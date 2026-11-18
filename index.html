@@ -9,7 +9,7 @@
   <meta name="description" content="iPhone 2台で遊べるオリジナルカードゲーム。初期LP8000、通常デュエル方式。">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=5">
+  <link rel="stylesheet" href="./style.css?v=61">
   <title>DUEL CRAFT｜2人でカード対戦</title>
 </head>
 <body>
@@ -22,6 +22,40 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="fx-overlay" class="fx-overlay" aria-hidden="true"></div>
 </div>
-<script type="module" src="./app.js?v=6"></script>
+<script>
+// Visible startup diagnostics: stale/missing JS files used to leave the screen blank.
+(function () {
+  let shown = false;
+  function bootFailed() {
+    const view = document.getElementById('view');
+    if (shown || !view || view.children.length) return;
+    shown = true;
+    const network = document.getElementById('network');
+    if (network) network.textContent = '起動エラー';
+    const panel = document.createElement('section');
+    panel.className = 'panel';
+    const title = document.createElement('h2');
+    title.textContent = 'ゲームを読み込めませんでした';
+    const help = document.createElement('p');
+    help.textContent = 'JavaScriptファイルの不足・更新漏れ・古いキャッシュが考えられます。更新用ZIP内の9ファイルをすべてGitHubにアップロードしてください。Safariのサイトデータは削除しないでください。';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn primary wide';
+    retry.textContent = '再読み込み';
+    retry.addEventListener('click', function () { location.reload(); });
+    panel.append(title, help, retry);
+    view.append(panel);
+  }
+  window.addEventListener('error', function (e) {
+    if (e.target && e.target.tagName === 'SCRIPT') bootFailed();
+    else if (e.error) bootFailed();
+  }, true);
+  window.addEventListener('unhandledrejection', bootFailed);
+  window.addEventListener('DOMContentLoaded', function () {
+    setTimeout(bootFailed, 9000);
+  });
+})();
+</script>
+<script type="module" src="./app.js?v=61"></script>
 </body>
 </html>

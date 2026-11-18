@@ -1,10 +1,10 @@
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES} from './cards.js?v=5';
-import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=5';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=6';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES} from './cards.js?v=61';
+import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=61';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=61';
 import {firebaseConfig} from './firebase-config.js';
-import {LIMITS,cardLimit,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=5';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=6';
-import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=5';
+import {LIMITS,cardLimit,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=61';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=61';
+import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=61';
 
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
