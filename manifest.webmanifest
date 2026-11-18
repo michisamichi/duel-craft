@@ -1,0 +1,11 @@
+{
+  "name": "DUEL CRAFT - オリジナルカード対戦",
+  "short_name": "DUEL CRAFT",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#111727",
+  "theme_color": "#111727",
+  "icons": [{"src":"./icons/app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
