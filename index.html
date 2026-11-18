@@ -9,7 +9,7 @@
   <meta name="description" content="iPhone 2台で遊べるオリジナルカードゲーム。初期LP8000、通常デュエル方式。">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=61">
+  <link rel="stylesheet" href="./style.css?v=62">
   <title>DUEL CRAFT｜2人でカード対戦</title>
 </head>
 <body>
@@ -23,39 +23,57 @@
   <div id="fx-overlay" class="fx-overlay" aria-hidden="true"></div>
 </div>
 <script>
-// Visible startup diagnostics: stale/missing JS files used to leave the screen blank.
-(function () {
-  let shown = false;
-  function bootFailed() {
-    const view = document.getElementById('view');
-    if (shown || !view || view.children.length) return;
-    shown = true;
-    const network = document.getElementById('network');
-    if (network) network.textContent = '起動エラー';
-    const panel = document.createElement('section');
-    panel.className = 'panel';
-    const title = document.createElement('h2');
-    title.textContent = 'ゲームを読み込めませんでした';
-    const help = document.createElement('p');
-    help.textContent = 'JavaScriptファイルの不足・更新漏れ・古いキャッシュが考えられます。更新用ZIP内の9ファイルをすべてGitHubにアップロードしてください。Safariのサイトデータは削除しないでください。';
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'btn primary wide';
-    retry.textContent = '再読み込み';
-    retry.addEventListener('click', function () { location.reload(); });
-    panel.append(title, help, retry);
-    view.append(panel);
+// This script runs even when ES modules or Firebase configuration fail.
+(function(){
+  window.__DUEL_READY=false;
+  var failed=false, failureMessage='';
+  function showProblem(message){
+    if(window.__DUEL_READY || failed)return;
+    failed=true;
+    var view=document.getElementById('view');
+    var network=document.getElementById('network');
+    if(network){network.textContent='起動エラー';network.className='network off';}
+    if(!view)return;
+    view.replaceChildren();
+    var section=document.createElement('section');section.className='panel';
+    section.style.margin='16px';
+    var h=document.createElement('h2');h.textContent='ゲームを起動できませんでした';
+    var p=document.createElement('p');p.className='small';
+    p.textContent='一部のJavaScriptファイル、または端末の保存領域に問題がある可能性があります。ゲームの容量が原因とは限りません。';
+    var detail=document.createElement('p');detail.className='small muted';
+    detail.style.overflowWrap='anywhere';
+    detail.textContent='診断：'+String(message||failureMessage||'読み込みが完了していません').slice(0,500);
+    var reload=document.createElement('button');reload.className='btn primary wide';reload.textContent='もう一度開く';
+    reload.addEventListener('click',function(){location.reload();});
+    var reset=document.createElement('button');reset.className='btn ghost wide mt8';reset.textContent='ゲームの端末保存データを初期化して再試行';
+    reset.addEventListener('click',function(){
+      if(!confirm('この端末に保存されたDUEL CRAFTのデッキ・カード・パック・設定が消えます。Firebaseの共有データは消えません。実行しますか？'))return;
+      try{var keys=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.startsWith('duel-'))keys.push(k);}
+        keys.forEach(function(k){localStorage.removeItem(k);});}catch(e){}
+      location.reload();
+    });
+    section.append(h,p,detail,reload,reset);view.append(section);
   }
-  window.addEventListener('error', function (e) {
-    if (e.target && e.target.tagName === 'SCRIPT') bootFailed();
-    else if (e.error) bootFailed();
-  }, true);
-  window.addEventListener('unhandledrejection', bootFailed);
-  window.addEventListener('DOMContentLoaded', function () {
-    setTimeout(bootFailed, 9000);
+  window.DUEL_BOOT_FAILURE=showProblem;
+  window.addEventListener('error',function(e){
+    if(!window.__DUEL_READY && e.error){failureMessage=e.error.message||String(e.error);showProblem(failureMessage);}
+  });
+  window.addEventListener('unhandledrejection',function(e){
+    if(!window.__DUEL_READY){failureMessage=e.reason?.message||String(e.reason);showProblem(failureMessage);}
+  });
+  window.addEventListener('DOMContentLoaded',function(){
+    var view=document.getElementById('view');
+    if(view && !view.hasChildNodes()){
+      var p=document.createElement('p');p.className='small muted';p.style.padding='16px';
+      p.textContent='ゲーム画面を準備しています…';view.append(p);
+    }
+    setTimeout(function(){if(!window.__DUEL_READY)showProblem(failureMessage||'8秒以内に起動処理が完了しませんでした');},8000);
   });
 })();
 </script>
-<script type="module" src="./app.js?v=61"></script>
+<script type="module">
+// Unlike a static import, a failed dependency is caught and shown on the page.
+import('./app.js?v=62').catch(error=>window.DUEL_BOOT_FAILURE(error?.message||String(error)));
+</script>
 </body>
 </html>

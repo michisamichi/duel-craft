@@ -8,7 +8,7 @@ export function readFxSettings(){
     volume:Number.isFinite(Number(data.volume))?Math.max(0,Math.min(100,Number(data.volume))):55,
   };}catch{return {...defaultSettings};}
 }
-export function writeFxSettings(value){const v={...defaultSettings,...value};localStorage.setItem('duel-fx-settings',JSON.stringify(v));return v;}
+export function writeFxSettings(value){const v={...defaultSettings,...value};try{localStorage.setItem('duel-fx-settings',JSON.stringify(v));}catch{/* private browsing: keep the game running */}return v;}
 let ctx=null;let latestSequence=0;
 export function unlockAudio(){
   try{const Type=window.AudioContext||window.webkitAudioContext;if(!Type)return;

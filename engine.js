@@ -1,5 +1,5 @@
-import {CARD, expandDeck, shuffle, validDeck} from './cards.js?v=61';
-import {normalizeRuleSettings} from './rules.js?v=61';
+import {CARD, expandDeck, shuffle, validDeck} from './cards.js?v=62';
+import {normalizeRuleSettings} from './rules.js?v=62';
 
 export const PHASES = {draw:'ドロー',main1:'メイン1',battle:'バトル',main2:'メイン2',end:'エンド'};
 const blank5 = () => [null,null,null,null,null];

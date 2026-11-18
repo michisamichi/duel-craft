@@ -1,19 +1,30 @@
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES} from './cards.js?v=61';
-import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=61';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=61';
-import {firebaseConfig} from './firebase-config.js';
-import {LIMITS,cardLimit,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=61';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=61';
-import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=61';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES} from './cards.js?v=62';
+import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=62';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=62';
+import {LIMITS,cardLimit,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=62';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=62';
+import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=62';
 
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const stored=(k,fallback)=>{try {const v=localStorage.getItem(k);return v?JSON.parse(v):fallback;}catch{return fallback;}};
-const configReady=['apiKey','authDomain','databaseURL','projectId','appId'].every(key=>typeof firebaseConfig?.[key]==='string'&&firebaseConfig[key].trim()!=='');
-const storedDecks=readDeckStore(localStorage);
+// Start the UI independently from Firebase. In-app iPhone browsers may deny storage.
+const tempStorage=new Map();
+let storageAvailable=true;
+try {const k='duel-storage-probe';window.localStorage.setItem(k,'1');window.localStorage.removeItem(k);}
+catch {storageAvailable=false;}
+const storage={
+  getItem(k){if(tempStorage.has(k))return tempStorage.get(k);try{return window.localStorage.getItem(k);}catch{return null;}},
+  setItem(k,v){try{window.localStorage.setItem(k,String(v));tempStorage.delete(k);}catch{tempStorage.set(k,String(v));}},
+  removeItem(k){tempStorage.delete(k);try{window.localStorage.removeItem(k);}catch{}},
+};
+const stored=(k,fallback)=>{try {const v=storage.getItem(k);return v?JSON.parse(v):fallback;}catch{return fallback;}};
+let firebaseConfig=null;
+let configReady=false;
+
+const storedDecks=readDeckStore(storage);
 const selectedStoredDeck=storedDecks.decks.find(d=>d.id===storedDecks.activeId)||storedDecks.decks[0];
 const ui={
-  nickname:localStorage.getItem('duel-name')||'プレイヤー',
+  nickname:storage.getItem('duel-name')||'プレイヤー',
   counts:{...selectedStoredDeck.counts},
   decks:storedDecks,deckDraft:null,deckFilterType:'all',deckFilterRarity:'all',
   galleryOpen:false,gallerySelected:null,galleryFilterType:'all',galleryFilterRarity:'all',
@@ -22,8 +33,8 @@ const ui={
   busy:false,sdk:null,db:null,uid:null,unsub:null,cardUnsub:null,toastTimer:null,
   cardsOpen:false,cardDraft:null,customCards:stored('duel-custom-cards',{}),cardBusy:false,
   fxOpen:false,fxSettings:readFxSettings(),lastFxRevision:null,
-  rules:readRuleSettings(localStorage),rulesOpen:false,appearanceOpen:false,appearance:stored('duel-appearance-v5',{mat:'nebula',back:'crest'}),
-  packOpen:false,packDraft:null,packResults:null,packs:readPackStore(localStorage),collectionOnly:false,previewCardId:null,
+  rules:readRuleSettings(storage),rulesOpen:false,appearanceOpen:false,appearance:stored('duel-appearance-v5',{mat:'nebula',back:'crest'}),
+  packOpen:false,packDraft:null,packResults:null,packs:readPackStore(storage),collectionOnly:false,previewCardId:null,
 };
 replaceCustomCards(ui.customCards);
 try{
@@ -41,7 +52,7 @@ const suffix=(c)=>c.type==='monster'?`★${c.level}　ATK ${c.atk} / DEF ${c.def
 const sum=totalCards;
 const activeSavedDeck=()=>ui.decks.decks.find(d=>d.id===ui.decks.activeId)||ui.decks.decks[0];
 const missingCards=counts=>Object.keys(counts||{}).filter(id=>!CARD[id]);
-function persistDecks(){ui.decks=writeDeckStore(localStorage,ui.decks);ui.counts={...activeSavedDeck().counts};localStorage.setItem('duel-deck',JSON.stringify(ui.counts));}
+function persistDecks(){ui.decks=writeDeckStore(storage,ui.decks);ui.counts={...activeSavedDeck().counts};storage.setItem('duel-deck',JSON.stringify(ui.counts));}
 function toast(msg){const el=$('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(ui.toastTimer);ui.toastTimer=setTimeout(()=>el.classList.remove('show'),3500);}
 function setNetwork(msg,status=''){const el=$('network');el.textContent=msg;el.className='network '+status;}
 function setBusy(v){ui.busy=v;const view=$('view');if(view)view.setAttribute('aria-busy',String(v));}
@@ -68,7 +79,7 @@ function cardHtml(id,{hidden=false,def=false,card:previewCard=null}={}){
 
 function renderHome(){
   const linkCode=new URLSearchParams(location.search).get('room')||'';
-  return `<section class="hero"><div class="eyebrow">ORIGINAL CARD BATTLE</div>
+  return `${!storageAvailable?`<section class="notice" style="margin:12px">このブラウザではカード・デッキを端末に保存できない可能性があります。Safariで開いてください。</section>`:''}<section class="hero"><div class="eyebrow">ORIGINAL CARD BATTLE</div>
     <h1>ふたりで遊ぶ<br><span>カードデュエル</span></h1><p>ライフ${ui.rules.lp.toLocaleString('ja-JP')}・デッキ${ui.rules.deckSize}枚。モンスターを召喚し、魔法や罠を駆使して相手に勝とう。</p></section>
   <section class="panel"><h2>対戦の準備</h2><label class="field-label" for="playerName">プレイヤー名</label>
   <input class="input" id="playerName" maxlength="12" value="${esc(ui.nickname)}" placeholder="プレイヤー">
@@ -258,7 +269,7 @@ function detailOverlay(){const c=CARD[ui.previewCardId];if(!c)return '';
  <p>${esc(suffix(c))}</p><p class="small muted">${esc(effectText(c)||c.desc||'効果なし')}</p><p class="small muted">枚数制限：${esc(LIMITS[c.limit||'unlimited'].label)}</p>${btn('閉じる','closePreview','btn primary wide')}</div></div>`;
 }
 function appearanceApply(){const a=$('app');if(a){a.dataset.mat=ui.appearance.mat;a.dataset.back=ui.appearance.back;}}
-function persistAppearance(){localStorage.setItem('duel-appearance-v5',JSON.stringify(ui.appearance));appearanceApply();}
+function persistAppearance(){storage.setItem('duel-appearance-v5',JSON.stringify(ui.appearance));appearanceApply();}
 function savePackDraftFields(){const d=ui.packDraft;if(!d)return;d.name=$('packName')?.value||d.name;d.size=Number($('packSize')?.value||d.size);
  document.querySelectorAll('[data-pack-weight]').forEach(x=>d.weights[x.dataset.packWeight]=Math.max(0,Number(x.value)||0));}
 
@@ -361,7 +372,7 @@ async function saveCardFromForm(){
     if(ui.sdk)await ui.sdk.set(ui.sdk.ref(ui.db,`cardLibrary/cards/${d.id}`),d);
     else{
       ui.customCards[d.id]=d;
-      localStorage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));
+      storage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));
       replaceCustomCards(ui.customCards);
     }
     ui.cardDraft=null;render();toast(ui.sdk?'共有カードを保存しました':'このiPhoneに保存しました（共有にはFirebaseが必要）');
@@ -374,7 +385,7 @@ async function deleteCard(){
   if(!confirm(ORIGINAL_IDS.has(id)?'カードを初期状態に戻しますか？':'このカードを削除しますか？ デッキに入れている場合は組み直しが必要です。'))return;
   try{
     if(ui.sdk)await ui.sdk.remove(ui.sdk.ref(ui.db,`cardLibrary/cards/${id}`));
-    else{delete ui.customCards[id];replaceCustomCards(ui.customCards);localStorage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));}
+    else{delete ui.customCards[id];replaceCustomCards(ui.customCards);storage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));}
     ui.cardDraft=null;render();toast('反映しました');
   }catch(e){toast('削除に失敗しました：'+e.message);}
 }
@@ -556,7 +567,7 @@ function graveModal(){const me=activePlayer(),enemy=ui.game.players[1-ui.seat];
 }
 function render(){ $('view').innerHTML=ui.game?renderGame():renderHome();appearanceApply(); }
 function readHomeValues(){
- const input=$('playerName');if(input){ui.nickname=(input.value.trim()||'プレイヤー').slice(0,12);localStorage.setItem('duel-name',ui.nickname);}
+ const input=$('playerName');if(input){ui.nickname=(input.value.trim()||'プレイヤー').slice(0,12);storage.setItem('duel-name',ui.nickname);}
 }
 function startDeckDraft(mode,source){
   if(mode==='new'&&ui.decks.decks.length>=MAX_SAVED_DECKS)return toast('保存できるデッキは最大30組です');
@@ -622,7 +633,7 @@ function updateCardRows(scope){
 }
 function startDemo(){readHomeValues();if(!validDeck(ui.counts,ui.rules))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);ui.demo=true;ui.seat=0;ui.roomCode='';ui.selected=null;ui.targetMode=null;
  ui.game=createDemo({counts1:ui.counts,counts2:ui.decks.decks.find(d=>d.id!==ui.decks.activeId&&validDeck(d.counts,ui.rules))?.counts||ui.counts,rules:ui.rules});ui.seat=ui.game.turn;ui.lastFxRevision=ui.game.revision;storeDemo();setNetwork('お試し対戦','ok');render();}
-function storeDemo(){if(ui.demo&&ui.game){localStorage.setItem('duel-demo-state',JSON.stringify(ui.game));localStorage.setItem('duel-demo-seat',String(ui.seat));}}
+function storeDemo(){if(ui.demo&&ui.game){storage.setItem('duel-demo-state',JSON.stringify(ui.game));storage.setItem('duel-demo-seat',String(ui.seat));}}
 async function remoteCreate(){
  if(!ui.sdk)return toast('Firebaseの設定が必要です');readHomeValues();if(!validDeck(ui.counts,ui.rules))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);
  setBusy(true);
@@ -745,7 +756,20 @@ async function copyInvite(){
 }
 function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.graveOpen=false;ui.fxOpen=false;ui.lastFxRevision=null;history.replaceState({},'',location.pathname);if(configReady&&ui.db)setNetwork('オンライン接続可能','ok');else setNetwork('お試し対戦可能');render();}
 async function initFirebase(){
- if(!configReady){setNetwork('Firebase未設定','off');render();return;}
+ // The config is OPTIONAL for the offline UI, and is loaded after the home screen.
+ // A missing/incorrect export must not prevent the whole game from starting.
+ try {
+   const configModule=await import('./firebase-config.js?config=62');
+   firebaseConfig=configModule.firebaseConfig||null;
+   configReady=['apiKey','authDomain','databaseURL','projectId','appId'].every(key=>
+     typeof firebaseConfig?.[key]==='string'&&firebaseConfig[key].trim()!=='');
+   if(!configReady){setNetwork('Firebase未設定','off');render();return;}
+ } catch(error) {
+   setNetwork('Firebase設定エラー','off');
+   toast('Firebase設定を確認してください：'+(error?.message||String(error)));
+   render();
+   return;
+ }
  try {
    const [{initializeApp},{getAuth,signInAnonymously},{getDatabase,ref,runTransaction,onValue,set,remove}]=await Promise.all([
      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js'),
@@ -760,7 +784,7 @@ async function initFirebase(){
      if(ui.cardDraft&&$('cardName'))readCardForm();
      if(ui.packDraft&&$('packName'))savePackDraftFields();
      ui.customCards=snapshot.val()||{};
-     localStorage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));
+     storage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));
      replaceCustomCards(ui.customCards);render();
    },err=>{toast('カード共有エラー：'+err.message);});
    setNetwork('オンライン接続可能','ok');render();
@@ -774,7 +798,7 @@ $('view').addEventListener('click',async e=>{
  if(ui.busy)return;
  if(action==='openRules'){ui.rulesOpen=true;render();return;}
  if(action==='closeRules'){ui.rulesOpen=false;render();return;}
- if(action==='saveRules'){ui.rules=writeRuleSettings(localStorage,{lp:Number($('ruleLP').value),deckSize:Number($('ruleDeck').value)});ui.rulesOpen=false;render();toast('ルールを保存しました');return;}
+ if(action==='saveRules'){ui.rules=writeRuleSettings(storage,{lp:Number($('ruleLP').value),deckSize:Number($('ruleDeck').value)});ui.rulesOpen=false;render();toast('ルールを保存しました');return;}
  if(action==='openAppearance'){ui.appearanceOpen=true;render();return;}
  if(action==='closeAppearance'){ui.appearanceOpen=false;render();return;}
  if(action==='openPacks'){ui.packOpen=true;ui.packResults=null;ui.packDraft=null;render();return;}
@@ -788,16 +812,16 @@ $('view').addEventListener('click',async e=>{
    if(!Object.values(d.weights).some(w=>w>0))return toast('少なくとも1種類の排出比率を正にしてください');
    const index=ui.packs.packs.findIndex(p=>p.id===d.id);
    if(index>=0)ui.packs.packs[index]=d;else ui.packs.packs.push(d);
-   savePackStore(localStorage,ui.packs);ui.packDraft=null;render();toast('パックを保存しました');return;
+   savePackStore(storage,ui.packs);ui.packDraft=null;render();toast('パックを保存しました');return;
  }
  if(action==='packOpenOne'){
    const p=ui.packs.packs.find(x=>x.id===el.dataset.id);if(!p)return;
-   try{ui.packResults=openPack(p);collect(ui.packs,ui.packResults);savePackStore(localStorage,ui.packs);render();}
+   try{ui.packResults=openPack(p);collect(ui.packs,ui.packResults);savePackStore(storage,ui.packs);render();}
    catch(e){toast('開封できません：'+e.message);}return;
  }
  if(action==='packDelete'){
   const p=ui.packs.packs.find(x=>x.id===el.dataset.id);if(!p||p.id==='starter'||!confirm('このパックを削除しますか？'))return;
-  ui.packs.packs=ui.packs.packs.filter(x=>x.id!==p.id);savePackStore(localStorage,ui.packs);render();return;
+  ui.packs.packs=ui.packs.packs.filter(x=>x.id!==p.id);savePackStore(storage,ui.packs);render();return;
  }
  if(action==='packDetail'){ui.previewCardId=el.dataset.id;render();return;}
  if(action==='viewCard'){const x=ui.selected;let id=null;if(x&&ui.game){const p=ui.game.players[x.owner==='mine'?ui.seat:1-ui.seat];id=x.zone==='hand'?p.hand[x.index]:p[x.zone]?.[x.index]?.id;}if(id){ui.previewCardId=id;render();}return;}
@@ -984,4 +1008,4 @@ $('view').addEventListener('change',async e=>{
  }
 });
 // オンライン設定前は1台お試しのみ利用可能。
-setNetwork(configReady?'オンライン準備中':'Firebase未設定',configReady?'':'off');render();initFirebase();
+setNetwork('画面の準備完了','ok');render();window.__DUEL_READY=true;initFirebase();
