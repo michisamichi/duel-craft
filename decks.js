@@ -1,5 +1,5 @@
 // v0.4: browser-local saved decks. No deck data is uploaded to Firebase.
-import {copyPreset} from './cards.js?v=80';
+import {copyPreset} from './cards.js?v=191';
 
 export const DECK_STORE_KEY='duel-decks-v4';
 export const MAX_SAVED_DECKS=30;
@@ -13,8 +13,8 @@ export function structurallyValidCounts(counts){
 function id(){
   return 'd_'+(globalThis.crypto?.randomUUID?.().replaceAll('-','').slice(0,20)||`${Date.now().toString(36)}${Math.random().toString(36).slice(2,12)}`);
 }
-export function newDeck(name='新しいデッキ',counts={}){
-  return {id:id(),name:cleanName(name),counts:{...counts},updatedAt:Date.now()};
+export function newDeck(name='新しいデッキ',counts={},extraCounts={}){
+  return {id:id(),name:cleanName(name),counts:{...counts},extraCounts:{...extraCounts},updatedAt:Date.now()};
 }
 export function normalizeDeckStore(value){
   if(!value||typeof value!=='object'||!Array.isArray(value.decks))return null;
@@ -24,14 +24,18 @@ export function normalizeDeckStore(value){
     const counts=raw.counts;
     if(!counts||typeof counts!=='object'||Array.isArray(counts)||Object.keys(counts).length>60||
        !Object.entries(counts).every(([key,n])=>ID_RE.test(key)&&Number.isInteger(n)&&n>=1&&n<=3))continue;
-    decks.push({id:raw.id,name:cleanName(raw.name),counts:{...counts},updatedAt:Number(raw.updatedAt)||Date.now()});used.add(raw.id);
+    const extra=raw.extraCounts||{};
+    if(typeof extra!=='object'||Array.isArray(extra)||Object.keys(extra).length>15||
+      !Object.entries(extra).every(([key,n])=>ID_RE.test(key)&&Number.isInteger(n)&&n>=1&&n<=3)||
+      Object.values(extra).reduce((n,x)=>n+x,0)>15)continue;
+    decks.push({id:raw.id,name:cleanName(raw.name),counts:{...counts},extraCounts:{...extra},updatedAt:Number(raw.updatedAt)||Date.now()});used.add(raw.id);
   }
   if(!decks.length)return null;
   return {version:4,decks,activeId:used.has(value.activeId)?value.activeId:decks[0].id};
 }
 export function initialDeckStore(legacyCounts,legacyPreset){
-  const red=newDeck('🔥 紅蓮デッキ',copyPreset('red'));
-  const blue=newDeck('🌊 蒼海デッキ',copyPreset('blue'));
+  const red=newDeck('🔥 紅蓮デッキ',copyPreset('red'),{'m26':1});
+  const blue=newDeck('🌊 蒼海デッキ',copyPreset('blue'),{'m26':1});
   const decks=[red,blue];let activeId=legacyPreset==='blue'?blue.id:red.id;
   if(legacyCounts&&structurallyValidCounts(legacyCounts)){
     const same=decks.find(d=>JSON.stringify(Object.entries(d.counts).sort())===JSON.stringify(Object.entries(legacyCounts).sort()));
@@ -55,7 +59,7 @@ export function writeDeckStore(storage,store){
 }
 export function encodeDeckShare(deck){
   if(!structurallyValidCounts(deck?.counts))throw Error('20〜60枚のデッキだけ共有できます');
-  const body=JSON.stringify({v:1,n:cleanName(deck.name),c:Object.entries(deck.counts)});
+  const body=JSON.stringify({v:2,n:cleanName(deck.name),c:Object.entries(deck.counts),e:Object.entries(deck.extraCounts||{})});
   const utf8=new TextEncoder().encode(body);let ascii='';for(const byte of utf8)ascii+=String.fromCharCode(byte);
   return btoa(ascii).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 }
@@ -65,12 +69,15 @@ export function decodeDeckShare(code){
     const ascii=atob(code.replaceAll('-','+').replaceAll('_','/')+'='.repeat((4-code.length%4)%4));
     raw=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(ascii,c=>c.charCodeAt(0))));
   }catch{throw Error('共有リンクを読み込めません');}
-  if(raw?.v!==1||typeof raw.n!=='string'||raw.n.length>28||!Array.isArray(raw.c)||raw.c.length>60)throw Error('共有データの形式が違います');
+  if(![1,2].includes(raw?.v)||typeof raw.n!=='string'||raw.n.length>28||!Array.isArray(raw.c)||raw.c.length>60|| (raw.v===2&&(!Array.isArray(raw.e)||raw.e.length>15)))throw Error('共有データの形式が違います');
   const counts=Object.create(null);
   for(const p of raw.c){
     if(!Array.isArray(p)||p.length!==2||typeof p[0]!=='string'||!ID_RE.test(p[0])||Object.hasOwn(counts,p[0]))throw Error('カード情報が不正です');
     counts[p[0]]=p[1];
   }
   if(!structurallyValidCounts(counts))throw Error('20〜60枚のデッキではありません');
-  return {name:cleanName(raw.n),counts:{...counts}};
+  const extraCounts=Object.create(null);
+  for(const e of raw.e||[]){if(!Array.isArray(e)||e.length!==2||!ID_RE.test(e[0])||Object.hasOwn(extraCounts,e[0])||!Number.isInteger(e[1])||e[1]<1||e[1]>3)throw Error('EXデッキが不正です');extraCounts[e[0]]=e[1];}
+  if(Object.values(extraCounts).reduce((n,v)=>n+v,0)>15)throw Error('EXデッキは15枚以内です');
+  return {name:cleanName(raw.n),counts:{...counts},extraCounts:{...extraCounts}};
 }

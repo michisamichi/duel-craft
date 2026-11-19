@@ -1,9 +1,12 @@
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell} from './cards.js?v=80';
-import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=80';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=80';
-import {LIMITS,cardLimit,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=80';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=80';
-import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=80';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=191';
+import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=191';
+import {makeBackup,parseBackup,applyBackup} from './backup.js?v=191';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=191';
+import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=191';
+import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=191';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=191';
+import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=191';
+import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=191';
 
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -18,33 +21,51 @@ const storage={
   removeItem(k){tempStorage.delete(k);try{window.localStorage.removeItem(k);}catch{}},
 };
 const stored=(k,fallback)=>{try {const v=storage.getItem(k);return v?JSON.parse(v):fallback;}catch{return fallback;}};
+const CARD_DRAFT_KEY='saho-card-draft-v1',DECK_DRAFT_KEY='saho-deck-draft-v1',LAST_ROOM_KEY='saho-last-room-v1';
+const draftSaveTimers=new Map();
+function scheduleSave(key,data){clearTimeout(draftSaveTimers.get(key));draftSaveTimers.set(key,setTimeout(()=>{try{storage.setItem(key,JSON.stringify(data));}catch{}},350));}
+function saveCardDraft(){if(ui.cardDraft)scheduleSave(CARD_DRAFT_KEY,ui.cardDraft);}
+function saveDeckDraft(){if(ui.deckDraft&&!ui.sealedOnly)scheduleSave(DECK_DRAFT_KEY,ui.deckDraft);}
+function flushDraft(){for(const t of draftSaveTimers.values())clearTimeout(t);draftSaveTimers.clear();if(ui.cardDraft)storage.setItem(CARD_DRAFT_KEY,JSON.stringify(ui.cardDraft));if(ui.deckDraft&&!ui.sealedOnly)storage.setItem(DECK_DRAFT_KEY,JSON.stringify(ui.deckDraft));}
+function clearCardDraft(){clearTimeout(draftSaveTimers.get(CARD_DRAFT_KEY));draftSaveTimers.delete(CARD_DRAFT_KEY);storage.removeItem(CARD_DRAFT_KEY);}
+function clearDeckDraft(){clearTimeout(draftSaveTimers.get(DECK_DRAFT_KEY));draftSaveTimers.delete(DECK_DRAFT_KEY);storage.removeItem(DECK_DRAFT_KEY);}
+function existingDraft(key){const d=stored(key,null);return d&&typeof d==='object'&&!Array.isArray(d)?d:null;}
+
 let firebaseConfig=null;
 let configReady=false;
 
 const storedDecks=readDeckStore(storage);
 const selectedStoredDeck=storedDecks.decks.find(d=>d.id===storedDecks.activeId)||storedDecks.decks[0];
+// Snapshot key for avoiding repeated localStorage writes and full UI rebuilds
+// when Firebase sends an identical card library (including the first snapshot).
+let lastCardLibraryJSON='';
 const ui={
   nickname:storage.getItem('duel-name')||'プレイヤー',
   counts:{...selectedStoredDeck.counts},
-  decks:storedDecks,deckDraft:null,deckFilterType:'all',deckFilterRarity:'all',
-  duelOpen:!!new URLSearchParams(location.search).get('room'),settingsOpen:false,
+  decks:storedDecks,deckDraft:null,deckFilterType:'all',deckFilterRarity:'all',deckSearch:'',deckOnly:false,
+  duelCompact:storage.getItem('duel-compact')!=='0',
+  duelOpen:!!new URLSearchParams(location.search).get('room'),draftOpen:!!new URLSearchParams(location.search).get('draft'),draftFormat:'two',settingsOpen:false,
   galleryOpen:false,gallerySelected:null,galleryFilterType:'all',galleryFilterRarity:'all',
   pendingShare:null,shareError:'',
-  game:null,roomCode:'',seat:0,demo:false,selected:null,targetMode:null,deckOpen:false,
+  game:null,roomCode:'',draftRoom:null,draftCode:'',demoDraft:false,seat:0,demo:false,selected:null,targetMode:null,specialDraft:null,deckOpen:false,
   busy:false,sdk:null,db:null,uid:null,unsub:null,cardUnsub:null,toastTimer:null,
-  cardsOpen:false,cardDraft:null,customCards:stored('duel-custom-cards',{}),cardBusy:false,
+  cardsOpen:false,cardDraft:null,cardManageType:'all',cardManageRarity:'all',cardManageQuery:'',customCards:stored('duel-custom-cards',{}),cardBusy:false,
   fxOpen:false,fxSettings:readFxSettings(),lastFxRevision:null,
   rules:readRuleSettings(storage),rulesOpen:false,appearanceOpen:false,appearance:stored('duel-appearance-v5',{mat:'nebula',back:'crest'}),
   packOpen:false,packDraft:null,packResults:null,packs:readPackStore(storage),collectionOnly:false,previewCardId:null,
+  sealedOpen:false,sealedOnly:false,sealedSession:normalizeSealedSession(stored(SEALED_STORAGE_KEY,null)),
+  duelToolsOpen:false,duelLogOpen:false,
+  lastRoom:existingDraft(LAST_ROOM_KEY),networkConnected:null,connectionUnsub:null,
 };
 replaceCustomCards(ui.customCards);
+lastCardLibraryJSON=JSON.stringify(ui.customCards);
 try{
   const shared=new URLSearchParams(location.search).get('deck');
   if(shared)ui.pendingShare=decodeDeckShare(shared);
 }catch(e){ui.shareError=e.message||'共有リンクを読めません';}
 
 const effectNeedsTarget=id=>{const c=CARD[id];if(c?.type==='spell'&&spellKind(c)==='field'&&c.ability?.when==='continuous')return false;return c?.ability?['ownMonster','enemyMonster'].includes(c.ability.target):['destroy','boost500'].includes(c?.effect);};
-const cardTypeName=c=>c.type==='monster'?(c.subtype==='effect'?'効果モンスター':'通常モンスター'):c.type==='spell'?SPELL_KINDS[spellKind(c)]:'罠';
+const cardTypeName=c=>c.type==='monster'?(summonKind(c)!=='normal'?SUMMON_KINDS[summonKind(c)]:'通常')+(c.subtype==='effect'?'・効果モンスター':'モンスター'):c.type==='spell'?SPELL_KINDS[spellKind(c)]:'罠';
 const isMine=()=>!!ui.game?.players?.[ui.seat];
 const activePlayer=()=>ui.game?.players?.[ui.seat];
 const myTurn=()=>ui.game?.turn===ui.seat&&ui.game?.status==='playing';
@@ -62,7 +83,7 @@ function btn(label,action,cls='btn',data='',disabled=false){return `<button type
 function cardHtml(id,{hidden=false,def=false,card:previewCard=null}={}){
   if(hidden)return '<div class="card back" aria-label="裏側のカード"><div class="back-emblem">✦</div></div>';
   const c=previewCard||CARD[id];if(!c)return '<div class="card back"><div class="back-emblem">✦</div></div>';
-  const face=c.type==='monster'?(c.subtype==='effect'?'effect-monster':'normal-monster'):c.type;
+  const face=c.type==='monster'?(summonKind(c)!=='normal'?summonKind(c)+'-monster':c.subtype==='effect'?'effect-monster':'normal-monster'):c.type;
   const rarity=Object.hasOwn(RARITIES,c.rarity)?c.rarity:'N';
   const art=c.image?.startsWith('data:image/jpeg;base64,')||c.image?.startsWith('data:image/webp;base64,')
     ?`<img class="card-art-image" src="${esc(c.image)}" alt="${esc(c.name)}" loading="lazy">`
@@ -78,14 +99,26 @@ function cardHtml(id,{hidden=false,def=false,card:previewCard=null}={}){
   </div>`;
 }
 
+/** Compact image preview: avoids building a full card DOM for every row. */
+function cardThumb(c){
+  const tone=c.type==='monster'?(summonKind(c)==='fusion'?'fusion':summonKind(c)==='ritual'?'ritual':'monster'):c.type;
+  const safeImage=typeof c.image==='string'&&/^data:image\/(?:jpeg|webp);base64,/.test(c.image)&&c.image.length<=90000;
+  return `<span class="sv-mini-thumb sv-mini-${tone}" aria-hidden="true">${safeImage
+    ?`<img src="${esc(c.image)}" alt="" loading="lazy" decoding="async">`
+    :`<span class="sv-mini-mark">${esc(c.emoji||'✦')}</span>`}<i></i></span>`;
+}
+
 function renderHome(){
   const linkCode=new URLSearchParams(location.search).get('room')||'';
   return `<section class="sv-home" aria-label="ホーム">
     <div class="sv-hero">
-      <img src="./sahoverse-icon-192.png?v=80" width="98" height="98" alt="" class="sv-crest">
+      <img src="./sahoverse-icon-192.png?v=191" width="98" height="98" alt="" class="sv-crest">
       <div class="sv-hero-text"><div class="sv-hero-title">SAHOVERSE</div><div class="sv-hero-sub">CARD DUEL</div></div>
     </div>
     ${btn('<span class="sv-duel-icon" aria-hidden="true">⚔</span><span>デュエル</span><span class="sv-chevron" aria-hidden="true">›</span>','openDuel','sv-duel-button')}
+    ${ui.lastRoom?.code?btn('↻ 前回の対戦に戻る','resumeRoom','sv-resume-button'):''}
+    <div class="sv-draft-modes">${btn('✦ 2択ドラフト','openDraft','sv-draft-launch')}${btn('◇ 通常ドラフト','openOpenDraft','sv-draft-launch sv-draft-open-launch')}</div>
+    ${btn('◇ パック限定戦','openSealed','sv-draft-launch sv-sealed-launch')}
     <div class="sv-home-grid">
       ${btn('<span class="sv-menu-icon" aria-hidden="true">◇</span>カード図鑑','openGallery','sv-menu-tile')}
       ${btn('<span class="sv-menu-icon" aria-hidden="true">✦</span>カード管理','openCards','sv-menu-tile')}
@@ -111,10 +144,87 @@ function renderHome(){
     <div class="sv-try">${btn('1台で練習','demo','btn secondary wide')}</div>
     ${!storageAvailable?`<div class="notice">端末への保存が制限されています。Safariで開いてください。</div>`:''}
   </section>`:''}
+  ${ui.draftOpen?draftSetupModal():''}${ui.sealedOpen?sealedModal():''}
   ${ui.settingsOpen?settingsModal():''}
   ${ui.deckOpen?deckModal():''}${ui.cardsOpen?cardsModal():''}${ui.galleryOpen?galleryModal():''}${ui.fxOpen?fxModal():''}
   ${ui.rulesOpen?ruleModal():''}${ui.appearanceOpen?appearanceModal():''}${ui.packOpen?packModal():''}
   ${ui.pendingShare||ui.shareError?shareImportModal():''}${ui.previewCardId?detailOverlay():''}`;
+}
+function draftSetupModal(){
+ const invite=new URLSearchParams(location.search).get('draft')||'';
+ const open=ui.draftFormat==='open',title=open?'通常ドラフト':'2択ドラフト';
+ return `<div class="modal" role="dialog" aria-modal="true" aria-label="${title}"><div class="modal-box sv-draft-setup">
+ <div class="modal-title-line"><h2>${title}</h2>${btn('×','closeDraft','btn sm square')}</div>
+ <div class="draft-brief">${open?'5枚の候補から交互に1枚選ぶ。各40枚でデッキ完成。':'2枚から1枚を選び、残りを相手へ。選ぶ順番は交互。'}</div>
+ <div class="draft-probabilities"><span>モンスター 50%</span><span>魔法 25%</span><span>罠 25%</span></div>
+ <label class="field-label" for="draftName">プレイヤー名</label><input id="draftName" class="input" maxlength="12" value="${esc(ui.nickname)}">
+ <div class="draft-setup-actions">
+ <h3>オンライン（iPhone 2台）</h3>
+ ${configReady?`${btn('ドラフト部屋を作る','createDraftRoom','btn primary wide')}
+ <div class="row"><input class="input grow" id="draftCodeInput" maxlength="8" placeholder="8文字の部屋コード" value="${esc(invite)}" autocapitalize="characters">${btn('参加','joinDraftRoom','btn secondary')}</div>`:'<div class="notice">オンライン接続が必要です</div>'}
+ <h3>1台で練習</h3>${btn('2人分を交互に選ぶ','draftDemo','btn secondary wide')}
+ </div></div></div>`;
+}
+function renderDraftRoom(){
+ const s=ui.draftRoom;if(!s)return '';
+ const mine=s.players?.[ui.seat]||null;
+ const open=s.draft?.format==='open',max=(s.rules?.deckSize||40)*(open?2:1);
+ if(s.status==='waiting')return `<section class="panel draft-waiting"><h2>ドラフト待機中</h2>
+ <div class="code">${esc(ui.draftCode)}</div><p class="muted small">コードを相手に送ってください。</p>
+ ${btn('招待リンクをコピー','copyDraftInvite','btn primary wide')}
+ ${btn('ホームへ','goHome','btn ghost wide mt8')}</section>`;
+ const d=s.draft,turn=d.round%2,isPicker=ui.demoDraft||turn===ui.seat;
+ return `<section class="sv-draft-screen">
+ <div class="row between draft-topline"><h2>${open?'通常ドラフト':'2択ドラフト'}</h2>${btn('退出','goHome','btn sm ghost')}</div>
+ <div class="draft-progress"><b>${d.round} / ${max}</b><span>${isPicker?'カードを選ぶ番です':`${esc(s.players[turn]?.name||'相手')}の選択待ち`}</span></div>
+ <div class="draft-progress-track"><div style="width:${Math.min(100,Math.round(d.round/max*100))}%"></div></div>
+ <div class="draft-scoreboard">${s.players.map((p,i)=>`<div class="draft-seat ${turn===i?'draft-active':''}"><span>${esc(p?.name||'プレイヤー')}</span><b>${Object.values(d.counts[i]||{}).reduce((n,v)=>n+Number(v||0),0)}枚</b></div>`).join('')}</div>
+ <div class="draft-subtitle">${isPicker?'欲しいカードをタップ':'相手が選んでいます'}</div>
+ <div class="draft-offers ${open?'draft-offers-open':''}">${(d.options||[]).map((id,i)=>`<button class="draft-offer" data-action="draftPick" data-index="${i}" ${isPicker?'':'disabled'}>
+ <div class="draft-card-art">${cardHtml(id)}</div><b class="draft-card-name">${esc(CARD[id]?.name||id)}</b><span class="draft-card-cost">${esc(CARD[id]?.type==='monster'?'モンスター':CARD[id]?.type==='spell'?'魔法':'罠')}・C${cardCost(CARD[id])}</span>
+ <span class="draft-offer-select">${isPicker?'選択する':'待機中'}</span></button>`).join('')}</div>
+ <p class="draft-help">${open?'選んだカードだけ自分のデッキに追加されます':'選ばなかったカードは相手に渡ります'}</p>
+ ${ui.demoDraft?`<div class="notice">1台練習：選択するプレイヤーが交代します。</div>`:''}
+ </section>`;
+}
+function exportBackup(){
+  flushDraft();
+  try{
+    if(!storageAvailable)throw Error('端末保存が制限されています。Safariから開いてください');
+    const data=makeBackup(storage);
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    const d=new Date();a.download=`SAHOVERSE-backup-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+    a.href=url;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    toast('バックアップを保存しました');
+  }catch(e){toast('バックアップに失敗しました：'+e.message);}
+}
+async function importBackup(file){
+  if(!file)return;
+  if(file.size>8*1024*1024)return toast('8MB以下のバックアップを選んでください');
+  try{
+    const imported=parseBackup(await file.text());
+    if(!confirm('このiPhoneに保存されたデッキ・カード・パック・設定をバックアップの内容に置き換えます。よろしいですか？'))return;
+    if(!storageAvailable)throw Error('端末保存が制限されています。Safariから開いてください');
+    applyBackup(window.localStorage,imported);
+    toast('復元しました。画面を再読み込みします');
+    location.href=location.pathname+'?v=191';
+  }catch(e){toast('復元できません：'+e.message);}
+}
+async function reconnectLastRoom(code){
+  if(!ui.sdk||!ui.db||!ui.uid)return toast('オンライン接続を確認してください');
+  if(!/^[A-Z2-9]{8}$/.test(code))return toast('部屋コードが正しくありません');
+  try{
+    // One-time read: do not create a second permanent listener.
+    const snap=await ui.sdk.get(ui.sdk.ref(ui.db,`rooms/${code}`));
+    const room=snap.val();
+    if(!room)return toast('対戦部屋が見つかりません');
+    const people=Array.isArray(room.players)?room.players:[room.players?.[0],room.players?.[1]];
+    if(!people.some(p=>p?.uid===ui.uid))return toast('この端末はその部屋の参加者ではありません');
+    ui.duelOpen=false;ui.settingsOpen=false;
+    await openRoom(code,!!room.draft&&['waiting','drafting'].includes(room.status));
+    toast('対戦部屋に再接続しました');
+  }catch(e){toast('再接続に失敗しました：'+e.message);}
 }
 function settingsModal(){
   return `<div class="modal" role="dialog" aria-modal="true" aria-label="設定"><div class="modal-box sv-settings">
@@ -123,6 +233,11 @@ function settingsModal(){
       ${btn('カード裏面・プレイマット','settingsAppearance','btn secondary wide')}
       ${btn('演出・音量','settingsFx','btn secondary wide')}
       ${btn('ルール設定','settingsRules','btn secondary wide')}
+      <div class="sv-backup-group">
+        ${btn('バックアップを保存','exportBackup','btn secondary wide')}
+        <label class="btn secondary wide sv-import-label">バックアップから復元<input id="backupFile" type="file" accept=".json,application/json" hidden></label>
+        <p class="tiny muted">デッキ・カード・パック・設定を復元。共有カードはFirebase側のデータが優先されます。</p>
+      </div>
     </div>
   </div></div>`;
 }
@@ -136,54 +251,96 @@ function fxModal(){
     <label class="fx-check"><input id="fxBgmToggle" type="checkbox" ${f.bgm?'checked':''}> オリジナルBGMを再生</label>
     <label class="field-label" for="fxVolume">音量 <b id="fxVolumeValue">${f.volume}%</b></label>
     <input id="fxVolume" class="fx-slider" type="range" min="0" max="100" step="5" value="${f.volume}">
-    <div class="row wrap mt8">${btn('▶ 炎を試す','previewFlame','btn sm secondary')}${btn('▶ 攻撃を試す','previewSlash','btn sm secondary')}${btn('▶ 罠を試す','previewShadow','btn sm secondary')}</div>
+    <div class="row wrap mt8">${btn('▶ 炎を試す','previewFlame','btn sm secondary')}${btn('▶ 攻撃を試す','previewSlash','btn sm secondary')}${btn('▶ 罠を試す','previewShadow','btn sm secondary')}${btn('▶ 儀式','previewRitual','btn sm secondary')}${btn('▶ 融合','previewFusion','btn sm secondary')}${btn('▶ 勝利','previewVictory','btn sm secondary')}</div>
     <p class="tiny muted mt8">iPhoneは最初のタップで音声を有効にします。端末の音量設定も確認してください。</p>
     ${btn('閉じる','closeFx','btn primary wide mt8')}
   </div></div>`;
 }
-function announceCue(event){
+function announceCue(event,room){
   if(!event||!document.getElementById('fx-overlay'))return;
-  playCue(event,CARD[event.cardId],ui.fxSettings);
+  // Win/loss display is local to the viewer; no private information is written to Firebase.
+  playCue({...event,winner:room?.winner,viewerSeat:ui.seat},CARD[event.cardId],ui.fxSettings);
 }
 function handleRoomCue(room){
   const ev=room?.lastEvent;
   if(ui.lastFxRevision===null){ui.lastFxRevision=ev?.id??room?.revision??0;return;}
-  if(ev&&ev.id>ui.lastFxRevision){ui.lastFxRevision=ev.id;announceCue(ev);}
+  if(ev&&ev.id>ui.lastFxRevision){ui.lastFxRevision=ev.id;announceCue(ev,room);}
+}
+function deckPool(){return ui.sealedOnly?ui.sealedSession?.pool||{}:ui.packs.collection;}
+function storeSealed(){if(ui.sealedSession)storage.setItem(SEALED_STORAGE_KEY,JSON.stringify(ui.sealedSession));else storage.removeItem(SEALED_STORAGE_KEY);}
+function saveSealedDraft(){
+  if(!ui.sealedOnly||!ui.sealedSession||!ui.deckDraft)return;
+  ui.sealedSession.draftCounts={...ui.deckDraft.counts};
+  ui.sealedSession.draftExtraCounts={...ui.deckDraft.extraCounts||{}};
+  ui.sealedSession.draftName=($('deckName')?.value||ui.deckDraft.name).slice(0,28);
+  storeSealed();
+}
+function sealedModal(){
+  const session=ui.sealedSession;
+  return `<div class="modal" role="dialog" aria-modal="true" aria-label="パック限定戦"><div class="modal-box deck-manager">
+    <div class="modal-title-line"><h2>パック限定戦</h2>${btn('×','closeSealed','btn sm square')}</div>
+    ${session?`<div class="sealed-session"><b>${esc(session.packName)}</b><div class="small muted">${session.packCount}パック・${session.drawn.length}枚獲得 / 使用可能 ${sealedCapacity(session.pool)}枚</div>
+      <div class="row wrap mt8">${btn('デッキ構築を続ける','sealedResume','btn primary wide')}</div></div>`:''}
+    <label for="sealedPack" class="field-label">開封するパック</label>
+    <select class="input" id="sealedPack">${ui.packs.packs.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}（${p.size}枚入り）</option>`).join('')}</select>
+    <p class="small muted">選んだパックをまとめて開封し、そのカードだけで${ui.rules.deckSize}枚デッキを作ります。</p>
+    ${btn(session?'新しいパック戦を始める':'開封してデッキを作る','sealedDraw','btn primary wide')}
+    ${btn('戻る','closeSealed','btn ghost wide mt8')}
+  </div></div>`;
+}
+function resumeSealed(){
+  if(!ui.sealedSession)return toast('パック戦のデータがありません');
+  if(ui.decks.decks.length>=MAX_SAVED_DECKS)return toast('保存できるデッキは最大30組です');
+  ui.sealedOpen=false;ui.sealedOnly=true;ui.collectionOnly=true;ui.deckOpen=true;
+  ui.deckDraft={...newDeck(ui.sealedSession.draftName,ui.sealedSession.draftCounts,ui.sealedSession.draftExtraCounts),isNew:true};
+  ui.deckFilterType='all';ui.deckFilterRarity='all';render();
 }
 function deckModal(){
   if(!ui.deckDraft)return `<div class="modal" role="dialog" aria-modal="true" aria-label="デッキ管理"><div class="modal-box deck-manager">
     <div class="modal-title-line"><h2>▤ マイデッキ</h2>${btn('×','closeDeck','btn sm square')}</div>
-    <p class="small muted">このiPhone内に保存。何組でも切り替えて使えます（最大${MAX_SAVED_DECKS}組）。</p>
+    <p class="tiny muted">このiPhoneに保存・最大${MAX_SAVED_DECKS}組</p>
+    ${existingDraft(DECK_DRAFT_KEY)?`<div class="sv-draft-reminder">編集中のデッキがあります ${btn('再開','resumeDeckDraft','btn sm primary')}${btn('破棄','discardDeckDraft','btn sm ghost')}</div>`:''}
     <div class="row wrap mt8">${btn('＋ 空から作る','deckNew','btn primary sm','',ui.decks.decks.length>=MAX_SAVED_DECKS)}${btn('🔥 紅蓮で作る','deckNewRed','btn sm','',ui.decks.decks.length>=MAX_SAVED_DECKS)}${btn('🌊 蒼海で作る','deckNewBlue','btn sm','',ui.decks.decks.length>=MAX_SAVED_DECKS)}</div>
     <div class="deck-saved-list">${ui.decks.decks.map(d=>`<section class="saved-deck ${d.id===ui.decks.activeId?'active':''}">
-       <div class="row between"><b>${esc(d.name)}</b><span class="pill">${sum(d.counts)} / ${ui.rules.deckSize}枚</span></div>
-       <div class="small muted">モンスター ${deckCountType(d.counts,'monster')}・魔法 ${deckCountType(d.counts,'spell')}・罠 ${deckCountType(d.counts,'trap')}</div>
+       <div class="row between"><b>${esc(d.name)}</b><span class="pill">${sum(d.counts)} / ${ui.rules.deckSize}枚 + EX ${sum(d.extraCounts||{})}</span></div>
+       <div class="small muted">モンスター ${deckCountType(d.counts,'monster')}・魔法 ${deckCountType(d.counts,'spell')}・罠 ${deckCountType(d.counts,'trap')}・コスト ${deckCost(d.counts,CARD)}${ui.rules.costLimit?'/'+ui.rules.costLimit:''}</div>
        <div class="deck-controls">
-         ${btn(d.id===ui.decks.activeId?'✓ 使用中':'使う','deckSelect','btn sm primary',`data-id="${esc(d.id)}"`,d.id===ui.decks.activeId||!validDeck(d.counts,ui.rules))}
+         ${btn(d.id===ui.decks.activeId?'✓ 使用中':'使う','deckSelect','btn sm primary',`data-id="${esc(d.id)}"`,d.id===ui.decks.activeId||!validDeck(d.counts,ui.rules,d.extraCounts||{}))}
          ${btn('編集','deckEdit','btn sm',`data-id="${esc(d.id)}"`)}
-         ${btn('共有','deckShare','btn sm secondary',`data-id="${esc(d.id)}"`,!validDeck(d.counts,ui.rules))}
+         ${btn('共有','deckShare','btn sm secondary',`data-id="${esc(d.id)}"`,!validDeck(d.counts,ui.rules,d.extraCounts||{}))}
          ${btn('複製','deckClone','btn sm',`data-id="${esc(d.id)}"`,ui.decks.decks.length>=MAX_SAVED_DECKS)}
          ${btn('削除','deckDelete','btn sm ghost',`data-id="${esc(d.id)}"`,ui.decks.decks.length<=1)}
        </div></section>`).join('')}</div>
-    <p class="tiny muted">「共有」はLINEなどで送るデッキ専用リンクです。相手が取り込んでも、あなたのデッキは変わりません。</p>
+
   </div></div>`;
-  const d=ui.deckDraft,counts=d.counts;
-  const usable=validDeck(counts,ui.rules)&&(!ui.collectionOnly||Object.entries(counts).every(([id,n])=>n<=(ui.packs.collection[id]||0)));
+  const d=ui.deckDraft,counts=d.counts,extra=d.extraCounts||{};
+  const pool=deckPool();
+  const usable=validDeck(counts,ui.rules,extra)&&(!ui.collectionOnly||[...Object.entries(counts),...Object.entries(extra)].every(([id,n])=>n<=(pool[id]||0)));
   return `<div class="modal" role="dialog" aria-modal="true" aria-label="デッキを作成・編集"><div class="modal-box deck-manager">
-    <div class="modal-title-line"><h2>デッキ作成・編集</h2>${btn('×','deckBack','btn sm square')}</div>
+    <div class="modal-title-line"><h2>${ui.sealedOnly?'パック戦':'デッキ編集'}</h2>${btn('×','deckBack','btn sm square')}</div>
     <label for="deckName" class="field-label">デッキ名</label><input id="deckName" class="input" maxlength="28" value="${esc(d.name)}">
-    <div class="row between mt8"><span class="muted small">禁止0枚・制限1枚・準制限2枚・通常3枚まで</span><b class="deck-total ${usable?'good':''}">${sum(counts)} / ${ui.rules.deckSize}</b></div>
-    <label class="fx-check small"><input id="collectionOnly" type="checkbox" ${ui.collectionOnly?'checked':''}> パックで獲得したカードだけでデッキを作る</label>
-    <div class="row wrap mt8">${btn('🔥 紅蓮を読み込む','loadRed','btn sm')}${btn('🌊 蒼海を読み込む','loadBlue','btn sm')}${btn('空にする','deckClear','btn sm ghost')}</div>
+    <div class="sv-deck-stats"><span>メイン <b class="deck-total ${usable?'good':''}">${sum(counts)} / ${ui.rules.deckSize}</b></span><span class="sv-deck-types">M ${deckCountType(counts,'monster')} ・ S ${deckCountType(counts,'spell')} ・ T ${deckCountType(counts,'trap')}</span></div>
+    <div class="deck-cost-summary">合計コスト <b class="deck-cost-total">${deckCost(counts,CARD)}</b>${ui.rules.costLimit?` / ${ui.rules.costLimit} まで`:'（制限なし）'}</div>
+    ${ui.sealedOnly?`<div class="notice">今回の開封分だけで構築（${ui.sealedSession?.drawn.length||0}枚）</div>`:`<label class="fx-check small"><input id="collectionOnly" type="checkbox" ${ui.collectionOnly?'checked':''}> パックで獲得したカードだけでデッキを作る</label>`}
+    <div class="row wrap mt8">${ui.sealedOnly?'':`${btn('🔥 紅蓮を読み込む','loadRed','btn sm')}${btn('🌊 蒼海を読み込む','loadBlue','btn sm')}`}${btn('空にする','deckClear','btn sm ghost')}</div>
     <div class="form-duo mt8"><div><label for="deckType" class="field-label">種類</label><select class="input" id="deckType"><option value="all">すべて</option>${['monster','spell','trap'].map(t=>`<option value="${t}" ${ui.deckFilterType===t?'selected':''}>${t==='monster'?'モンスター':t==='spell'?'魔法':'罠'}</option>`).join('')}</select></div>
     <div><label for="deckRarity" class="field-label">レアリティ</label><select class="input" id="deckRarity"><option value="all">すべて</option>${Object.entries(RARITIES).map(([v,n])=>`<option value="${v}" ${ui.deckFilterRarity===v?'selected':''}>${v} ${n}</option>`).join('')}</select></div></div>
-    <input id="deckSearch" class="input mt8" placeholder="カード名で探す" autocomplete="off">
-    <div class="deck-list mt8">${CARDS.map(c=>`<div class="deck-item" data-cardtype="${esc(c.type)}" data-rarity="${esc(c.rarity||'N')}" data-cardname="${esc(c.name)}">
-      <div class="mini-card-preview">${cardHtml(c.id)}</div><div class="grow"><div class="deck-item-title">${esc(c.name)} <span class="rarity-label rarity-text-${esc(c.rarity||'N')}">${esc(c.rarity||'N')}</span></div><div class="deck-item-detail">${esc(suffix(c))} / ${esc(LIMITS[c.limit||'unlimited'].label)} ${ui.collectionOnly?' / 所持'+(ui.packs.collection[c.id]||0)+'枚':''}</div></div>
-      ${btn('−','deckMinus','btn sm square',`data-id="${esc(c.id)}"`,!counts[c.id])}<span class="count">${counts[c.id]||0}</span>
-      ${btn('＋','deckPlus','btn sm square',`data-id="${esc(c.id)}"`,(counts[c.id]||0)>=Math.min(cardLimit(c),ui.collectionOnly?(ui.packs.collection[c.id]||0):3)||sum(counts)>=ui.rules.deckSize)}</div>`).join('')}</div>
-    ${btn(d.isNew?`この${ui.rules.deckSize}枚を保存`:'変更を保存','saveDeck','btn primary wide mt8','',!usable)}
-    ${btn('保存せず戻る','deckBack','btn ghost wide mt8')}
+    <div class="sv-filter-strip"><input id="deckSearch" class="input" placeholder="カード検索" autocomplete="off" value="${esc(ui.deckSearch)}"><label class="sv-check-chip"><input id="deckOnly" type="checkbox" ${ui.deckOnly?'checked':''}> 収録中</label></div>
+    <div class="sv-list-caption"><span id="deckMatchCount"></span><span>− / ＋ で枚数変更</span></div>
+    <div class="deck-list mt8">${CARDS.filter(c=>summonKind(c)!=='fusion'&&(!ui.sealedOnly||pool[c.id]>0)).map(c=>`<div class="deck-item" data-cardtype="${esc(c.type)}" data-rarity="${esc(c.rarity||'N')}" data-cardname="${esc(c.name)}" data-cardsearch="${esc(c.name.toLocaleLowerCase('ja'))}">
+      ${cardThumb(c)}<div class="grow"><div class="deck-item-title">${esc(c.name)} <span class="rarity-label rarity-text-${esc(c.rarity||'N')}">${esc(c.rarity||'N')}</span></div><div class="deck-item-detail">${esc(suffix(c))} · C${cardCost(c)} ${ui.collectionOnly?'· 所持'+(pool[c.id]||0):''}</div></div>
+      ${btn('−','deckMinus','btn sm square',`data-id="${esc(c.id)}" aria-label="${esc(c.name)}を1枚減らす"`,!counts[c.id])}<span class="count">${counts[c.id]||0}</span>
+      ${btn('＋','deckPlus','btn sm square',`data-id="${esc(c.id)}" aria-label="${esc(c.name)}を1枚増やす"`,(counts[c.id]||0)>=Math.min(cardLimit(c),ui.collectionOnly?(pool[c.id]||0):3)||sum(counts)>=ui.rules.deckSize)}</div>`).join('')}</div>
+    <h3 class="mt8">EXデッキ <span class="pill ex-total">${sum(extra)} / 15</span></h3>
+    <div class="small muted">融合モンスターはここに入れます（最大15枚）。</div>
+    <div class="deck-list ex-deck-list">${CARDS.filter(c=>summonKind(c)==='fusion'&&(!ui.sealedOnly||pool[c.id]>0)).map(c=>`<div class="deck-item ex-deck-item">
+     ${cardThumb(c)}<div class="grow"><b>${esc(c.name)}</b><div class="tiny muted">${esc(suffix(c))}</div></div>
+     ${btn('−','extraMinus','btn sm square',`data-id="${esc(c.id)}"`,!extra[c.id])}<span class="ex-count">${extra[c.id]||0}</span>${btn('＋','extraPlus','btn sm square',`data-id="${esc(c.id)}"`,(extra[c.id]||0)>=Math.min(cardLimit(c),ui.collectionOnly?(pool[c.id]||0):3)||sum(extra)>=15)}
+    </div>`).join('')}</div>
+    <div class="sv-sticky-actions sv-deck-save">
+      <div class="sv-save-total">メイン <strong class="sv-save-count">${sum(counts)} / ${ui.rules.deckSize}</strong>　 EX <strong class="sv-save-ex">${sum(extra)} / 15</strong></div>
+      ${btn(d.isNew?'デッキを保存':'変更を保存','saveDeck','btn primary wide','',!usable)}
+    </div>
   </div></div>`;
 }
 function deckCountType(counts,type){return Object.entries(counts).reduce((n,[id,count])=>n+(CARD[id]?.type===type?count:0),0);}
@@ -200,7 +357,7 @@ function galleryModal(){
     <div class="form-duo"><div><label for="galleryType" class="field-label">カード種類</label><select id="galleryType" class="input"><option value="all">すべて</option>${['monster','spell','trap'].map(t=>`<option value="${t}" ${ui.galleryFilterType===t?'selected':''}>${t==='monster'?'モンスター':t==='spell'?'魔法':'罠'}</option>`).join('')}</select></div>
     <div><label for="galleryRarity" class="field-label">レアリティ</label><select id="galleryRarity" class="input"><option value="all">すべて</option>${Object.entries(RARITIES).map(([v,n])=>`<option value="${v}" ${ui.galleryFilterRarity===v?'selected':''}>${v} ${n}</option>`).join('')}</select></div></div>
     <input id="gallerySearch" class="input mt8" placeholder="名前で検索" autocomplete="off">
-    <div class="gallery-grid">${CARDS.map(c=>`<button type="button" class="gallery-entry" data-action="galleryDetail" data-id="${esc(c.id)}" data-cardtype="${esc(c.type)}" data-rarity="${esc(c.rarity||'N')}" data-cardname="${esc(c.name)}">
+    <div class="gallery-grid">${CARDS.map(c=>`<button type="button" class="gallery-entry" data-action="galleryDetail" data-id="${esc(c.id)}" data-cardtype="${esc(c.type)}" data-rarity="${esc(c.rarity||'N')}" data-cardname="${esc(c.name)}" data-cardsearch="${esc(c.name.toLocaleLowerCase('ja'))}">
       <div class="gallery-card">${cardHtml(c.id)}</div><span class="gallery-caption">${esc(c.name)}</span><span class="rarity-label rarity-text-${esc(c.rarity||'N')}">${esc(c.rarity||'N')}</span></button>`).join('')}</div>
     <p class="tiny muted">カードをタップすると、画像・効果・能力値を拡大表示できます。</p>
   </div></div>`;
@@ -249,6 +406,8 @@ function ruleModal(){const r=ui.rules;
  <p class="small muted">部屋を作る側の設定が対戦に適用されます。設定はこの端末に保存されます。</p>
  <label class="field-label" for="ruleLP">初期LP</label><select class="input" id="ruleLP">${selectOptions({1000:'1000',2000:'2000',4000:'4000',6000:'6000',8000:'8000',10000:'10000',12000:'12000',16000:'16000',20000:'20000'},String(r.lp))}</select>
  <label class="field-label" for="ruleDeck">デッキ枚数</label><select class="input" id="ruleDeck">${selectOptions({20:'20枚',30:'30枚',40:'40枚',50:'50枚',60:'60枚'},String(r.deckSize))}</select>
+ <label class="field-label" for="ruleCost">コスト上限</label><select class="input" id="ruleCost">${selectOptions({0:'制限なし',40:'40',50:'50',60:'60',70:'70',80:'80',100:'100',120:'120',150:'150',200:'200',240:'240'},String(r.costLimit||0))}</select>
+ <p class="tiny muted">各カードのコスト合計が上限以下のデッキだけ使用できます。</p>
  <p class="small muted mt8">通常ルールは8000LP・40枚。変更した場合、同じ枚数のデッキが必要です。</p>
  ${btn('保存する','saveRules','btn primary wide')}</div></div>`;
 }
@@ -282,7 +441,7 @@ function packModal(){const st=ui.packs;
 function detailOverlay(){const c=CARD[ui.previewCardId];if(!c)return '';
  return `<div class="modal modal-detail" role="dialog" aria-modal="true"><div class="modal-box gallery-dialog"><div class="modal-title-line"><h2>カード詳細</h2>${btn('×','closePreview','btn sm square')}</div>
  <div class="gallery-detail-card card-demo">${cardHtml(c.id)}</div><h3>${esc(c.name)} <span class="rarity-label">${esc(c.rarity||'N')}</span></h3>
- <p>${esc(suffix(c))}</p><p class="small muted">${esc(effectText(c)||c.desc||'効果なし')}</p><p class="small muted">枚数制限：${esc(LIMITS[c.limit||'unlimited'].label)}</p>${btn('閉じる','closePreview','btn primary wide')}</div></div>`;
+ <p>${esc(suffix(c))} ・ コスト ${cardCost(c)}</p><p class="small muted">${esc(effectText(c)||c.desc||'効果なし')}</p><p class="small muted">枚数制限：${esc(LIMITS[c.limit||'unlimited'].label)}</p>${btn('閉じる','closePreview','btn primary wide')}</div></div>`;
 }
 function appearanceApply(){const a=$('app');if(a){a.dataset.mat=ui.appearance.mat;a.dataset.back=ui.appearance.back;}}
 function persistAppearance(){storage.setItem('duel-appearance-v5',JSON.stringify(ui.appearance));appearanceApply();}
@@ -291,19 +450,23 @@ function savePackDraftFields(){const d=ui.packDraft;if(!d)return;d.name=$('packN
 
 function newCardDraft(){
   const random=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID().replace(/-/g,'').slice(0,24):`${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.padEnd(24,'0').slice(0,24);
-  return {id:`u_${random}`,name:'',rarity:'N',limit:'unlimited',type:'monster',subtype:'normal',level:4,atk:1500,def:1200,emoji:'✨',desc:'',image:'',fx:{visual:'auto',sound:'auto'},monsterEffect:{kind:'ignition',code:'burn500'}};
+  return {id:`u_${random}`,name:'',rarity:'N',limit:'unlimited',cost:2,type:'monster',subtype:'normal',summonKind:'normal',level:4,atk:1500,def:1200,emoji:'✨',desc:'',image:'',fx:{visual:'auto',sound:'auto'},monsterEffect:{kind:'ignition',code:'burn500'}};
 }
 function cardsModal(){
   if(ui.cardDraft)return editorModal();
-  return `<div class="modal" role="dialog" aria-modal="true" aria-label="カード管理"><div class="modal-box card-manager">
-    <div class="modal-title-line"><h2>✦ カード管理</h2>${btn('×','closeCards','btn sm square')}</div>
-    ${btn('＋ 新しいカードを作成','newCard','btn primary wide')}
-    <input id="cardSearch" class="input mt8" placeholder="カード名で検索" autocomplete="off">
+  return `<div class="modal" role="dialog" aria-modal="true" aria-label="カード管理"><div class="modal-box card-manager sv-card-manager">
+    <div class="modal-title-line"><h2>カード管理</h2>${btn('×','closeCards','btn sm square')}</div>
+    ${existingDraft(CARD_DRAFT_KEY)?`<div class="sv-draft-reminder">編集中のカードがあります ${btn('再開','resumeCardDraft','btn sm primary')}${btn('破棄','discardCardDraft','btn sm ghost')}</div>`:''}
+    ${btn('＋ カードを作成','newCard','btn primary wide')}
+    <input id="cardSearch" class="input mt8" value="${esc(ui.cardManageQuery)}" placeholder="カード名を検索" autocomplete="off">
+    <div class="form-duo mt8"><select id="cardManageType" class="input" aria-label="カードの種類">${selectOptions({all:'すべての種類',monster:'モンスター',spell:'魔法',trap:'罠'},ui.cardManageType)}</select>
+    <select id="cardManageRarity" class="input" aria-label="レアリティ">${selectOptions({all:'すべてのレアリティ',...RARITIES},ui.cardManageRarity)}</select></div>
+    <div class="sv-list-caption"><span id="cardManageCount"></span><span>編集するカードを選択</span></div>
     <div class="card-manage-list">${CARDS.map(c=>{
        const canEdit=!ui.customCards[c.id]||ui.customCards[c.id].owner===(ui.uid||'local');
-       return `<div class="card-manage-item" data-cardname="${esc(c.name)}">
-         <div class="mini-card-preview">${cardHtml(c.id)}</div>
-         <div class="grow"><b>${esc(c.name)}</b><div class="tiny muted"><span class="rarity-label rarity-text-${esc(c.rarity||'N')}">${esc(c.rarity||'N')}</span> ${esc(suffix(c))}</div><div class="tiny muted">${esc(effectText(c)||c.desc||'')}</div></div>
+       return `<div class="card-manage-item" data-cardname="${esc(c.name)}" data-cardsearch="${esc(c.name.toLocaleLowerCase('ja'))}" data-cardtype="${esc(c.type)}" data-rarity="${esc(c.rarity||'N')}">
+         ${cardThumb(c)}
+         <div class="grow"><b>${esc(c.name)}</b><div class="tiny muted"><span class="rarity-label rarity-text-${esc(c.rarity||'N')}">${esc(c.rarity||'N')}</span> ${esc(suffix(c))}</div></div>
          ${btn(canEdit?'編集':'閲覧のみ','editCard','btn sm',`data-id="${esc(c.id)}"`,!canEdit)}
        </div>`}).join('')}</div>
   </div></div>`;
@@ -315,32 +478,41 @@ function editorModal(){
   const editable=(!custom||ui.customCards[d.id]?.owner===(ui.uid||'local'));
   return `<div class="modal" role="dialog" aria-modal="true" aria-label="カードを編集"><div class="modal-box card-manager">
     <div class="modal-title-line"><h2>${ORIGINAL_IDS.has(d.id)?'カードを編集':custom?'カードを編集':'カードを作成'}</h2>${btn('×','cardList','btn sm square')}</div>
+    <p class="tiny muted sv-autosave-note">入力内容は下書きとして自動保存されます</p>
     <div class="editor-preview"><div class="card-demo">${cardHtmlPreview(d)}</div>
       <div class="upload-tools"><label class="btn secondary upload-label">🖼 画像を選ぶ<input id="cardImage" type="file" accept="image/*" hidden></label>
       ${d.image?btn('画像を削除','removeCardImage','btn sm ghost'):''}
 </div></div>
     <div class="card-form">
       <label class="field-label" for="cardName">カード名</label><input id="cardName" class="input" maxlength="32" value="${esc(d.name)}" placeholder="例：星影の魔術師">
-      <div class="form-duo"><div><label class="field-label" for="cardRarity">レアリティ</label><select id="cardRarity" class="input">${selectOptions(RARITIES,d.rarity||'N')}</select></div>
-      <div><label class="field-label" for="cardLimit">禁止・制限</label><select id="cardLimit" class="input">${selectOptions(Object.fromEntries(Object.entries(LIMITS).map(([v,x])=>[v,x.label])),d.limit||'unlimited')}</select></div></div>
+      <label class="field-label" for="cardRarity">レアリティ</label><select id="cardRarity" class="input">${selectOptions(RARITIES,d.rarity||'N')}</select>
       <div class="form-duo"><div><label class="field-label" for="cardType">種類</label><select class="input" id="cardType">${selectOptions({monster:'モンスター',spell:'魔法',trap:'罠'},d.type)}</select></div>
       ${!isMonster&&d.type==='spell'?`<div><label class="field-label" for="cardSpellKind">魔法の種類</label><select class="input" id="cardSpellKind">${selectOptions(SPELL_KINDS,spellKind(d))}</select></div>`:''}
       ${isMonster?`<div><label class="field-label" for="cardSubtype">モンスター種別</label><select class="input" id="cardSubtype">${selectOptions({normal:'通常',effect:'効果'},d.subtype||'normal')}</select></div>`:''}</div>
+      ${isMonster?`<label class="field-label" for="cardSummonKind">召喚方法</label><select id="cardSummonKind" class="input">${selectOptions(SUMMON_KINDS,summonKind(d))}</select>`:''}
+      ${isMonster&&summonKind(d)==='fusion'?`<div class="form-duo"><div><label class="field-label">融合素材①</label><select id="fusionMat1" class="input">${selectOptions(Object.fromEntries(CARDS.filter(c=>c.type==='monster'&&summonKind(c)!=='fusion'&&c.id!==d.id).map(c=>[c.id,c.name])),d.fusionMaterials?.[0]||'m03')}</select></div>
+      <div><label class="field-label">融合素材②</label><select id="fusionMat2" class="input">${selectOptions(Object.fromEntries(CARDS.filter(c=>c.type==='monster'&&summonKind(c)!=='fusion'&&c.id!==d.id).map(c=>[c.id,c.name])),d.fusionMaterials?.[1]||'m12')}</select></div></div>`:''}
+      ${d.type==='spell'&&spellKind(d)==='ritual'?`<label class="field-label" for="ritualFor">対応する儀式モンスター</label><select class="input" id="ritualFor">${selectOptions({ '':'すべての儀式モンスター',...Object.fromEntries(CARDS.filter(c=>summonKind(c)==='ritual').map(c=>[c.id,c.name]))},d.ritualFor||'')}</select>`:''}
       ${isMonster?`<div class="form-trio"><div><label class="field-label" for="cardLevel">レベル</label><input id="cardLevel" class="input" inputmode="numeric" type="number" min="1" max="12" value="${d.level||4}"></div>
           <div><label class="field-label" for="cardAtk">ATK</label><input id="cardAtk" class="input" inputmode="numeric" type="number" min="0" max="5000" value="${d.atk??1500}"></div>
           <div><label class="field-label" for="cardDef">DEF</label><input id="cardDef" class="input" inputmode="numeric" type="number" min="0" max="5000" value="${d.def??1200}"></div></div>`:''}
-      ${draftEffectFields(d)}
-      <label class="field-label" for="cardEmoji">画像がない場合のアイコン（絵文字）</label><input id="cardEmoji" class="input" maxlength="8" value="${esc(d.emoji||'✨')}">
+      ${!(d.type==='spell'&&['ritual','fusion'].includes(spellKind(d)))?draftEffectFields(d):'<p class="tiny muted">召喚効果は自動設定されます。</p>'}
+      <details class="sv-advanced-fields"><summary>詳細設定 <span>制限・コスト・説明・演出</span></summary>
+      <div class="form-duo"><div><label class="field-label" for="cardLimit">禁止・制限</label><select id="cardLimit" class="input">${selectOptions(Object.fromEntries(Object.entries(LIMITS).map(([v,x])=>[v,x.label])),d.limit||'unlimited')}</select></div>
+      <div><label class="field-label" for="cardCost">デッキコスト</label><input id="cardCost" class="input" type="number" inputmode="numeric" min="1" max="20" value="${d.cost??cardCost(d)}"></div></div>
+      <label class="field-label" for="cardEmoji">画像がない場合のアイコン</label><input id="cardEmoji" class="input" maxlength="8" value="${esc(d.emoji||'✨')}">
       <label class="field-label" for="cardDesc">フレーバー説明文</label><textarea id="cardDesc" class="input" maxlength="250" rows="2" placeholder="カードの説明を入力">${esc(d.desc||'')}</textarea>
       <div class="fx-card-editor"><h3>✧ このカードの演出・音</h3>
         <div class="form-duo"><div><label class="field-label" for="cardFxVisual">使用時のエフェクト</label><select class="input" id="cardFxVisual">${selectOptions(VISUAL_CHOICES,d.fx?.visual||'auto')}</select></div>
         <div><label class="field-label" for="cardFxSound">使用時の効果音</label><select class="input" id="cardFxSound">${selectOptions(SOUND_CHOICES,d.fx?.sound||'auto')}</select></div></div>
         <div class="row mt8">${btn('▶ この演出を試す','previewCardFx','btn sm secondary')}</div>
       </div>
+      </details>
     </div>
-    ${btn('このカードを保存','saveCard','btn primary wide','',!editable||ui.cardBusy)}
+    <div class="sv-sticky-actions sv-card-save">
+      ${btn('カードを保存','saveCard','btn primary wide','',!editable||ui.cardBusy)}
+    </div>
     ${custom?btn(ORIGINAL_IDS.has(d.id)?'初期状態に戻す':'このカードを削除','deleteCard','btn ghost danger wide mt8','',!editable):''}
-    ${btn('カード一覧に戻る','cardList','btn ghost wide mt8')}
   </div></div>`;
 }
 function cardHtmlPreview(card){return cardHtml(card.id,{card});}
@@ -348,9 +520,11 @@ function readCardForm(){
   const d=ui.cardDraft;if(!d)return;
   const value=(id,fallback='')=>$(id)?.value??fallback;
   d.name=value('cardName',d.name).trim();
-  d.rarity=value('cardRarity',d.rarity||'N');d.limit=value('cardLimit',d.limit||'unlimited');
+  d.rarity=value('cardRarity',d.rarity||'N');d.limit=value('cardLimit',d.limit||'unlimited');d.cost=Number(value('cardCost',d.cost??cardCost(d)));
   d.type=value('cardType',d.type);
   if(d.type==='spell')d.spellKind=value('cardSpellKind',d.spellKind||'normal');else delete d.spellKind;
+  if(d.type==='monster'){d.summonKind=value('cardSummonKind',d.summonKind||'normal');if(d.summonKind==='fusion')d.fusionMaterials=[value('fusionMat1',d.fusionMaterials?.[0]||'m03'),value('fusionMat2',d.fusionMaterials?.[1]||'m12')];else delete d.fusionMaterials;}else delete d.summonKind;
+  if(d.type==='spell'&&d.spellKind==='ritual')d.ritualFor=value('ritualFor',d.ritualFor||'');else delete d.ritualFor;
   d.emoji=value('cardEmoji',d.emoji).trim()||'✦';
   d.desc=value('cardDesc',d.desc).trim();
   d.fx={visual:value('cardFxVisual',d.fx?.visual||'auto'),sound:value('cardFxSound',d.fx?.sound||'auto')};
@@ -364,9 +538,9 @@ function readCardForm(){
       d.monsterEffect={kind,code};
     }else delete d.monsterEffect;
     delete d.effect;
-  }else{d.effect=value('cardEffectCode',d.effect||'draw2');delete d.monsterEffect;delete d.subtype;}
+  }else{d.effect=d.type==='spell'&&['ritual','fusion'].includes(spellKind(d))?(spellKind(d)==='ritual'?'ritualSummon':'fusionSummon'):value('cardEffectCode',d.effect||'draw2');delete d.monsterEffect;delete d.subtype;}
   const mode=value('cardEffectMode',d.ability?'builder':'preset');
-  if(d.type==='spell'&&spellKind(d)==='equip'){
+  if(d.type==='spell'&&['ritual','fusion'].includes(spellKind(d))){delete d.ability;}else if(d.type==='spell'&&spellKind(d)==='equip'){
     const a=Number(value('cardAbilityAmount',d.ability?.amount||500));
     d.ability={when:'continuous',operation:'boost',target:'ownMonster',amount:EFFECT_VALUES.boost.includes(a)?a:500};
   }else if((d.type!=='monster'||d.subtype==='effect')&&mode==='builder'){
@@ -377,6 +551,7 @@ function readCardForm(){
     const values=EFFECT_VALUES[operation]||[0];
     d.ability={when,operation,target:targets.includes(oldTarget)?oldTarget:targets[0],amount:values.includes(Number(value('cardAbilityAmount',d.ability?.amount??values[0])))?Number(value('cardAbilityAmount',values[0])):values[0]};
   }else delete d.ability;
+  saveCardDraft();
 }
 async function saveCardFromForm(){
   if(ui.cardBusy)return;
@@ -390,10 +565,11 @@ async function saveCardFromForm(){
     if(ui.sdk)await ui.sdk.set(ui.sdk.ref(ui.db,`cardLibrary/cards/${d.id}`),d);
     else{
       ui.customCards[d.id]=d;
-      storage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));
+      lastCardLibraryJSON=JSON.stringify(ui.customCards);
+      storage.setItem('duel-custom-cards',lastCardLibraryJSON);
       replaceCustomCards(ui.customCards);
     }
-    ui.cardDraft=null;render();toast(ui.sdk?'共有カードを保存しました':'このiPhoneに保存しました（共有にはFirebaseが必要）');
+    clearCardDraft();ui.cardDraft=null;render();toast(ui.sdk?'共有カードを保存しました':'このiPhoneに保存しました（共有にはFirebaseが必要）');
   }catch(e){toast('保存に失敗しました：'+e.message);}
   finally{ui.cardBusy=false;}
 }
@@ -403,8 +579,8 @@ async function deleteCard(){
   if(!confirm(ORIGINAL_IDS.has(id)?'カードを初期状態に戻しますか？':'このカードを削除しますか？ デッキに入れている場合は組み直しが必要です。'))return;
   try{
     if(ui.sdk)await ui.sdk.remove(ui.sdk.ref(ui.db,`cardLibrary/cards/${id}`));
-    else{delete ui.customCards[id];replaceCustomCards(ui.customCards);storage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));}
-    ui.cardDraft=null;render();toast('反映しました');
+    else{delete ui.customCards[id];replaceCustomCards(ui.customCards);lastCardLibraryJSON=JSON.stringify(ui.customCards);storage.setItem('duel-custom-cards',lastCardLibraryJSON);}
+    clearCardDraft();ui.cardDraft=null;render();toast('反映しました');
   }catch(e){toast('削除に失敗しました：'+e.message);}
 }
 async function compressCardImage(file){
@@ -439,7 +615,10 @@ function slotHtml(player,owner,zone,i){
     const c=CARD[item.id];const attack=effectiveAtk(item,ui.game,owner==='mine'?ui.seat:1-ui.seat);
     marker=`<span class="slot-tag">${item.pos==='atk'?'攻'+attack:item.pos==='set'?'裏守':'守'+(c?.def??0)}</span>`;
   }
-  return `<button type="button" aria-label="${owner==='mine'?'自分':'相手'}の${zone==='monsters'?'モンスター':'魔法・罠'}ゾーン${i+1}${occupied?' カードあり':' 空き'}" class="slot ${occupied?'':'empty'} ${selected?'selected':''}" data-select="1" data-owner="${owner}" data-zone="${zone}" data-index="${i}">
+  const eligible=ui.targetMode?.type==='tribute'&&owner==='mine'&&zone==='monsters'&&occupied;
+  const picked=eligible&&ui.targetMode.indices.includes(i);
+  const emptyTarget=ui.targetMode?.type==='move'&&owner==='mine'&&zone===ui.targetMode.zone&&!occupied;
+  return `<button type="button" aria-label="${owner==='mine'?'自分':'相手'}の${zone==='monsters'?'モンスター':'魔法・罠'}ゾーン${i+1}${occupied?' カードあり':' 空き'}" class="slot ${occupied?'':'empty'} ${selected?'selected':''} ${eligible?'sv-target-eligible':''} ${picked?'sv-target-picked':''} ${emptyTarget?'sv-target-empty':''}" data-select="1" data-owner="${owner}" data-zone="${zone}" data-index="${i}">
   ${occupied?cardHtml(item.id,{hidden:hide,def:item.pos==='def'}):''}${marker}</button>`;
 }
 function fieldSlotHtml(player,owner){
@@ -489,9 +668,11 @@ function renderPending(){
   ${btn('何も発動せず攻撃を通す','passAttack','btn wide mt8')}</div>`;
 }
 function renderTargetHint(){
-  if(!ui.targetMode)return '';
-  const m=ui.targetMode;
-  return `<div class="hintbox">${m.type==='spell'||m.type==='quick'?'選択した効果の対象モンスターをタップしてください。':m.type==='chainTrap'?'✧ 罠の対象モンスターをタップしてください。':m.type==='monsterEffect'?'✦ 効果で破壊する相手のモンスターをタップしてください。':m.type==='attack'?`⚔ 攻撃対象となる相手モンスターをタップしてください。${!ui.game.players[1-ui.seat].monsters.some(Boolean)?'「直接攻撃」もできます。':''}`:m.id==='s03'?'⚡ 破壊する相手のモンスターをタップしてください。':'💪 強化する自分の攻撃表示モンスターをタップしてください。'}
+ if(!ui.targetMode)return '';
+ const m=ui.targetMode;
+ if(m.type==='tribute')return `<div class="hintbox sv-target-choice"><strong>リリースするモンスターをタップ</strong><div class="small">${m.indices.length} / ${m.needed}体選択</div><div class="row wrap mt8">${btn('選択して召喚','confirmTributes','btn primary sm','',m.indices.length!==m.needed)}${btn('やめる','cancelTarget','btn sm ghost')}</div></div>`;
+ if(m.type==='move')return `<div class="hintbox sv-target-choice"><strong>移動先の空いているゾーンをタップ</strong><div class="row mt8">${btn('やめる','cancelTarget','btn sm ghost')}</div></div>`;
+ return `<div class="hintbox">${m.type==='spell'||m.type==='quick'?'選択した効果の対象モンスターをタップしてください。':m.type==='chainTrap'?'✧ 罠の対象モンスターをタップしてください。':m.type==='monsterEffect'?'✦ 効果で破壊する相手のモンスターをタップしてください。':m.type==='attack'?`⚔ 攻撃対象となる相手モンスターをタップしてください。${!ui.game.players[1-ui.seat].monsters.some(Boolean)?'「直接攻撃」もできます。':''}`:m.id==='s03'?'⚡ 破壊する相手のモンスターをタップしてください。':'💪 強化する自分の攻撃表示モンスターをタップしてください。'}
    <div class="row mt8">${m.type==='attack'&&!ui.game.players[1-ui.seat].monsters.some(Boolean)?btn('直接攻撃','directAttack','btn sm primary'):''}${btn('キャンセル','cancelTarget','btn sm ghost')}</div></div>`;
 }
 function renderSelection(){
@@ -507,14 +688,14 @@ function renderSelection(){
     item=(sel.owner==='mine'?p:enemy).backrow[sel.index];id=item?.id;
   }
   if(!id)return '';
-  if(sel.owner==='opponent'&&((sel.zone==='backrow'||sel.zone==='field')&&item?.faceDown||item?.pos==='set'))return '<div class="card-detail"><b>裏側のカード</b><div class="small muted">内容はまだわかりません。</div></div>';
+  if(sel.owner==='opponent'&&((sel.zone==='backrow'||sel.zone==='field')&&item?.faceDown||item?.pos==='set'))return '<div class="card-detail duel-card-actions"><div class="row between"><b>裏側のカード</b><button class="btn sm ghost" data-action="cancelSelection">閉じる</button></div><div class="small muted">内容はまだわかりません。</div></div>'; 
   const c=CARD[id];if(!c)return '';
   let options='';const canMain=inMain();
   if(sel.owner==='mine'&&sel.zone==='hand'&&myTurn()&&!s.pending&&(canMain||c.type==='spell'&&spellKind(c)==='quick')){
     if(c.type==='monster'&&canMain){
-      options=btn('攻撃表示で召喚','summonAtk','btn primary sm')+btn('裏側守備でセット','summonSet','btn sm');
+      options=summonKind(c)==='ritual'?btn('儀式召喚','openRitual','btn primary sm'):summonKind(c)==='fusion'?'':btn('攻撃表示で召喚','summonAtk','btn primary sm')+btn('裏側守備でセット','summonSet','btn sm');
     }else if(c.type==='spell'){
-      options=btn('魔法を発動','spellHand','btn primary sm')+(canMain?btn('伏せてセット','setHand','btn sm'):'');
+      options=btn(['ritual','fusion'].includes(spellKind(c))?(spellKind(c)==='ritual'?'儀式召喚':'融合召喚'):'魔法を発動','spellHand','btn primary sm')+(canMain?btn('伏せてセット','setHand','btn sm'):'');
     }else if(canMain)options=btn('伏せてセット','setHand','btn primary sm');
   }
   if(sel.owner==='mine'&&sel.zone==='hand'&&myTurn()&&p.hand.length>6)
@@ -531,13 +712,13 @@ function renderSelection(){
   }
   if(sel.owner==='mine'&&sel.zone==='monsters'&&canMain&&item){options+=btn('位置移動','moveSelected','btn sm')+btn('墓地へ','destroySelected','btn sm ghost')+btn('除外','banishSelected','btn sm ghost');}
   if(sel.owner==='mine'&&(sel.zone==='backrow'||sel.zone==='field')&&item){
-    if(c.type==='spell'&&item.faceDown&&myTurn()&&!s.pending&&(canMain||spellKind(c)==='quick'))options=btn('魔法を発動','spellField','btn primary sm');
+    if(c.type==='spell'&&item.faceDown&&myTurn()&&!s.pending&&(canMain||spellKind(c)==='quick'))options=btn(['ritual','fusion'].includes(spellKind(c))?'特殊召喚':'魔法を発動','spellField','btn primary sm');
     if(c.type==='trap'&&s.pending?.kind==='attack'&&s.pending.by!==ui.seat&&item.setTurn<s.turnNo)
       options=btn('罠を発動','trap','btn primary sm',`data-index="${sel.index}"`);
   }
   if(sel.owner==='mine'&&sel.zone==='backrow'&&canMain&&item)options+=btn('位置移動','moveSelected','btn sm')+btn('墓地へ','destroySelected','btn sm ghost')+btn('除外','banishSelected','btn sm ghost');
   if(sel.owner==='mine'&&sel.zone==='field'&&canMain&&item)options+=btn('フィールド魔法を墓地へ','destroySelected','btn sm ghost');
-  return `<section class="card-detail"><div class="row between"><div class="detail-title">${esc(c.emoji||'✦')} ${esc(c.name)}</div><span class="detail-badge">${cardTypeName(c)}</span></div>
+  return `<section class="card-detail duel-card-actions" role="region" aria-label="カード操作"><div class="row between duel-detail-heading"><div class="detail-title">${esc(c.name)}</div><span class="detail-badge">${cardTypeName(c)}</span>${btn('×','cancelSelection','btn sm square ghost')}</div>
    <div class="small muted mt8">${esc(suffix(c))}${item?.bonus?` / 強化+${item.bonus}`:''}</div><p class="detail-text">${esc(effectText(c)||c.desc)}</p>
    <div class="actionbar">${btn('🔎 拡大・効果確認','viewCard','btn secondary sm')}${options}</div></section>`;
 }
@@ -558,40 +739,63 @@ function renderGame(){
   const phaseButton=!myTurn()||ready||s.status!=='playing'?'':s.phase==='main2'?btn('ターン終了','endTurn','btn primary'):btn(s.phase==='draw'?(s.turnNo===1?'メインへ':'ドローしてメインへ'):s.phase==='main1'?(s.turnNo===1?'メイン2へ':'バトルへ'):'メイン2へ','nextPhase','btn primary');
   const endButton=myTurn()&&!ready&&s.status==='playing'&&s.phase!=='main2'&&s.phase!=='draw'?btn('ターン終了','endTurn','btn ghost'):'';
   const winner=s.status==='finished'?`<section class="panel winner">🏆 ${s.winner==='draw'?'引き分け':`${esc(s.players[s.winner].name)} の勝利！`}</section>`:'';
-  return `${roombar}<div class="statusbar">${enemyStatus}</div>
+  const layoutButton=btn(ui.duelCompact?'拡大表示':'省スペース','toggleCompact','btn sm ghost duel-layout-button');
+  const commandBar=`<div class="duel-commandbar" role="group" aria-label="フェイズ操作"><div class="duel-command-state"><span class="duel-turn">TURN ${s.turnNo}</span><strong>${esc(PHASES[s.phase]||'終了')}</strong><span class="duel-who">${s.status==='finished'?'決着':s.pending?'応答中':myTurn()?'自分のターン':'相手のターン'}</span></div>${phaseButton||endButton?`<div class="duel-command-buttons">${phaseButton}${endButton}</div>`:''}${layoutButton}</div>`;
+  const duelHud=ui.duelCompact?`<div class="duel-hud" aria-label="ライフポイントとデッキ残数"><div class="duel-hud-seat"><span class="duel-hud-label">相手</span>${enemyStatus}</div><div class="duel-hud-seat"><span class="duel-hud-label">自分</span>${myStatus}</div></div>`:`<div class="statusbar">${enemyStatus}</div>`;
+  return `${roombar}${commandBar}${duelHud}
+   ${ui.targetMode&&['tribute','move'].includes(ui.targetMode.type)?renderTargetHint():''}
    <div class="battlefield">
      <div class="field-zone-line"><span>相手のフィールド魔法</span>${fieldSlotHtml(enemy,'opponent')}</div><div class="zone-caption">相手の魔法・罠</div>
      <div class="slots">${Array.from({length:5},(_,i)=>slotHtml(enemy,'opponent','backrow',i)).join('')}</div>
      <div class="zone-caption">相手のモンスター</div>
      <div class="slots">${Array.from({length:5},(_,i)=>slotHtml(enemy,'opponent','monsters',i)).join('')}</div>
-     <div class="field-center"><div class="turnnote">ターン ${s.turnNo}</div><div class="phase">${esc(PHASES[s.phase]||'終了')}</div><div class="turnnote">${myTurn()?'あなたの手番':'相手の手番'}</div></div>
+     <div class="field-center duel-center-mark" aria-hidden="true">✦</div>
      <div class="zone-caption">自分のモンスター</div>
      <div class="slots">${Array.from({length:5},(_,i)=>slotHtml(me,'mine','monsters',i)).join('')}</div>
      <div class="zone-caption">自分の魔法・罠</div>
      <div class="slots">${Array.from({length:5},(_,i)=>slotHtml(me,'mine','backrow',i)).join('')}</div><div class="field-zone-line"><span>自分のフィールド魔法</span>${fieldSlotHtml(me,'mine')}</div>
    </div>
-   <div class="statusbar">${myStatus}<div class="row">${ui.demo?btn('操作側を交代','switchSeat','btn sm secondary'):''}</div></div>
+   ${!ui.duelCompact?`<div class="statusbar">${myStatus}<div class="row">${ui.demo?btn('操作側を交代','switchSeat','btn sm secondary'):''}</div></div>`:ui.demo?`<div class="duel-demo-switch">${btn('操作側を交代','switchSeat','btn sm secondary')}</div>`:''}
    ${winner}
    ${renderPending()}
-   ${renderTargetHint()}
-   ${s.status==='playing'&&!s.pending&&myTurn()?`<div class="row wrap mt8">${phaseButton}${endButton}</div>`:''}
+   ${ui.targetMode&&['tribute','move'].includes(ui.targetMode.type)?'':renderTargetHint()}
    <div class="hand-count">自分の手札 (${me.hand.length}枚)　${!myTurn()?'・相手のターン中':''}</div>
    <div class="hand-scroll">${hand||'<div class="muted small">手札がありません</div>'}</div>
    ${renderSelection()}
-   <section class="panel"><h3>デュエル操作</h3><div class="row wrap battle-tools">
+   <details class="panel duel-tools" ${ui.duelToolsOpen?'open':''}><summary>その他の操作</summary><div class="row wrap battle-tools">
      ${btn('🎲 サイコロ','rollDice','btn sm secondary')}${btn('🪙 コイン','flipCoin','btn sm secondary')}
      ${myTurn()&&!ready&&['main1','main2'].includes(s.phase)?btn('山札を混ぜる','shuffleDeck','btn sm')+btn('＋1枚ドロー','manualDraw','btn sm'):''}
      ${ui.demo?btn('↶ 1操作戻す','undoDemo','btn sm ghost','',!s.undoSnapshot):
        (s.undoRequest!==null&&s.undoRequest!==undefined&&s.undoRequest!==ui.seat?
         btn('取り消し承認','approveUndo','btn sm primary')+btn('拒否','rejectUndo','btn sm ghost'):
        btn(s.undoRequest===ui.seat?'承認待ち':'↶ 取り消しを依頼','requestUndo','btn sm ghost','',!s.undoSnapshot||s.undoActor!==ui.seat||s.undoRequest!==null&&s.undoRequest!==undefined))}
-     ${btn('🎨 デザイン','openAppearance','btn sm')}
+     ${myTurn()&&!ready&&['main1','main2'].includes(s.phase)&&me.extraDeck?.length?btn(`✦ EXデッキ (${me.extraDeck.length})`,'openFusion','btn sm primary'):''}
+     ${btn('🎨 デザイン','openAppearance','btn sm')}${btn('墓地・除外','showGrave','btn sm secondary')}
    </div>${s.lastRandom?`<div class="notice mt8">${esc(s.lastRandom)}</div>`:''}
-   </section>
-   <section class="panel"><div class="row between"><h3>対戦ログ</h3></div><div class="loglist">${s.log.map(x=>`<div>• ${esc(x)}</div>`).join('')}</div>
-   <hr class="soft-divider"><div class="row between"><span class="small muted">墓地・除外 ${me.grave.length+me.banished.length}枚</span>${btn('墓地・除外を見る','showGrave','btn sm')}</div></section>
+   </details>
+   <details class="panel duel-log" ${ui.duelLogOpen?'open':''}><summary>対戦ログ (${s.log.length})</summary><div class="loglist">${s.log.map(x=>`<div>• ${esc(x)}</div>`).join('')}</div></details>
    <div class="footer-links">${s.status==='playing'?btn('降参する','surrender','btn ghost sm'):''}${btn('🔊 演出設定','openFx','btn ghost sm')}${btn('ホームへ','goHome','btn ghost sm')}</div>
-   ${ui.graveOpen?graveModal():''}${ui.fxOpen?fxModal():''}${ui.appearanceOpen?appearanceModal():''}${ui.previewCardId?detailOverlay():''}`;
+   ${ui.graveOpen?graveModal():''}${ui.fxOpen?fxModal():''}${ui.appearanceOpen?appearanceModal():''}${ui.previewCardId?detailOverlay():''}${ui.specialDraft?specialModal():''}`;
+}
+/** Update only the selected-card drawer; the field and hand are untouched. */
+function refreshDuelSelection(){
+ const view=$('view');
+ if(!view?.classList.contains('duel-active')||ui.targetMode||!ui.game||typeof document.createElement!=='function'){render();return;}
+ for(const node of view.querySelectorAll('.slot.selected,.hand-slot.selected'))node.classList.remove('selected');
+ const selected=ui.selected;
+ if(selected){
+   const node=Array.from(view.querySelectorAll('[data-select]')).find(x=>
+     x.dataset.owner===selected.owner&&x.dataset.zone===selected.zone&&Number(x.dataset.index)===selected.index);
+   node?.classList.add('selected');
+ }
+ const old=view.querySelector('.duel-card-actions');
+ const html=renderSelection();
+ if(!html){old?.remove();return;}
+ const template=document.createElement('template');template.innerHTML=html.trim();
+ const next=template.content.firstElementChild;
+ if(!next){old?.remove();return;}
+ if(old)old.replaceWith(next);
+ else {const hand=view.querySelector('.hand-scroll');if(hand)hand.after(next);else view.append(next);}
 }
 function graveModal(){const me=activePlayer(),enemy=ui.game.players[1-ui.seat];
  const view=(p,side)=>`<h3>${side}：墓地 (${p.grave.length})</h3><div class="grave-list">${p.grave.map((id,i)=>`<button class="grave-chip" data-action="graveDetail" data-id="${esc(id)}">${esc(CARD[id]?.name||id)}</button>`).join('')||'なし'}</div>
@@ -601,9 +805,33 @@ function graveModal(){const me=activePlayer(),enemy=ui.game.players[1-ui.seat];
  <hr class="soft-divider">${view(enemy,'相手')}</div></div>`;
 }
 function render(){
- const mode=!!ui.game,changed=ui.renderedMode!==mode;ui.renderedMode=mode;
- $('view').innerHTML=mode?renderGame():renderHome();appearanceApply();
- if(changed)try{window.scrollTo(0,0);}catch{}
+ const view=$('view');
+ const mode=!!ui.game||!!ui.draftRoom,changed=ui.renderedMode!==mode;
+ const wasGame=!!view.classList.contains('duel-active');
+ const oldY=wasGame?window.scrollY:0;
+ const handX=wasGame?(view.querySelector('.hand-scroll')?.scrollLeft||0):0;
+ const logY=wasGame?(view.querySelector('.loglist')?.scrollTop||0):0;
+ const modalY=wasGame?(view.querySelector('.modal-box')?.scrollTop||0):0;
+ if(wasGame){
+   ui.duelToolsOpen=view.querySelector('.duel-tools')?.open??ui.duelToolsOpen;
+   ui.duelLogOpen=view.querySelector('.duel-log')?.open??ui.duelLogOpen;
+ }
+ ui.renderedMode=mode;
+ view.classList.toggle('duel-active',!!ui.game&&ui.game.status!=='waiting');
+ view.classList.toggle('duel-compact',!!ui.game&&ui.game.status!=='waiting'&&ui.duelCompact);
+ view.innerHTML=ui.draftRoom?renderDraftRoom():ui.game?renderGame():renderHome();
+ // Apply saved filters only when their list is present.
+ if($('deckSearch'))updateCardRows('deck');
+ if($('cardSearch'))updateManagedCards();
+ appearanceApply();
+ if(changed){try{window.scrollTo(0,0);}catch{}}
+ else if(wasGame&&ui.game){
+   // Preserve the user's position when a selection or online action redraws the field.
+   const hand=view.querySelector('.hand-scroll');if(hand)hand.scrollLeft=handX;
+   const log=view.querySelector('.loglist');if(log)log.scrollTop=logY;
+   const modal=view.querySelector('.modal-box');if(modal)modal.scrollTop=modalY;
+   if(Math.abs(window.scrollY-oldY)>2)try{window.scrollTo(0,oldY);}catch{}
+ }
 }
 function readHomeValues(){
  const input=$('playerName');if(input){ui.nickname=(input.value.trim()||'プレイヤー').slice(0,12);storage.setItem('duel-name',ui.nickname);}
@@ -611,21 +839,21 @@ function readHomeValues(){
 function startDeckDraft(mode,source){
   if(mode==='new'&&ui.decks.decks.length>=MAX_SAVED_DECKS)return toast('保存できるデッキは最大30組です');
   const base=source||activeSavedDeck();
-  ui.deckDraft=mode==='new'?{...newDeck('新しいデッキ',{}),isNew:true}:{...base,counts:{...base.counts},isNew:false};
-  ui.deckFilterType='all';ui.deckFilterRarity='all';render();
+  ui.deckDraft=mode==='new'?{...newDeck('新しいデッキ',{}),isNew:true}:{...base,counts:{...base.counts},extraCounts:{...base.extraCounts||{}},isNew:false};
+  ui.deckFilterType='all';ui.deckFilterRarity='all';saveDeckDraft();render();
 }
 function saveDeck(){
-  const d=ui.deckDraft;if(!d||!validDeck(d.counts,ui.rules))return toast(`${ui.rules.deckSize}枚・禁止制限を守ってください`);
-  if(ui.collectionOnly&&Object.entries(d.counts).some(([id,n])=>n>(ui.packs.collection[id]||0)))return toast('所持カード枚数を超えています');
+  const d=ui.deckDraft;if(!d||!validDeck(d.counts,ui.rules,d.extraCounts||{}))return toast(`${ui.rules.deckSize}枚・禁止制限を守ってください`);
+  if(ui.collectionOnly&&[...Object.entries(d.counts),...Object.entries(d.extraCounts||{})].some(([id,n])=>n>(deckPool()[id]||0)))return toast('所持カード枚数を超えています');
   const name=($('deckName')?.value||d.name).trim().slice(0,28)||'名前のないデッキ';
-  const result={id:d.id,name,counts:{...d.counts},updatedAt:Date.now()};
+  const result={id:d.id,name,counts:{...d.counts},extraCounts:{...d.extraCounts||{}},updatedAt:Date.now()};
   if(d.isNew){if(ui.decks.decks.length>=MAX_SAVED_DECKS)return toast('保存数の上限です');ui.decks.decks.push(result);}
   else{const i=ui.decks.decks.findIndex(x=>x.id===d.id);if(i<0)return toast('デッキがありません');ui.decks.decks[i]=result;}
-  ui.decks.activeId=result.id;persistDecks();ui.deckDraft=null;render();toast('「'+name+'」を保存しました');
+  ui.decks.activeId=result.id;persistDecks();const fromSealed=ui.sealedOnly;clearDeckDraft();ui.deckDraft=null;if(fromSealed){ui.sealedOnly=false;ui.collectionOnly=false;ui.deckOpen=false;ui.sealedOpen=false;ui.duelOpen=true;ui.sealedSession=null;storeSealed();}render();toast('「'+name+'」を保存しました');if(fromSealed)requestAnimationFrame(()=>document.getElementById('duel-setup')?.scrollIntoView({block:'start',behavior:'smooth'}));
 }
 function selectDeck(id){
  const d=ui.decks.decks.find(x=>x.id===id);if(!d)return;
- if(!validDeck(d.counts,ui.rules))return toast(`${ui.rules.deckSize}枚・禁止制限を守る必要があります`);
+ if(!validDeck(d.counts,ui.rules,d.extraCounts||{}))return toast(`${ui.rules.deckSize}枚・禁止制限を守る必要があります`);
  ui.decks.activeId=id;persistDecks();render();toast('対戦用デッキを切り替えました');
 }
 async function shareDeck(id){
@@ -641,45 +869,157 @@ async function shareDeck(id){
 function closeShare(){ui.pendingShare=null;ui.shareError='';try{const u=new URL(location.href);u.searchParams.delete('deck');history.replaceState({},'',u.pathname+u.search+u.hash);}catch{}render();}
 function addImportedDeck(){
  if(!ui.pendingShare)return;if(ui.decks.decks.length>=MAX_SAVED_DECKS)return toast('デッキ保存数の上限です');
- const deck=newDeck(ui.pendingShare.name+'（共有）',ui.pendingShare.counts);
+ const deck=newDeck(ui.pendingShare.name+'（共有）',ui.pendingShare.counts,ui.pendingShare.extraCounts||{});
  ui.decks.decks.push(deck);ui.decks.activeId=deck.id;persistDecks();closeShare();toast('共有デッキを保存しました');
 }
 /** Update only deck counts/buttons; keep search, scroll and keyboard focus intact. */
 function refreshDeckEditor(){
   if(!ui.deckDraft)return;
   const counts=ui.deckDraft.counts,total=sum(counts);
-  const valid=validDeck(counts,ui.rules)&&(!ui.collectionOnly||
-    Object.entries(counts).every(([id,n])=>n<=(ui.packs.collection[id]||0)));
+  const valid=validDeck(counts,ui.rules,ui.deckDraft.extraCounts||{})&&(!ui.collectionOnly||
+    [...Object.entries(counts),...Object.entries(ui.deckDraft.extraCounts||{})].every(([id,n])=>n<=(deckPool()[id]||0)));
   const counter=document.querySelector('.deck-total');
   if(counter){counter.textContent=`${total} / ${ui.rules.deckSize}`;counter.classList.toggle('good',valid);}
   const save=document.querySelector('[data-action="saveDeck"]');if(save)save.disabled=!valid;
-  for(const row of document.querySelectorAll('.deck-item')){
+  const cost=document.querySelector('.deck-cost-total');if(cost)cost.textContent=String(deckCost(counts,CARD));
+  const saveCount=document.querySelector('.sv-save-count');if(saveCount)saveCount.textContent=`${total} / ${ui.rules.deckSize}`;
+  const typeTotals=document.querySelector('.sv-deck-types');if(typeTotals)typeTotals.textContent=`M ${deckCountType(counts,'monster')} ・ S ${deckCountType(counts,'spell')} ・ T ${deckCountType(counts,'trap')}`;
+  const extra=ui.deckDraft.extraCounts||{},countExtra=sum(extra);
+  const exTotal=document.querySelector('.ex-total');if(exTotal)exTotal.textContent=`${countExtra} / 15`;
+  const exSave=document.querySelector('.sv-save-ex');if(exSave)exSave.textContent=`${countExtra} / 15`;
+  for(const row of document.querySelectorAll('.ex-deck-item')){const add=row.querySelector('[data-action="extraPlus"]'),minus=row.querySelector('[data-action="extraMinus"]'),qty=row.querySelector('.ex-count');if(!add)continue;const n=extra[add.dataset.id]||0;if(qty)qty.textContent=String(n);if(minus)minus.disabled=n<1;add.disabled=n>=Math.min(cardLimit(CARD[add.dataset.id]),ui.collectionOnly?(deckPool()[add.dataset.id]||0):3)||countExtra>=15;}
+  for(const row of document.querySelectorAll('.deck-item:not(.ex-deck-item)')){
     const add=row.querySelector('[data-action="deckPlus"]');if(!add)continue;
     const id=add.dataset.id,c=CARD[id],count=counts[id]||0;
     const minus=row.querySelector('[data-action="deckMinus"]');
     const qty=row.querySelector('.count');if(qty)qty.textContent=String(count);
     if(minus)minus.disabled=count<=0;
-    add.disabled=!c||count>=Math.min(cardLimit(c),ui.collectionOnly?(ui.packs.collection[id]||0):3)||total>=ui.rules.deckSize;
+    add.disabled=!c||count>=Math.min(cardLimit(c),ui.collectionOnly?(deckPool()[id]||0):3)||total>=ui.rules.deckSize;
   }
+  // Quantity changes only affect visibility when the "in deck" filter is active.
+  // Otherwise search, type and rarity results stay unchanged; do not rescan the list.
+  if(ui.deckOnly)updateCardRows('deck');
 }
 function updateCardRows(scope){
  const gallery=scope==='gallery';const type=gallery?ui.galleryFilterType:ui.deckFilterType;
  const rarity=gallery?ui.galleryFilterRarity:ui.deckFilterRarity;
  const search=($(gallery?'gallerySearch':'deckSearch')?.value||'').trim().toLocaleLowerCase('ja');
- for(const row of document.querySelectorAll(gallery?'.gallery-entry':'.deck-item')){
-   row.hidden=(type!=='all'&&row.dataset.cardtype!==type)||(rarity!=='all'&&row.dataset.rarity!==rarity)||!row.dataset.cardname.toLocaleLowerCase('ja').includes(search);
+ if(!gallery)ui.deckSearch=$('deckSearch')?.value||'';
+ let matches=0;
+ for(const row of document.querySelectorAll(gallery?'.gallery-entry':'.deck-item:not(.ex-deck-item)')){
+   const qty=gallery?0:(ui.deckDraft?.counts?.[row.querySelector('[data-action="deckPlus"]')?.dataset.id]||0);
+   row.hidden=(type!=='all'&&row.dataset.cardtype!==type)||(rarity!=='all'&&row.dataset.rarity!==rarity)||!(row.dataset.cardsearch||row.dataset.cardname.toLocaleLowerCase('ja')).includes(search)||(!gallery&&ui.deckOnly&&qty===0);
+   if(!row.hidden)matches++;
  }
+ if(!gallery){const out=$('deckMatchCount');if(out)out.textContent=`${matches}種類を表示`;}
 }
-function startDemo(){readHomeValues();if(!validDeck(ui.counts,ui.rules))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);ui.demo=true;ui.seat=0;ui.roomCode='';ui.selected=null;ui.targetMode=null;
- ui.game=createDemo({counts1:ui.counts,counts2:ui.decks.decks.find(d=>d.id!==ui.decks.activeId&&validDeck(d.counts,ui.rules))?.counts||ui.counts,rules:ui.rules});ui.seat=ui.game.turn;ui.lastFxRevision=ui.game.revision;storeDemo();setNetwork('お試し対戦','ok');render();}
+function updateManagedCards(){
+ const q=($('cardSearch')?.value||'').trim().toLocaleLowerCase('ja');
+ ui.cardManageQuery=$('cardSearch')?.value||'';
+ let matches=0;
+ for(const row of document.querySelectorAll('.card-manage-item')){
+   row.hidden=(!(row.dataset.cardsearch||row.dataset.cardname.toLocaleLowerCase('ja')).includes(q))||(ui.cardManageType!=='all'&&row.dataset.cardtype!==ui.cardManageType)||(ui.cardManageRarity!=='all'&&row.dataset.rarity!==ui.cardManageRarity);
+   if(!row.hidden)matches++;
+ }
+ const out=$('cardManageCount');if(out)out.textContent=`${matches} / ${CARDS.length}種類`;
+}
+function readDraftName(){
+ const value=$('draftName')?.value||ui.nickname;
+ ui.nickname=(value.trim()||'プレイヤー').slice(0,12);
+ storage.setItem('duel-name',ui.nickname);
+}
+function saveCompletedDrafts(room,code,local=false){
+ if(!room?.completedDraft)return;
+ const marker='duel-draft-saved-'+(local?code:code+'-'+ui.uid);
+ if(storage.getItem(marker))return;
+ const seats=local?[0,1]:[ui.seat];
+ let added=0;
+ for(const seat of seats){
+   const counts=room.completedDraft.counts?.[seat];
+   if(!counts||ui.decks.decks.length>=MAX_SAVED_DECKS)continue;
+   const name=`${room.completedDraft.format==='open'?'通常':'2択'}ドラフト・${room.completedDraft.players?.[seat]?.name||seat+1}`;
+   const deck=newDeck(name,counts);
+   ui.decks.decks.push(deck);ui.decks.activeId=deck.id;added++;
+ }
+ if(added){persistDecks();toast('ドラフトデッキを保存しました');}
+ storage.setItem(marker,'1');
+}
+function startLocalDraft(){
+ readDraftName();
+ try{
+   let room=createDraftRoom({uid:'local-draft-a',name:'プレイヤー1',rules:ui.rules,format:ui.draftFormat});
+   room=joinDraftRoom(room,{uid:'local-draft-b',name:'プレイヤー2'});
+   ui.demoDraft=true;ui.demo=false;ui.draftCode='LOCAL';ui.roomCode='';ui.game=null;ui.draftRoom=room;ui.seat=0;ui.draftOpen=false;
+   render();window.scrollTo(0,0);
+ }catch(e){toast(e.message);}
+}
+async function createOnlineDraft(){
+ if(!ui.sdk||!ui.uid)return toast('オンラインに接続できません');readDraftName();setBusy(true);
+ try{
+   for(let attempt=0;attempt<4;attempt++){
+     const code=makeCode(),r=ui.sdk.ref(ui.db,'rooms/'+code);
+     const result=await ui.sdk.runTransaction(r,old=>old?undefined:createDraftRoom({uid:ui.uid,name:ui.nickname,rules:ui.rules,format:ui.draftFormat}),{applyLocally:false});
+     if(result.committed){ui.draftOpen=false;await openRoom(code,true);return;}
+   }
+   throw Error('部屋を作れませんでした');
+ }catch(e){toast('ドラフト作成エラー：'+e.message);}finally{setBusy(false);}
+}
+async function joinOnlineDraft(){
+ if(!ui.sdk||!ui.uid)return toast('オンラインに接続できません');readDraftName();
+ const code=($('draftCodeInput')?.value||'').toUpperCase().replace(/[^A-Z2-9]/g,'');
+ if(code.length!==8)return toast('8文字の部屋コードを入力してください');
+ setBusy(true);let problem='ドラフトが見つかりません';
+ try{
+   const r=ui.sdk.ref(ui.db,'rooms/'+code);
+   const result=await ui.sdk.runTransaction(r,old=>{
+     if(!old){problem='部屋が見つかりません';return;}
+     const players=Array.isArray(old.players)?old.players:[old.players?.[0],old.players?.[1]];
+     if(players.some(p=>p?.uid===ui.uid))return old;
+     try{return joinDraftRoom(old,{uid:ui.uid,name:ui.nickname});}catch(e){problem=e.message;return;}
+   },{applyLocally:false});
+   if(!result.committed)throw Error(problem);
+   ui.draftOpen=false;await openRoom(code,true);
+ }catch(e){toast('参加エラー：'+e.message);}finally{setBusy(false);}
+}
+async function draftPick(index){
+ if(!ui.draftRoom||ui.busy)return;
+ if(ui.demoDraft){
+   try{
+     const next=applyDraftPick(ui.draftRoom,'local-draft-'+(ui.draftRoom.draft.round%2?'b':'a'),index);
+     if(next.completedDraft){
+       saveCompletedDrafts(next,'local-'+Date.now(),true);
+       ui.draftRoom=null;ui.demoDraft=false;ui.demo=true;ui.game=next;ui.seat=next.turn;storeDemo();
+       setNetwork('お試し対戦','ok');
+     }else ui.draftRoom=next;
+     render();window.scrollTo(0,0);
+   }catch(e){toast(e.message);}
+   return;
+ }
+ setBusy(true);let problem='ドラフト選択に失敗しました';
+ try{
+   const result=await ui.sdk.runTransaction(ui.sdk.ref(ui.db,'rooms/'+ui.draftCode),old=>{
+     if(!old)return;
+     try{return applyDraftPick(old,ui.uid,index);}catch(e){problem=e.message;return;}
+   },{applyLocally:false});
+   if(!result.committed)toast(problem);
+ }catch(e){toast('通信エラー：'+e.message);}finally{setBusy(false);}
+}
+async function copyDraftInvite(){
+ const url=`${location.origin}${location.pathname}?draft=${encodeURIComponent(ui.draftCode)}`;
+ try{await navigator.clipboard.writeText(url);toast('招待リンクをコピーしました');}
+ catch{prompt('招待リンク',url);}
+}
+function startDemo(){readHomeValues();if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);ui.demo=true;ui.seat=0;ui.roomCode='';ui.selected=null;ui.targetMode=null;
+ const other=ui.decks.decks.find(d=>d.id!==ui.decks.activeId&&validDeck(d.counts,ui.rules,d.extraCounts||{}));
+ ui.game=createDemo({counts1:ui.counts,extra1:activeSavedDeck()?.extraCounts||{},counts2:other?.counts||ui.counts,extra2:other?.extraCounts||activeSavedDeck()?.extraCounts||{},rules:ui.rules});ui.seat=ui.game.turn;ui.lastFxRevision=ui.game.revision;storeDemo();setNetwork('お試し対戦','ok');render();}
 function storeDemo(){if(ui.demo&&ui.game){storage.setItem('duel-demo-state',JSON.stringify(ui.game));storage.setItem('duel-demo-seat',String(ui.seat));}}
 async function remoteCreate(){
- if(!ui.sdk)return toast('Firebaseの設定が必要です');readHomeValues();if(!validDeck(ui.counts,ui.rules))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);
+ if(!ui.sdk)return toast('Firebaseの設定が必要です');readHomeValues();if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);
  setBusy(true);
  try{
    for(let tries=0;tries<4;tries++){
      const code=makeCode(),r=ui.sdk.ref(ui.db,`rooms/${code}`);
-     const result=await ui.sdk.runTransaction(r,old=>old?undefined:createRoom({uid:ui.uid,name:ui.nickname,counts:ui.counts,rules:ui.rules}),{applyLocally:false});
+     const result=await ui.sdk.runTransaction(r,old=>old?undefined:createRoom({uid:ui.uid,name:ui.nickname,counts:ui.counts,extraCounts:activeSavedDeck()?.extraCounts||{},rules:ui.rules}),{applyLocally:false});
      if(result.committed){await openRoom(code);return;}
    }
    throw Error('部屋コードを作れませんでした');
@@ -687,7 +1027,7 @@ async function remoteCreate(){
 }
 async function remoteJoin(){
  if(!ui.sdk)return toast('Firebaseの設定が必要です');readHomeValues();
- if(!validDeck(ui.counts,ui.rules))return toast(`対戦できる${ui.rules.deckSize}枚のデッキを選んでください`);
+ if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`対戦できる${ui.rules.deckSize}枚のデッキを選んでください`);
  const code=($('roomCode')?.value||'').trim().toUpperCase().replace(/[^A-Z2-9]/g,'');
  if(code.length!==8)return toast('8文字の部屋コードを入力してください');
  setBusy(true);
@@ -698,21 +1038,32 @@ async function remoteJoin(){
      const players=Array.isArray(old.players)?old.players:[old.players?.[0],old.players?.[1]];
      if(players.some(p=>p?.uid===ui.uid))return old;
      if(old.status!=='waiting'||old.players?.[1])return;
-     return joinRoom(old,{uid:ui.uid,name:ui.nickname,counts:ui.counts});
+     return joinRoom(old,{uid:ui.uid,name:ui.nickname,counts:ui.counts,extraCounts:activeSavedDeck()?.extraCounts||{}});
    },{applyLocally:false});
    if(!result.committed)return toast('部屋が見つからないか、すでに満員です');
    await openRoom(code);
  }catch(e){toast('参加できませんでした：'+e.message)}finally{setBusy(false);}
 }
-async function openRoom(code){
+async function openRoom(code,isDraft=false){
  if(ui.unsub){ui.unsub();ui.unsub=null;}
- ui.demo=false;ui.roomCode=code;ui.selected=null;ui.targetMode=null;ui.lastFxRevision=null;
- history.replaceState({},'',`${location.pathname}?room=${code}`);
+ ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.roomCode=code;ui.draftCode=code;ui.selected=null;ui.targetMode=null;ui.lastFxRevision=null;
+ history.replaceState({},'',`${location.pathname}?${isDraft?'draft':'room'}=${code}`);
+ ui.lastRoom={code};storage.setItem(LAST_ROOM_KEY,JSON.stringify(ui.lastRoom));
+ let lastRoomVersion='';
  ui.unsub=ui.sdk.onValue(ui.sdk.ref(ui.db,`rooms/${code}`),snap=>{
    const v=snap.val();if(!v){toast('部屋が見つかりません');return;}
-   ui.game=normalizeRoom(v);ui.seat=ui.game.players.findIndex(p=>p?.uid===ui.uid);
-   if(ui.seat<0){ui.game=null;toast('この部屋に参加していません');}
-   render();handleRoomCue(ui.game);
+   // Every server-side duel/draft action increments revision. Avoid an identical repaint.
+   const roomVersion=`${v.revision??0}:${v.status??''}:${v.draft?.round??''}`;
+   if(lastRoomVersion===roomVersion)return;
+   lastRoomVersion=roomVersion;
+   const draftActive=!!v.draft&&['waiting','drafting'].includes(v.status);
+   ui.game=draftActive?null:normalizeRoom(v);
+   ui.draftRoom=draftActive?normalizeDraftRoom(v):null;
+   const people=Array.isArray(v.players)?v.players:[v.players?.[0],v.players?.[1]];
+   ui.seat=people.findIndex(p=>p?.uid===ui.uid);
+   if(ui.seat<0){ui.game=null;ui.draftRoom=null;toast('この部屋に参加していません');}
+   if(ui.game?.completedDraft&&ui.seat>=0)saveCompletedDrafts(ui.game,code);
+   render();if(ui.game)handleRoomCue(ui.game);
  },err=>{toast('同期エラー：'+err.message);setNetwork('同期エラー','off')});
  render();
 }
@@ -725,7 +1076,7 @@ async function send(action){
      if(!ui.game.undoSnapshot)return toast('取り消せる操作がありません');
      const restored=normalizeRoom(structuredClone(ui.game.undoSnapshot));restored.revision=(ui.game.revision||0)+1;restored.undoSnapshot=null;restored.undoActor=null;restored.undoRequest=null;restored.log.unshift('直前の操作を取り消しました。');ui.game=restored;storeDemo();render();return;
    }
-   try {ui.game=applyAction(ui.game,`demo-${ui.seat===0?'a':'b'}`,action);ui.selected=null;storeDemo();render();handleRoomCue(ui.game);}
+   try {ui.game=applyAction(ui.game,ui.game.players[ui.seat].uid,action);ui.selected=null;storeDemo();render();handleRoomCue(ui.game);}
    catch(e){toast(e.message);}return;
  }
  setBusy(true);let problem=null;
@@ -738,25 +1089,77 @@ async function send(action){
    else ui.selected=null;
  }catch(e){toast('通信エラー：'+e.message)}finally{setBusy(false);}
 }
-function requestTributes(id){
- const c=CARD[id],need=c.level<=4?0:c.level<=6?1:2;if(!need)return [];
- const p=activePlayer();const occupied=p.monsters.map((m,i)=>m?i+1:null).filter(Boolean);
- if(occupied.length<need){toast(`レベル${c.level}の召喚には${need}体のリリースが必要です`);return null;}
- const raw=prompt(`召喚には${need}体のリリースが必要です。\n自分のモンスターゾーン番号(1〜5)を選択してください。\nカードがある位置: ${occupied.join(', ')}\n${need===2?'例: 1,3':'例: 2'}`);
- if(raw===null)return null;
- const indexes=raw.split(/[,、\s]+/).map(x=>Number(x)-1);
- if(indexes.length!==need||new Set(indexes).size!==need||!indexes.every(x=>Number.isInteger(x)&&p.monsters[x])){toast('正しいモンスターの位置番号を入力してください');return null;}
- return indexes;
-}
 function attemptSummon(faceDown){
- const i=ui.selected?.index;if(ui.selected?.zone!=='hand')return;
- const id=activePlayer().hand[i],c=CARD[id];if(!c||c.type!=='monster')return;
- const tributes=requestTributes(id);if(tributes===null)return;
- send({type:'summon',hand:i,faceDown,tributes});
+ const hand=ui.selected?.index;if(ui.selected?.zone!=='hand')return;
+ const id=activePlayer()?.hand[hand],c=CARD[id];if(!c||c.type!=='monster')return;
+ const need=c.level<=4?0:c.level<=6?1:2;
+ const owned=activePlayer()?.monsters.map((m,i)=>m?i:null).filter(i=>i!==null)||[];
+ if(owned.length<need)return toast(`召喚には${need}体のリリースが必要です`);
+ if(!need)return send({type:'summon',hand,faceDown,tributes:[]});
+ ui.targetMode={type:'tribute',hand,faceDown,needed:need,indices:[]};ui.selected=null;render();
+}
+function specialSpells(kind){
+ const p=activePlayer();if(!p)return [];
+ const hand=p.hand.map((id,index)=>({id,source:'hand',index}));
+ const row=p.backrow.map((slot,index)=>slot?.faceDown?{id:slot.id,source:'backrow',index}:null).filter(Boolean);
+ return [...hand,...row].filter(x=>CARD[x.id]?.type==='spell'&&spellKind(CARD[x.id])===kind);
+}
+const specialKey=x=>`${x.source}:${x.index}`;
+function beginSpecial(kind,opts={}){
+ if(!inMain())return toast('自分のメインフェイズで行ってください');
+ const spells=specialSpells(kind);if(!spells.length)return toast(kind==='ritual'?'儀式魔法が必要です':'融合魔法が必要です');
+ const p=activePlayer();const targets=kind==='ritual'?p.hand.map((id,i)=>({id,index:i})).filter(x=>summonKind(CARD[x.id])==='ritual'):
+   [...new Set(p.extraDeck||[])].filter(id=>summonKind(CARD[id])==='fusion').map(id=>({id}));
+ if(!targets.length)return toast(kind==='ritual'?'手札に儀式モンスターが必要です':'EXデッキに融合モンスターが必要です');
+ const spell=spells.find(x=>x.source===opts.source&&x.index===opts.index)||spells[0];
+ const target=targets.find(x=>kind==='ritual'?x.index===opts.ritualHand:x.id===opts.fusionId) ||targets[0];
+ ui.specialDraft={kind,spellKey:specialKey(spell),targetKey:kind==='ritual'?String(target.index):target.id,materials:[]};
+ ui.selected=null;render();
+}
+function specialModal(){
+ const d=ui.specialDraft,p=activePlayer();if(!d||!p)return '';
+ const spells=specialSpells(d.kind);if(!spells.length)return '';
+ const chosenSpell=spells.find(x=>specialKey(x)===d.spellKey)||spells[0];
+ const spellCard=CARD[chosenSpell.id];
+ const targets=d.kind==='ritual'?p.hand.map((id,index)=>({id,key:String(index)})).filter(x=>summonKind(CARD[x.id])==='ritual'&&(!spellCard.ritualFor||spellCard.ritualFor===x.id)):
+   [...new Set(p.extraDeck||[])].filter(id=>summonKind(CARD[id])==='fusion').map(id=>({id,key:id}));
+ const target=targets.find(x=>x.key===d.targetKey)||targets[0];
+ d.spellKey=specialKey(chosenSpell);if(target)d.targetKey=target.key;
+ const card=CARD[target?.id];
+ const all=[...p.hand.map((id,index)=>({zone:'hand',index,id})),...p.monsters.map((m,index)=>m?{zone:'monsters',index,id:m.id}:null).filter(Boolean)];
+ const allowed=target?all.filter(x=>CARD[x.id]?.type==='monster' && !(x.zone==='hand'&&((d.kind==='ritual'&&x.index===Number(target.key))||(chosenSpell.source==='hand'&&x.index===chosenSpell.index)))&&
+    (d.kind==='ritual'||card.fusionMaterials?.includes(x.id))):[];
+ const selected=allowed.filter(x=>d.materials.includes(`${x.zone}:${x.index}`));
+ const matched=d.kind==='ritual'?selected.reduce((sum,m)=>sum+(CARD[m.id]?.level||0),0)>=(card?.level||Infinity):
+    selected.length===2&&[...selected.map(x=>x.id)].sort().join(',')===[...(card?.fusionMaterials||[])].sort().join(',');
+ const room=p.monsters.some((m,i)=>!m||selected.some(x=>x.zone==='monsters'&&x.index===i));
+ const enabled=!!target&&matched&&room;
+ const details=card?d.kind==='ritual'?`必要レベル ${card.level} / 選択 ${selected.reduce((sum,m)=>sum+CARD[m.id].level,0)}`:
+   `素材：${(card.fusionMaterials||[]).map(id=>CARD[id]?.name||id).join(' ＋ ')}`:'対応するモンスターがありません';
+ return `<div class="modal" role="dialog" aria-modal="true" aria-label="${d.kind==='ritual'?'儀式':'融合'}召喚"><div class="modal-box special-manager">
+  <div class="modal-title-line"><h2>✦ ${d.kind==='ritual'?'儀式':'融合'}召喚</h2>${btn('×','closeSpecial','btn sm square')}</div>
+  <label class="field-label" for="specialSpell">使用する魔法</label>
+  <select id="specialSpell" class="input">${spells.map(x=>`<option value="${specialKey(x)}" ${specialKey(x)===specialKey(chosenSpell)?'selected':''}>${esc(CARD[x.id].name)}（${x.source==='hand'?'手札':'セット'}）</option>`).join('')}</select>
+  <label class="field-label" for="specialTarget">召喚するモンスター</label>
+  <select id="specialTarget" class="input" ${targets.length?'':'disabled'}>${targets.map(x=>`<option value="${esc(x.key)}" ${x.key===target?.key?'selected':''}>${esc(CARD[x.id].name)}</option>`).join('')}</select>
+  <div class="special-note">${esc(details)}</div>
+  <label class="field-label">素材を選択</label>
+  <div class="special-material-list">${allowed.map(x=>{const key=`${x.zone}:${x.index}`;return `<label class="special-material"><input type="checkbox" data-special-material="${key}" ${selected.some(t=>`${t.zone}:${t.index}`===key)?'checked':''}><span>${esc(CARD[x.id].name)}</span><span class="small muted">${x.zone==='hand'?'手札':'場'}・★${CARD[x.id].level}</span></label>`;}).join('')||'<p class="small muted">選択できる素材がありません</p>'}</div>
+  ${btn('召喚する','confirmSpecial','btn primary wide','',!enabled)}${btn('キャンセル','closeSpecial','btn ghost wide mt8')}
+ </div></div>`;
+}
+function confirmSpecial(){
+ const d=ui.specialDraft;if(!d)return;
+ const [spellSource,index]=d.spellKey.split(':');
+ const materials=d.materials.map(v=>{const [zone,n]=v.split(':');return {zone,index:Number(n)};});
+ const action=d.kind==='ritual'?{type:'ritualSummon',ritualHand:Number(d.targetKey),spellSource,spellIndex:Number(index),materials}:
+  {type:'fusionSummon',fusionId:d.targetKey,spellSource,spellIndex:Number(index),materials};
+ ui.specialDraft=null;return send(action);
 }
 function chooseSpell(source,index){
  const p=activePlayer(),id=source==='hand'?p.hand[index]:source==='field'?p.field?.id:p.backrow[index]?.id;
  if(!id)return;
+ if(CARD[id]?.type==='spell'&&['ritual','fusion'].includes(spellKind(CARD[id])))return beginSpecial(spellKind(CARD[id]),{source,index});
  if(effectNeedsTarget(id)){
    ui.targetMode={type:'spell',source,index,id};ui.selected=null;render();
    toast(CARD[id].ability?.target==='ownMonster'||CARD[id].effect==='boost500'?'自分の対象モンスターを選択':'相手の対象モンスターを選択');
@@ -766,6 +1169,15 @@ function chooseSlot(owner,zone,index){
  if(!ui.game||ui.game.status==='waiting')return;
  if(ui.targetMode){
    const mode=ui.targetMode;
+   if(mode.type==='tribute'){
+     if(owner==='mine'&&zone==='monsters'&&activePlayer()?.monsters[index]){
+       mode.indices=mode.indices.includes(index)?mode.indices.filter(i=>i!==index):[...mode.indices,index].slice(0,mode.needed);render();return;
+     }return toast('自分のモンスターをタップしてください');
+   }
+   if(mode.type==='move'){
+     if(owner==='mine'&&zone===mode.zone&&!activePlayer()?.[zone]?.[index])return send({type:'moveCard',zone:zone,from:mode.from,to:index});
+     return toast('同じ列の空きゾーンをタップしてください');
+   }
    if(mode.type==='attack'&&owner==='opponent'&&zone==='monsters'&&ui.game.players[1-ui.seat].monsters[index])
      return send({type:'attack',index:mode.index,target:index});
    if(mode.type==='monsterEffect'&&owner===(mode.owner||'opponent')&&zone==='monsters'&&ui.game.players[owner==='mine'?ui.seat:1-ui.seat].monsters[index])
@@ -786,11 +1198,11 @@ function chooseSlot(owner,zone,index){
  }
  if(zone==='hand'){
    if(owner!=='mine')return;
-   ui.selected={owner,zone,index};return render();
+   ui.selected={owner,zone,index};return refreshDuelSelection();
  }
  if(zone==='monsters'||zone==='backrow'||zone==='field'){
    if(!(zone==='field'?ui.game.players[owner==='mine'?ui.seat:1-ui.seat]?.field:ui.game.players[owner==='mine'?ui.seat:1-ui.seat]?.[zone]?.[index]))return;
-   ui.selected={owner,zone,index};return render();
+   ui.selected={owner,zone,index};return refreshDuelSelection();
  }
 }
 async function copyInvite(){
@@ -798,41 +1210,66 @@ async function copyInvite(){
  try{await navigator.clipboard.writeText(link);toast('招待リンクをコピーしました');}
  catch{prompt('招待リンクをコピーしてください',link);}
 }
-function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork('オンライン接続可能','ok');else setNetwork('お試し対戦可能');render();}
+function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.draftCode='';ui.draftOpen=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.specialDraft=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork(ui.networkConnected===false?'再接続待ち':'オンライン接続可能',ui.networkConnected===false?'off':'ok');else setNetwork('お試し対戦可能');render();}
+function preserveInputBeforeNetworkRefresh(){
+ // Firebase connects asynchronously, possibly while a card or pack editor is open.
+ // Keep the user's in-progress input intact when we actually need to rebuild the UI.
+ if(ui.cardDraft&&$('cardName'))readCardForm();
+ if(ui.packDraft&&$('packName'))savePackDraftFields();
+ if(ui.deckDraft&&$('deckName'))ui.deckDraft.name=$('deckName').value;
+}
 async function initFirebase(){
  // The config is OPTIONAL for the offline UI, and is loaded after the home screen.
  // A missing/incorrect export must not prevent the whole game from starting.
  try {
-   const configModule=await import('./firebase-config.js?config=80');
+   const configModule=await import('./firebase-config.js?config=191');
    firebaseConfig=configModule.firebaseConfig||null;
    configReady=['apiKey','authDomain','databaseURL','projectId','appId'].every(key=>
      typeof firebaseConfig?.[key]==='string'&&firebaseConfig[key].trim()!=='');
-   if(!configReady){setNetwork('Firebase未設定','off');render();return;}
+   if(!configReady){setNetwork('Firebase未設定','off');return;}
  } catch(error) {
    setNetwork('Firebase設定エラー','off');
    toast('Firebase設定を確認してください：'+(error?.message||String(error)));
-   render();
    return;
  }
  try {
-   const [{initializeApp},{getAuth,signInAnonymously},{getDatabase,ref,runTransaction,onValue,set,remove}]=await Promise.all([
+   const [{initializeApp},{getAuth,signInAnonymously},{getDatabase,ref,runTransaction,onValue,get,set,remove}]=await Promise.all([
      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js'),
      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js'),
      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js'),
    ]);
    const app=initializeApp(firebaseConfig);const auth=getAuth(app);
    await auth.authStateReady();if(!auth.currentUser)await signInAnonymously(auth);
-   ui.uid=auth.currentUser.uid;ui.db=getDatabase(app);ui.sdk={ref,runTransaction,onValue,set,remove};
+   ui.uid=auth.currentUser.uid;ui.db=getDatabase(app);ui.sdk={ref,runTransaction,onValue,get,set,remove};
+   // Firebase reconnects room listeners itself; only a single connection-state listener is needed.
+   ui.connectionUnsub?.();
+   ui.connectionUnsub=onValue(ref(ui.db,'.info/connected'),snap=>{
+     const connected=snap.val()===true;ui.networkConnected=connected;
+     setNetwork(connected?'オンライン接続可能':'再接続待ち',connected?'ok':'off');
+   });
    ui.cardUnsub=onValue(ref(ui.db,'cardLibrary/cards'),snapshot=>{
-     // Preserve text being typed if someone updates the shared card library.
-     if(ui.cardDraft&&$('cardName'))readCardForm();
-     if(ui.packDraft&&$('packName'))savePackDraftFields();
-     ui.customCards=snapshot.val()||{};
-     storage.setItem('duel-custom-cards',JSON.stringify(ui.customCards));
-     replaceCustomCards(ui.customCards);render();
+     const cards=snapshot.val()||{};
+     const encoded=JSON.stringify(cards);
+     if(encoded===lastCardLibraryJSON)return; // No data change, no disk write, no repaint.
+     preserveInputBeforeNetworkRefresh();
+     ui.customCards=cards;
+     lastCardLibraryJSON=encoded;
+     storage.setItem('duel-custom-cards',encoded);
+     replaceCustomCards(cards);
+     render();
    },err=>{toast('カード共有エラー：'+err.message);});
-   setNetwork('オンライン接続可能','ok');render();
- }catch(e){setNetwork('接続設定エラー','off');toast('Firebase接続エラー：'+e.message);render();}
+   setNetwork(ui.networkConnected===false?'再接続待ち':'オンライン接続可能',ui.networkConnected===false?'off':'ok');
+   preserveInputBeforeNetworkRefresh();
+   render(); // First connection: expose the online buttons exactly once.
+   // URL invitation / reload: resume only for a participant with the same anonymous UID.
+   const resumeCode=new URLSearchParams(location.search).get('room')||new URLSearchParams(location.search).get('draft');
+   if(resumeCode&&/^[A-Z2-9]{8}$/.test(resumeCode))await reconnectLastRoom(resumeCode);
+ }catch(e){
+   // Do not leave enabled online actions if the SDK failed to connect.
+   configReady=false;
+   setNetwork('接続設定エラー','off');toast('Firebase接続エラー：'+e.message);
+   preserveInputBeforeNetworkRefresh();render();
+ }
 }
 $('view').addEventListener('click',async e=>{
  if(ui.fxSettings.sound||ui.fxSettings.bgm)unlockAudio();if(ui.fxSettings.bgm)setBgmPlaying(true); // iOS gesture
@@ -840,8 +1277,23 @@ $('view').addEventListener('click',async e=>{
  const el=e.target.closest('[data-action]');if(!el)return;
  const action=el.dataset.action;
  if(ui.busy)return;
+ if(action==='openDraft'||action==='openOpenDraft'){ui.draftFormat=action==='openOpenDraft'?'open':'two';ui.draftOpen=true;ui.duelOpen=false;render();return;}
+ if(action==='closeDraft'){ui.draftOpen=false;render();return;}
+ if(action==='draftDemo')return startLocalDraft();
+ if(action==='createDraftRoom')return createOnlineDraft();
+ if(action==='joinDraftRoom')return joinOnlineDraft();
+ if(action==='copyDraftInvite')return copyDraftInvite();
+ if(action==='draftPick')return draftPick(Number(el.dataset.index));
+ if(action==='closeSpecial'){ui.specialDraft=null;render();return;}
+ if(action==='confirmSpecial')return confirmSpecial();
+ if(action==='openRitual')return beginSpecial('ritual',{ritualHand:ui.selected?.index});
+ if(action==='openFusion')return beginSpecial('fusion');
+ if(action==='extraPlus'||action==='extraMinus'){if(!ui.deckDraft)return;const id=el.dataset.id,c=CARD[id];if(!c||summonKind(c)!=='fusion')return;const counts=ui.deckDraft.extraCounts||={},n=counts[id]||0;if(action==='extraPlus'&&n<Math.min(cardLimit(c),ui.collectionOnly?(deckPool()[id]||0):3)&&sum(counts)<15)counts[id]=n+1;else if(action==='extraMinus'&&n>0){if(n===1)delete counts[id];else counts[id]=n-1;}ui.deckDraft.extraCounts=counts;saveSealedDraft();saveDeckDraft();refreshDeckEditor();return;}
+ if(action==='toggleCompact'){ui.duelCompact=!ui.duelCompact;storage.setItem('duel-compact',ui.duelCompact?'1':'0');render();return;}
  if(action==='openDuel'){ui.duelOpen=true;render();requestAnimationFrame(()=>document.getElementById('duel-setup')?.scrollIntoView({behavior:'smooth',block:'start'}));return;}
  if(action==='closeDuel'){ui.duelOpen=false;render();return;}
+ if(action==='exportBackup'){exportBackup();return;}
+ if(action==='resumeRoom'){return reconnectLastRoom(ui.lastRoom?.code||'');}
  if(action==='openSettings'){ui.settingsOpen=true;render();return;}
  if(action==='closeSettings'){ui.settingsOpen=false;render();return;}
  if(action==='settingsAppearance'){ui.settingsOpen=false;ui.appearanceOpen=true;render();return;}
@@ -849,9 +1301,24 @@ $('view').addEventListener('click',async e=>{
  if(action==='settingsRules'){ui.settingsOpen=false;ui.rulesOpen=true;render();return;}
  if(action==='openRules'){ui.rulesOpen=true;render();return;}
  if(action==='closeRules'){ui.rulesOpen=false;render();return;}
- if(action==='saveRules'){ui.rules=writeRuleSettings(storage,{lp:Number($('ruleLP').value),deckSize:Number($('ruleDeck').value)});ui.rulesOpen=false;render();toast('ルールを保存しました');return;}
+ if(action==='saveRules'){ui.rules=writeRuleSettings(storage,{lp:Number($('ruleLP').value),deckSize:Number($('ruleDeck').value),costLimit:Number($('ruleCost').value)});ui.rulesOpen=false;render();toast('ルールを保存しました');return;}
  if(action==='openAppearance'){ui.appearanceOpen=true;render();return;}
  if(action==='closeAppearance'){ui.appearanceOpen=false;render();return;}
+ if(action==='openSealed'){ui.sealedOpen=true;render();return;}
+ if(action==='closeSealed'){ui.sealedOpen=false;render();return;}
+ if(action==='sealedResume'){resumeSealed();return;}
+ if(action==='sealedDraw'){
+   const id=$('sealedPack')?.value,p=ui.packs.packs.find(x=>x.id===id);if(!p)return toast('パックを選んでください');
+   if(ui.decks.decks.length>=MAX_SAVED_DECKS)return toast('保存できるデッキは最大30組です');
+   if(ui.sealedSession&&!confirm('前回のパック戦の作成途中データを上書きしますか？'))return;
+   try{
+     const session=sealedPoolFromPacks(p,ui.rules.deckSize);
+     ui.sealedSession=session;storeSealed();
+     collect(ui.packs,session.drawn);savePackStore(storage,ui.packs);
+     resumeSealed();toast(`${session.packCount}パックから${session.drawn.length}枚獲得！`);
+   }catch(e){toast('開封できません：'+e.message);}
+   return;
+ }
  if(action==='openPacks'){ui.packOpen=true;ui.packResults=null;ui.packDraft=null;render();return;}
  if(action==='closePacks'){ui.packOpen=false;ui.packDraft=null;ui.packResults=null;render();return;}
  if(action==='packBack'){ui.packResults=null;render();return;}
@@ -881,32 +1348,37 @@ $('view').addEventListener('click',async e=>{
 
  if(action==='openFx'){ui.fxOpen=true;render();return;}
  if(action==='closeFx'){ui.fxOpen=false;render();return;}
- if(['previewFlame','previewSlash','previewShadow'].includes(action)){
-   const kind=action==='previewFlame'?'flame':action==='previewSlash'?'slash':'shadow';
-   const sound=kind==='flame'?'boom':kind==='slash'?'slash':'spark';
-   Promise.resolve(unlockAudio()).then(()=>playCue({type:kind==='slash'?'impact':kind==='shadow'?'trap':'summon',cardId:'__preview'}, {name:'テスト演出',fx:{visual:kind,sound}},ui.fxSettings));return;
+ if(['previewFlame','previewSlash','previewShadow','previewRitual','previewFusion','previewVictory'].includes(action)){
+   const kind={previewFlame:'flame',previewSlash:'slash',previewShadow:'shadow',previewRitual:'ritual',previewFusion:'fusion',previewVictory:'victory'}[action];
+   const type=kind==='slash'?'impact':kind==='shadow'?'trap':kind==='ritual'?'ritual':kind==='fusion'?'fusion':kind==='victory'?'win':'summon';
+   const sound=kind==='flame'?'boom':kind==='slash'?'slash':kind==='shadow'?'spark':kind==='victory'?'chime':'chime';
+   Promise.resolve(unlockAudio()).then(()=>playCue({type,cardId:'__preview',winner:0,viewerSeat:0}, {name:kind==='victory'?'': 'テスト演出',fx:{visual:kind,sound}},ui.fxSettings));return;
  }
  if(action==='previewCardFx'&&ui.cardDraft){readCardForm();
    const card=ui.cardDraft;
-   Promise.resolve(unlockAudio()).then(()=>playCue({type:card.type==='trap'?'trap':card.type==='spell'?'spell':card.subtype==='effect'?'effect':'summon',cardId:card.id},card,ui.fxSettings));return;}
+   Promise.resolve(unlockAudio()).then(()=>playCue({type:card.type==='trap'?'trap':card.type==='spell'?'spell':card.summonKind==='ritual'?'ritual':card.summonKind==='fusion'?'fusion':card.subtype==='effect'?'effect':'summon',cardId:card.id},card,ui.fxSettings));return;}
  if(action==='openCards'){readHomeValues();ui.cardsOpen=true;ui.cardDraft=null;render();return;}
  if(action==='closeCards'){ui.cardsOpen=false;ui.cardDraft=null;render();return;}
- if(action==='newCard'){ui.cardDraft=newCardDraft();render();return;}
- if(action==='editCard'){ui.cardDraft={...CARD[el.dataset.id],subtype:CARD[el.dataset.id]?.type==='monster'?(CARD[el.dataset.id]?.subtype||'normal'):undefined,monsterEffect:CARD[el.dataset.id]?.monsterEffect?{...CARD[el.dataset.id].monsterEffect}:undefined};render();return;}
+ if(action==='resumeCardDraft'){ui.cardDraft=existingDraft(CARD_DRAFT_KEY);render();return;}
+ if(action==='discardCardDraft'){clearCardDraft();render();return;}
+ if(action==='newCard'){ui.cardDraft=newCardDraft();saveCardDraft();render();return;}
+ if(action==='editCard'){ui.cardDraft={...CARD[el.dataset.id],subtype:CARD[el.dataset.id]?.type==='monster'?(CARD[el.dataset.id]?.subtype||'normal'):undefined,monsterEffect:CARD[el.dataset.id]?.monsterEffect?{...CARD[el.dataset.id].monsterEffect}:undefined};saveCardDraft();render();return;}
  if(action==='cardList'){ui.cardDraft=null;render();return;}
  if(action==='saveCard')return saveCardFromForm();
  if(action==='deleteCard')return deleteCard();
- if(action==='removeCardImage'){if(ui.cardDraft){ui.cardDraft.image='';render();}return;}
+ if(action==='removeCardImage'){if(ui.cardDraft){readCardForm();ui.cardDraft.image='';saveCardDraft();render();}return;}
  if(action==='openGallery'){readHomeValues();ui.galleryOpen=true;ui.gallerySelected=null;render();return;}
  if(action==='closeGallery'){ui.galleryOpen=false;ui.gallerySelected=null;render();return;}
  if(action==='galleryDetail'){ui.gallerySelected=el.dataset.id;render();return;}
  if(action==='galleryBack'){ui.gallerySelected=null;render();return;}
- if(action==='editDeck'){readHomeValues();ui.deckOpen=true;ui.deckDraft=null;render();return;}
- if(action==='closeDeck'){ui.deckOpen=false;ui.deckDraft=null;render();return;}
- if(action==='deckBack'){ui.deckDraft=null;render();return;}
+ if(action==='editDeck'){readHomeValues();ui.sealedOnly=false;ui.collectionOnly=false;ui.deckOpen=true;ui.deckDraft=null;render();return;}
+ if(action==='closeDeck'){saveSealedDraft();const wasSealed=ui.sealedOnly;ui.deckOpen=false;ui.deckDraft=null;ui.sealedOnly=false;ui.collectionOnly=false;if(wasSealed)ui.sealedOpen=true;render();return;}
+ if(action==='deckBack'){saveSealedDraft();if(ui.sealedOnly){ui.sealedOnly=false;ui.collectionOnly=false;ui.deckOpen=false;ui.sealedOpen=true;}ui.deckDraft=null;render();return;}
+ if(action==='resumeDeckDraft'){const d=existingDraft(DECK_DRAFT_KEY);if(d&&d.counts&&d.extraCounts){ui.deckDraft=d;ui.sealedOnly=false;ui.collectionOnly=false;render();}return;}
+ if(action==='discardDeckDraft'){clearDeckDraft();render();return;}
  if(action==='deckNew'||action==='deckNewRed'||action==='deckNewBlue'){
    startDeckDraft('new');
-   if(ui.deckDraft&&action!=='deckNew'){ui.deckDraft.counts=copyPreset(action==='deckNewRed'?'red':'blue');ui.deckDraft.name=action==='deckNewRed'?'紅蓮デッキ（新規）':'蒼海デッキ（新規）';render();}
+   if(ui.deckDraft&&action!=='deckNew'){ui.deckDraft.counts=copyPreset(action==='deckNewRed'?'red':'blue');ui.deckDraft.extraCounts={m26:1};ui.deckDraft.name=action==='deckNewRed'?'紅蓮デッキ（新規）':'蒼海デッキ（新規）';saveDeckDraft();render();}
    return;
  }
  if(action==='deckSelect'){selectDeck(el.dataset.id);return;}
@@ -915,7 +1387,7 @@ $('view').addEventListener('click',async e=>{
  if(action==='deckClone'){
    const d=ui.decks.decks.find(x=>x.id===el.dataset.id);
    if(!d||ui.decks.decks.length>=MAX_SAVED_DECKS)return;
-   const cloned=newDeck(d.name+' のコピー',d.counts);ui.decks.decks.push(cloned);persistDecks();render();toast('デッキを複製しました');return;
+   const cloned=newDeck(d.name+' のコピー',d.counts,d.extraCounts||{});ui.decks.decks.push(cloned);persistDecks();render();toast('デッキを複製しました');return;
  }
  if(action==='deckDelete'){
    const d=ui.decks.decks.find(x=>x.id===el.dataset.id);
@@ -927,13 +1399,13 @@ $('view').addEventListener('click',async e=>{
  if(action==='deckPlus'||action==='deckMinus'){
    if(!ui.deckDraft)return;
    const counts=ui.deckDraft.counts,id=el.dataset.id,n=counts[id]||0;
-   if(action==='deckPlus'&&n<Math.min(cardLimit(CARD[id]),ui.collectionOnly?(ui.packs.collection[id]||0):3)&&sum(counts)<ui.rules.deckSize)counts[id]=n+1;
+   if(action==='deckPlus'&&n<Math.min(cardLimit(CARD[id]),ui.collectionOnly?(deckPool()[id]||0):3)&&sum(counts)<ui.rules.deckSize)counts[id]=n+1;
    if(action==='deckMinus'&&n>0){if(n===1)delete counts[id];else counts[id]=n-1;}
-   refreshDeckEditor();return;
+   saveSealedDraft();saveDeckDraft();refreshDeckEditor();return;
  }
  if(action==='loadRed'||action==='loadBlue'||action==='deckClear'){
    if(!ui.deckDraft)return;
-   ui.deckDraft.counts=action==='deckClear'?{}:copyPreset(action==='loadRed'?'red':'blue');render();return;
+   ui.deckDraft.counts=action==='deckClear'?{}:copyPreset(action==='loadRed'?'red':'blue');ui.deckDraft.extraCounts=action==='deckClear'?{}:{m26:1};saveSealedDraft();saveDeckDraft();render();return;
  }
  if(action==='saveDeck'){saveDeck();return;}
  if(action==='acceptShare'){addImportedDeck();return;}
@@ -943,6 +1415,7 @@ $('view').addEventListener('click',async e=>{
  if(action==='joinRoom')return remoteJoin();
  if(action==='copyInvite')return copyInvite();
  if(action==='goHome')return goHome();
+ if(action==='cancelSelection'){ui.selected=null;refreshDuelSelection();return;}
  if(action==='switchSeat'){ui.seat=1-ui.seat;ui.selected=null;ui.targetMode=null;storeDemo();render();return;}
  if(action==='nextPhase')return send({type:'nextPhase'});
  if(action==='chainPass')return send({type:'chainPass'});
@@ -963,7 +1436,7 @@ $('view').addEventListener('click',async e=>{
  if(action==='flipCoin')return send({type:'random',kind:'coin'});
  if(action==='requestUndo'||action==='approveUndo'||action==='rejectUndo')return send({type:action});
  if(action==='undoDemo')return send({type:'undoDemo'});
- if(action==='moveSelected'){const x=ui.selected;if(!x||x.owner!=='mine')return;const n=Number(prompt('移動先の空いているゾーン番号（1〜5）を入力'));if(!Number.isInteger(n)||n<1||n>5)return toast('1〜5で指定してください');return send({type:'moveCard',zone:x.zone,from:x.index,to:n-1});}
+ if(action==='moveSelected'){const x=ui.selected;if(!x||x.owner!=='mine')return;ui.targetMode={type:'move',zone:x.zone,from:x.index};ui.selected=null;render();return;}
  if(action==='destroySelected'||action==='banishSelected'){const x=ui.selected;if(x?.owner!=='mine')return;return send({type:action==='destroySelected'?'manualDestroy':'manualBanish',zone:x.zone,index:x.index});}
  if(action==='banishFromGrave'){const n=Number(prompt('除外する墓地のカード番号を指定\n'+(activePlayer()?.grave||[]).map((id,i)=>`${i+1}: ${CARD[id]?.name||id}`).join('\n')));if(Number.isInteger(n))return send({type:'banishGrave',index:n-1});return;}
  if(action==='endTurn')return send({type:'endTurn'});
@@ -975,6 +1448,7 @@ $('view').addEventListener('click',async e=>{
   }
   return send({type:'activateTrap',index:i});
  }
+ if(action==='confirmTributes'){const m=ui.targetMode;if(m?.type==='tribute'&&m.indices.length===m.needed)return send({type:'summon',hand:m.hand,faceDown:m.faceDown,tributes:[...m.indices]});return;}
  if(action==='summonAtk')return attemptSummon(false);
  if(action==='summonSet')return attemptSummon(true);
  if(action==='setHand')return send({type:'setBackrow',hand:ui.selected.index});
@@ -1002,18 +1476,16 @@ $('view').addEventListener('input',e=>{
  if(e.target.id==='fxVolume'){ui.fxSettings.volume=Number(e.target.value);writeFxSettings(ui.fxSettings);const el=$('fxVolumeValue');if(el)el.textContent=`${ui.fxSettings.volume}%`;return;}
  if(e.target.id==='gallerySearch'){updateCardRows('gallery');return;}
  if(e.target.id==='deckSearch'){updateCardRows('deck');return;}
- if(e.target.id==='deckName'&&ui.deckDraft){ui.deckDraft.name=e.target.value;return;}
- if(e.target.id==='cardSearch'){
-   const q=e.target.value.toLocaleLowerCase('ja');
-   for(const row of document.querySelectorAll('.card-manage-item'))row.hidden=!row.dataset.cardname.toLocaleLowerCase('ja').includes(q);
- }
- if(ui.cardDraft&&['cardName','cardLevel','cardAtk','cardDef','cardEmoji','cardDesc'].includes(e.target.id)){
+ if(e.target.id==='deckName'&&ui.deckDraft){ui.deckDraft.name=e.target.value;saveSealedDraft();saveDeckDraft();return;}
+ if(e.target.id==='cardSearch'){updateManagedCards();return;}
+ if(ui.cardDraft&&['cardName','cardLevel','cardAtk','cardDef','cardCost','cardEmoji','cardDesc'].includes(e.target.id)){
    readCardForm();
    const preview=document.querySelector('.card-demo');if(preview)preview.innerHTML=cardHtmlPreview(ui.cardDraft);
  }
 
 });
 $('view').addEventListener('change',async e=>{
+ if(e.target.id==='backupFile'){await importBackup(e.target.files?.[0]);return;}
  if(['fxVisualToggle','fxSoundToggle','fxBgmToggle'].includes(e.target.id)){
    ui.fxSettings[e.target.id==='fxVisualToggle'?'visuals':e.target.id==='fxSoundToggle'?'sound':'bgm']=e.target.checked;
    writeFxSettings(ui.fxSettings);
@@ -1024,11 +1496,14 @@ $('view').addEventListener('change',async e=>{
  if(e.target.id==='cardImage'&&e.target.files?.[0]){
    readCardForm(); // 写真選択前に入力した名前・ATK等が消えないよう保存
    ui.cardBusy=true;
-   try {const img=await compressCardImage(e.target.files[0]);if(ui.cardDraft){ui.cardDraft.image=img;toast('画像を登録しました');}}
+   try {const img=await compressCardImage(e.target.files[0]);if(ui.cardDraft){ui.cardDraft.image=img;saveCardDraft();toast('画像を登録しました');}}
    catch(err){toast('画像を読み込めません：'+err.message);}
    finally{ui.cardBusy=false;render();}return;
  }
- if(['cardType','cardSubtype','cardSpellKind','cardEffectKind','cardEffectMode','cardAbilityWhen','cardAbilityOperation'].includes(e.target.id)&&ui.cardDraft){
+ if(e.target.id==='specialSpell'&&ui.specialDraft){ui.specialDraft.spellKey=e.target.value;ui.specialDraft.materials=[];render();return;}
+ if(e.target.id==='specialTarget'&&ui.specialDraft){ui.specialDraft.targetKey=e.target.value;ui.specialDraft.materials=[];render();return;}
+ if(e.target.matches('[data-special-material]')&&ui.specialDraft){const key=e.target.dataset.specialMaterial;ui.specialDraft.materials=e.target.checked?[...new Set([...ui.specialDraft.materials,key])]:ui.specialDraft.materials.filter(x=>x!==key);render();return;}
+ if(['cardType','cardSubtype','cardSpellKind','cardSummonKind','cardEffectKind','cardEffectMode','cardAbilityWhen','cardAbilityOperation'].includes(e.target.id)&&ui.cardDraft){
    readCardForm();
    if(e.target.id==='cardType'){
      ui.cardDraft.type=e.target.value;
@@ -1036,9 +1511,11 @@ $('view').addEventListener('change',async e=>{
      else{ui.cardDraft.effect=ui.cardDraft.type==='spell'?'draw2':'negate';if(ui.cardDraft.type==='spell')ui.cardDraft.spellKind='normal';delete ui.cardDraft.monsterEffect;}
    }
    if(e.target.id==='cardSubtype')ui.cardDraft.subtype=e.target.value;
+   if(e.target.id==='cardSummonKind'){ui.cardDraft.summonKind=e.target.value;if(e.target.value==='fusion')ui.cardDraft.fusionMaterials=['m03','m12'];else delete ui.cardDraft.fusionMaterials;}
    if(e.target.id==='cardSpellKind'){
      ui.cardDraft.spellKind=e.target.value;
      if(ui.cardDraft.ability?.when==='continuous'&&!persistentSpell(ui.cardDraft))ui.cardDraft.ability.when='main';
+     if(['ritual','fusion'].includes(e.target.value)){ui.cardDraft.effect=e.target.value==='ritual'?'ritualSummon':'fusionSummon';delete ui.cardDraft.ability;}
      if(e.target.value==='equip')ui.cardDraft.ability={when:'continuous',operation:'boost',target:'ownMonster',amount:500};
      if(e.target.value==='field')ui.cardDraft.ability={when:'continuous',operation:'boost',target:'ownMonster',amount:500};
    }
@@ -1057,12 +1534,14 @@ $('view').addEventListener('change',async e=>{
      const op=e.target.value,when=ui.cardDraft.ability.when;
      ui.cardDraft.ability.operation=op;ui.cardDraft.ability.target=abilityTargets(op,when)[0];ui.cardDraft.ability.amount=EFFECT_VALUES[op][0];
    }
-   render();return;
+   saveCardDraft();render();return;
  }
- if(['cardEffectCode','cardAbilityTarget','cardAbilityAmount','cardLimit'].includes(e.target.id)&&ui.cardDraft){readCardForm();return;}
+ if(['cardEffectCode','cardAbilityTarget','cardAbilityAmount','cardLimit','cardCost','fusionMat1','fusionMat2','ritualFor'].includes(e.target.id)&&ui.cardDraft){readCardForm();return;}
  if(e.target.id==='cardRarity'&&ui.cardDraft){readCardForm();const preview=document.querySelector('.card-demo');if(preview)preview.innerHTML=cardHtmlPreview(ui.cardDraft);return;}
  if(e.target.id==='matChoice'||e.target.id==='backChoice'){ui.appearance[e.target.id==='matChoice'?'mat':'back']=e.target.value;persistAppearance();return;}
  if(e.target.id==='collectionOnly'){ui.collectionOnly=e.target.checked;render();return;}
+ if(e.target.id==='deckOnly'){ui.deckOnly=e.target.checked;updateCardRows('deck');return;}
+ if(e.target.id==='cardManageType'||e.target.id==='cardManageRarity'){ui[e.target.id==='cardManageType'?'cardManageType':'cardManageRarity']=e.target.value;updateManagedCards();return;}
  if(e.target.matches('[data-pack-card]')&&ui.packDraft){savePackDraftFields();const id=e.target.dataset.packCard;if(e.target.checked&&!ui.packDraft.ids.includes(id))ui.packDraft.ids.push(id);else if(!e.target.checked)ui.packDraft.ids=ui.packDraft.ids.filter(x=>x!==id);return;}
  if(e.target.id==='activeDeck'){readHomeValues();selectDeck(e.target.value);return;}
  if(e.target.id==='deckType'||e.target.id==='deckRarity'){
@@ -1072,5 +1551,6 @@ $('view').addEventListener('change',async e=>{
    ui[e.target.id==='galleryType'?'galleryFilterType':'galleryFilterRarity']=e.target.value;updateCardRows('gallery');return;
  }
 });
+window.addEventListener('pagehide',()=>{try{flushDraft();}catch{}});
 // オンライン設定前は1台お試しのみ利用可能。
 setNetwork('画面の準備完了');render();window.__DUEL_READY=true;initFirebase();

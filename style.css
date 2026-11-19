@@ -85,24 +85,29 @@ body{background:radial-gradient(ellipse 500px 330px at 30% 2%,#23365e 0%,transpa
 .fx-settings{max-width:480px}
 .fx-overlay{position:fixed;inset:0;z-index:180;pointer-events:none;display:grid;place-items:center;overflow:hidden;opacity:0}
 .fx-overlay.active{opacity:1}
-.fx-light{position:absolute;inset:0;background:radial-gradient(circle at 50% 49%,color-mix(in srgb,var(--fx-color) 34%,transparent) 0%,transparent 58%);opacity:0;animation:fx-flash .8s ease-out forwards}
-.fx-burst{position:relative;min-width:220px;max-width:min(350px,88vw);padding:18px 24px;display:flex;align-items:center;flex-direction:column;gap:6px;text-align:center;color:#fff;
-  background:radial-gradient(ellipse at 50% 45%,#111b36ee 0%,#0b162ada 68%,transparent 100%);border-radius:28px;border:1px solid color-mix(in srgb,var(--fx-color) 72%,transparent);
-  box-shadow:0 0 16px color-mix(in srgb,var(--fx-color) 52%,transparent),0 0 80px color-mix(in srgb,var(--fx-color) 30%,transparent);
-  animation:fx-appear .85s cubic-bezier(.22,.9,.23,1) both}
-.fx-burst:before,.fx-burst:after{content:'✦';position:absolute;top:14px;font-size:26px;color:var(--fx-color);filter:drop-shadow(0 0 5px currentColor);animation:fx-sparkle .7s ease-out both}
-.fx-burst:before{left:10px}.fx-burst:after{right:10px;animation-delay:.11s}
-.fx-glyph{font-size:clamp(58px,18vw,92px);line-height:1.1;filter:drop-shadow(0 0 15px var(--fx-color));animation:fx-icon .65s ease-out both}
-.fx-title{font-size:22px;line-height:1.35;letter-spacing:.04em;color:#fff3d9;text-shadow:0 0 18px var(--fx-color)}
-.fx-subtitle{font-size:12px;font-weight:700;color:#d5dde9;max-width:280px;word-break:break-word}
-.fx-overlay[data-style='slash'] .fx-burst{transform:rotate(-3deg);border-color:#fff3b4}
-.fx-overlay[data-style='lightning'] .fx-burst{box-shadow:0 0 32px #8fd8ff,0 0 100px #1c72d080}
-.fx-overlay[data-style='shadow'] .fx-burst{box-shadow:0 0 36px #8e4ab4,0 0 100px #702a9666}
+.fx-light{position:absolute;inset:0;background:radial-gradient(circle at 50% 49%,color-mix(in srgb,var(--fx-color) 34%,transparent) 0%,transparent 58%);opacity:0;animation:fx-flash .82s ease-out forwards}
+.fx-burst{position:relative;min-width:220px;max-width:min(360px,88vw);padding:18px 22px 20px;display:flex;align-items:center;flex-direction:column;gap:7px;text-align:center;color:#fff;
+  background:radial-gradient(ellipse at 50% 46%,#162442f2 0%,#0b162ae8 72%,transparent 100%);border-radius:30px;border:1px solid color-mix(in srgb,var(--fx-color) 72%,transparent);
+  box-shadow:0 0 24px color-mix(in srgb,var(--fx-color) 50%,transparent),0 0 84px color-mix(in srgb,var(--fx-color) 25%,transparent),inset 0 0 0 1px #ffffff10;
+  animation:fx-appear .9s cubic-bezier(.22,.9,.23,1) both;isolation:isolate}
+.fx-burst:before,.fx-burst:after{content:'';position:absolute;inset:14px;border-radius:24px;border:1px solid color-mix(in srgb,var(--fx-color) 42%,transparent);opacity:.35}
+.fx-burst:after{inset:7px;opacity:.12}
+.fx-halo{position:absolute;top:18px;left:50%;width:118px;height:118px;translate:-50% 0;border-radius:50%;border:1px solid color-mix(in srgb,var(--fx-color) 55%,transparent);box-shadow:0 0 24px color-mix(in srgb,var(--fx-color) 35%,transparent), inset 0 0 28px color-mix(in srgb,var(--fx-color) 12%,transparent);animation:fx-halo .9s ease-out both}
+.fx-mark{width:min(124px,34vw);height:min(124px,34vw);position:relative;display:grid;place-items:center;filter:drop-shadow(0 0 22px color-mix(in srgb,var(--fx-color) 70%,transparent));animation:fx-icon .7s ease-out both;z-index:1}
+.fx-svg{width:100%;height:100%;overflow:visible}
+.fx-title{font-size:22px;line-height:1.35;letter-spacing:.04em;color:#fff3d9;text-shadow:0 0 18px var(--fx-color);position:relative;z-index:1}
+.fx-subtitle{font-size:12px;font-weight:700;color:#d5dde9;max-width:280px;word-break:break-word;position:relative;z-index:1}
+.fx-particle{position:absolute;left:50%;top:50%;width:var(--size);height:var(--size);margin-left:calc(var(--size)/-2);margin-top:calc(var(--size)/-2);border-radius:999px;background:radial-gradient(circle,#fff 0%,var(--fx-color) 45%,transparent 72%);opacity:0;filter:blur(.2px);animation:fx-particle .85s ease-out forwards;animation-delay:var(--delay);z-index:0}
+.fx-overlay[data-style='slash'] .fx-burst{transform:rotate(-2.5deg);border-color:#fff3b4}
+.fx-overlay[data-style='lightning'] .fx-burst{box-shadow:0 0 32px #8fd8ff,0 0 100px #1c72d080,inset 0 0 0 1px #ffffff15}
+.fx-overlay[data-style='shadow'] .fx-burst{box-shadow:0 0 36px #8e4ab4,0 0 100px #702a9666,inset 0 0 0 1px #ffffff10}
+.fx-overlay[data-style='heal'] .fx-burst{box-shadow:0 0 30px #95ffc3,0 0 100px #33a66c44,inset 0 0 0 1px #ffffff12}
 @keyframes fx-flash{0%{opacity:0}16%{opacity:1}100%{opacity:0}}
 @keyframes fx-appear{0%{opacity:0;transform:translateY(26px) scale(.58)}30%{opacity:1;transform:translateY(-6px) scale(1.08)}70%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-18px) scale(1.02)}}
-@keyframes fx-icon{0%{opacity:.4;transform:scale(.4) rotate(-20deg)}50%{opacity:1;transform:scale(1.15) rotate(3deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
-@keyframes fx-sparkle{0%{opacity:0;transform:scale(.25) translateY(15px)}38%{opacity:1;transform:scale(1.4)}100%{opacity:0;transform:scale(.6) translateY(-20px)}}
-@media(prefers-reduced-motion:reduce){.fx-light{animation:none;opacity:.15}.fx-burst,.fx-glyph,.fx-burst:before,.fx-burst:after{animation:none}.fx-burst:before,.fx-burst:after{display:none}}
+@keyframes fx-icon{0%{opacity:.2;transform:scale(.55) rotate(-9deg)}45%{opacity:1;transform:scale(1.08) rotate(1deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes fx-halo{0%{opacity:0;transform:scale(.55)}40%{opacity:.95;transform:scale(1.04)}100%{opacity:0;transform:scale(1.3)}}
+@keyframes fx-particle{0%{opacity:0;transform:translate(0,0) scale(.3)}25%{opacity:.95}100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(1.1)}}
+@media(prefers-reduced-motion:reduce){.fx-light{animation:none;opacity:.15}.fx-burst,.fx-mark,.fx-halo,.fx-particle{animation:none}.fx-particle{display:none}}
 
 /* v0.4: rarity treatments, searchable card gallery, local multi-deck library */
 .card-rarity{position:absolute;right:3px;top:20px;font-size:6px;line-height:1.2;padding:1px 3px;border-radius:3px;color:#241c13;background:#e8d1a1b0;font-weight:950;letter-spacing:.025em;z-index:2;box-shadow:0 1px 3px #0008}
@@ -341,3 +346,268 @@ body{
 .hand-slot .card-rarity{top:25px;right:4px}
 .gallery-card .card-rarity{top:23px;right:3px}
 .slot .card-rarity{top:15px;right:2px}
+
+/* SAHOVERSE v0.9 — lightweight draft and cost-limit UI */
+.sv-draft-launch{display:block;width:100%;margin:10px 0 0;padding:12px 16px;border:1px solid #d1ab695e;border-radius:13px;background:linear-gradient(100deg,#1d2842,#13263c);color:#f0d5a4;text-align:center;font-weight:800;letter-spacing:.06em;box-shadow:inset 0 1px #ffffff13}
+.sv-draft-launch:active{transform:scale(.99)}
+.sv-draft-setup{max-width:490px}
+.draft-brief{color:#dfdfef;font-size:13px;line-height:1.6;margin-bottom:10px}
+.draft-probabilities{display:flex;gap:5px;justify-content:space-between;flex-wrap:wrap;margin:0 0 17px}
+.draft-probabilities span{display:block;padding:7px 9px;border:1px solid #7ec7d73b;border-radius:20px;background:#10283dcc;color:#a8dced;font-size:11px;font-weight:700}
+.draft-setup-actions{display:grid;gap:10px;margin-top:16px}
+.draft-setup-actions h3{font-size:13px;margin:8px 0 0;color:#dfbb7f}
+.sv-draft-screen{max-width:780px;margin:12px auto 28px;padding:14px 12px 20px;border:1px solid #dabb7b46;border-radius:18px;background:linear-gradient(180deg,#182a44ee,#0b1424f7);box-shadow:0 18px 45px #0006}
+.draft-topline{margin-bottom:12px}
+.draft-topline h2{margin:0;color:#edcf93;letter-spacing:.04em;font-size:21px}
+.draft-progress{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:#e1e7f5;margin-bottom:7px}
+.draft-progress b{font-size:16px;color:#f0d79c}
+.draft-progress-track{height:6px;border-radius:8px;overflow:hidden;background:#ffffff1b;margin-bottom:12px}
+.draft-progress-track>div{height:100%;background:linear-gradient(90deg,#d8a659,#f6d99a);border-radius:inherit;transition:width .2s}
+.draft-scoreboard{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:15px}
+.draft-seat{display:flex;gap:6px;justify-content:space-between;align-items:center;min-width:0;padding:10px 8px;font-size:12px;background:#1b2a4199;border:1px solid #ffffff25;border-radius:9px;color:#b5c4db}
+.draft-seat span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-seat b{color:#e1d8be;white-space:nowrap}
+.draft-seat.draft-active{border-color:#dfb96e;background:#3f34285c;color:#fff}
+.draft-subtitle{text-align:center;color:#f3ddb2;font-size:14px;font-weight:800;margin:6px 0 12px}
+.draft-offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.draft-offer{display:flex;flex-direction:column;align-items:center;min-width:0;padding:10px 6px 12px;background:linear-gradient(160deg,#22324d,#111b2e);border:1px solid #d5ae766a;color:#fff;border-radius:14px;box-shadow:0 6px 19px #0006;cursor:pointer}
+.draft-offer:not(:disabled):active{transform:scale(.98)}
+.draft-offer:disabled{opacity:.73;cursor:default}
+.draft-card-art{width:100%;max-width:158px;height:222px;margin:0 auto 10px;filter:drop-shadow(0 4px 8px #000a)}
+.draft-card-art .card{height:100%;width:100%;padding:5px;border-radius:7px}
+.draft-card-art .card-head{min-height:19px}
+.draft-card-art .card-name{font-size:10px;max-height:26px}
+.draft-card-art .card-symbol{font-size:11px}
+.draft-card-art .card-stars{min-height:12px;font-size:9px}
+.draft-card-art .card-art{min-height:50px}
+.draft-card-art .card-emoji{font-size:39px}
+.draft-card-art .card-lore{display:block;min-height:34px;max-height:38px;padding:3px}
+.draft-card-art .card-lore b{font-size:7px}
+.draft-card-art .card-lore span{font-size:7px;max-height:25px}
+.draft-card-art .card-info{font-size:8px}
+.draft-card-name{font-size:12px;line-height:1.35;margin:1px 0 3px;text-align:center;min-height:33px;display:grid;place-items:center}
+.draft-card-cost{font-size:10px;color:#b7c9de;margin-bottom:10px}
+.draft-offer-select{font-size:12px;font-weight:900;color:#1c2134;background:linear-gradient(110deg,#e6bb71,#f8e3b4);border-radius:8px;padding:9px 8px;width:100%;max-width:146px}
+.draft-offer:disabled .draft-offer-select{background:#344960;color:#d1d9e1}
+.draft-help{text-align:center;color:#aabbd3;font-size:12px;margin:12px 0}
+.draft-waiting{margin:30px auto;max-width:450px;text-align:center}
+.deck-cost-summary{font-size:12px;color:#cae0f0;padding:7px 0}
+.deck-cost-total{color:#e9c383}
+@media(max-width:355px){.sv-draft-screen{padding:10px 6px}.draft-offers{gap:6px}.draft-card-art{height:194px}.draft-offer{padding:6px 3px 10px}.draft-card-name{font-size:10px}}
+
+/* v1.0: Ritual and Fusion card frames + compact selection dialog */
+.card.ritual-monster {background:linear-gradient(145deg,#324e85 0%,#151b37 42%,#283c71 100%);border-color:#9bbbe8;box-shadow:inset 0 0 0 1px #7fb6f3,0 0 12px #3c75ce35;}
+.card.fusion-monster {background:linear-gradient(145deg,#68428b 0%,#211735 46%,#4c326e 100%);border-color:#b99add;box-shadow:inset 0 0 0 1px #c39beb,0 0 12px #9e6dca35;}
+.card.ritual-monster .card-head,.card.fusion-monster .card-head {background:#121628cc;}
+.card.ritual-monster .card-rarity,.card.fusion-monster .card-rarity{background:#ffffff16;}
+.special-manager {max-width:530px;}
+.special-note {margin:12px 0;padding:12px;border:1px solid #bea77768;border-radius:10px;background:#0c1a2b99;color:#f5ddb5;font-size:.91rem;line-height:1.5;}
+.special-material-list {max-height:290px;overflow-y:auto;display:grid;gap:8px;margin:10px 0 16px;}
+.special-material {display:flex;align-items:center;gap:12px;border-radius:10px;border:1px solid #7592b44f;background:#0d1b2fa8;padding:12px 10px;cursor:pointer;}
+.special-material input{width:19px;height:19px;accent-color:#e1b967;flex:0 0 auto;}
+.special-material span:nth-child(2){flex:1;font-weight:600;}
+.ex-deck-list{margin-top:12px;}
+.ex-deck-item .mini-card-preview{min-width:42px;}
+
+
+/* SAHOVERSE v1.2 — ritual/fusion/victory visual cues and preview-only foil. */
+.fx-overlay[data-style="ritual"] .fx-halo{border-color:#9bddff;box-shadow:0 0 26px #5ac8ff80,inset 0 0 25px #5ac8ff26}
+.fx-overlay[data-style="ritual"] .fx-halo-secondary{border:2px dashed #d2ecffb0;box-shadow:0 0 28px #5ac8ff66;animation:svfx-ring-alt .94s ease-out both}
+.fx-overlay[data-style="fusion"] .fx-halo{border:3px double #c99dff;box-shadow:0 0 38px #c080ff8c,inset 0 0 26px #c991ff45}
+.fx-overlay[data-style="fusion"] .fx-halo-secondary{border:2px dashed #fbd3ffcf;animation:svfx-ring-alt .94s ease-out both}
+.fx-overlay[data-style="victory"] .fx-halo{width:140px;height:140px;top:10px;border:2px solid #ffe8ad;box-shadow:0 0 38px #f9c661ab}
+.fx-overlay[data-style="victory"] .fx-halo-secondary{width:160px;height:160px;top:0;border:1px dashed #f5e8bb98;animation:svfx-ring-alt .94s ease-out both}
+.fx-overlay[data-style="victory"] .fx-title{font-size:clamp(27px,7vw,35px);letter-spacing:.12em}
+.fx-overlay[data-result="defeat"] .fx-halo{border-color:#9eaad0;box-shadow:0 0 20px #586d9c77}
+.fx-overlay[data-result="defeat"] .fx-title{color:#ccd6ed;text-shadow:0 0 12px #7588ad}
+.fx-overlay[data-style="ritual"] .fx-mark{animation:fx-icon .72s ease-out both}
+.fx-overlay[data-style="fusion"] .fx-mark{animation:svfx-fusion .87s ease-out both}
+.fx-overlay[data-style="victory"] .fx-mark{animation:svfx-victory .95s ease-out both}
+@keyframes svfx-ring-alt{0%{opacity:0;transform:scale(.5) rotate(-90deg)}40%{opacity:.9;transform:scale(1.05) rotate(60deg)}100%{opacity:0;transform:scale(1.33) rotate(150deg)}}
+/* Keep secondary halo centered using `left:50%` and CSS translate inherited from .fx-halo. */
+@keyframes svfx-fusion{0%{opacity:0;transform:scale(.45) rotate(-90deg)}47%{opacity:1;transform:scale(1.1) rotate(10deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes svfx-victory{0%{opacity:0;transform:scale(.55) rotate(-20deg)}45%{opacity:1;transform:scale(1.17) rotate(4deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+/* Foil effects only on single enlarged card previews: avoid animating dozens of cards in the gallery or battle field. */
+.card-demo .card.rarity-SR .card-art::after,
+.card-demo .card.rarity-UR .card-art::after,
+.card-demo .card.rarity-SEC .card-art::after,
+.gallery-detail-card .card.rarity-SR .card-art::after,
+.gallery-detail-card .card.rarity-UR .card-art::after,
+.gallery-detail-card .card.rarity-SEC .card-art::after{
+  content:"";position:absolute;z-index:2;inset:0;pointer-events:none;opacity:.65;
+  background:linear-gradient(108deg,transparent 26%,#ffffff00 36%,#fffbdc66 48%,#fff9ea99 50%,#ffffff00 64%,transparent 72%);
+  background-size:280% 100%;background-position:140% 0;
+  animation:sv-foil-shine 5.4s ease-in-out infinite;
+  mix-blend-mode:screen;
+}
+.card-demo .card.rarity-SEC .card-art::after,
+.gallery-detail-card .card.rarity-SEC .card-art::after{
+  background:linear-gradient(112deg,transparent 14%,#bbecff44 30%,#ffd6f366 44%,#fff9c588 50%,#b2c3ff66 60%,transparent 78%);
+  background-size:280% 100%;background-position:140% 0;opacity:.8;
+}
+.card-demo .card.rarity-UR .card-art::after,
+.gallery-detail-card .card.rarity-UR .card-art::after{opacity:.8}
+@keyframes sv-foil-shine{0%,16%{background-position:140% 0}60%,100%{background-position:-40% 0}}
+@media (prefers-reduced-motion:reduce){
+  .fx-overlay .fx-halo-secondary,.fx-overlay .fx-mark{animation:none!important}
+  .card-demo .card .card-art::after,.gallery-detail-card .card .card-art::after{animation:none!important;opacity:.20!important;background-position:50% 0!important}
+}
+
+/* SAHOVERSE v1.3 — sealed-deck workflow (reuses existing deck editor) */
+.sv-sealed-launch{background:linear-gradient(120deg,#142b3f,#173047);border-color:#86c9df57;color:#d8f5ff}
+.sealed-session{border:1px solid #dbbc7949;border-radius:14px;padding:13px;margin:12px 0 18px;background:#15253c}
+
+/* v1.4: compact turn controls, single-hand browsing, lightweight action drawer. */
+#view.duel-active{padding-bottom:calc(40px + env(safe-area-inset-bottom));}
+.duel-commandbar{position:sticky;top:60px;z-index:21;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 10px;margin:0 0 10px;border:1px solid #c8a66d80;border-radius:12px;background:linear-gradient(110deg,#11243bf5,#16263bf5);box-shadow:0 7px 25px #02071060;backdrop-filter:blur(12px)}
+.duel-command-state{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.duel-command-state strong{font-size:13px;color:#e8d29e;white-space:nowrap}
+.duel-turn{font-size:10px;font-weight:800;letter-spacing:.11em;color:#b0c3d7}
+.duel-who{font-size:10px;color:#a8c9dc}
+.duel-command-buttons{display:flex;gap:5px;margin-left:auto}
+.duel-command-buttons .btn{font-size:11px;min-height:34px;padding:7px 10px;white-space:nowrap}
+.duel-center-mark{justify-content:center;min-height:25px;padding:2px;color:#bcab86;font-size:13px;letter-spacing:.15em;opacity:.66}
+#view.duel-active .duel-card-actions{position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:32;width:min(660px,calc(100vw - 18px));max-height:min(45dvh,390px);overflow-y:auto;margin:0;padding:12px 13px;background:linear-gradient(130deg,#25374dfa,#101c30fa);border:1px solid #d1af74;box-shadow:0 0 0 100vmax #02071329,0 10px 38px #0009;overscroll-behavior:contain}
+.duel-card-actions .detail-title{font-size:14px;line-height:1.25;overflow:hidden;text-overflow:ellipsis}
+.duel-card-actions .detail-text{max-height:4.2em;overflow:auto;font-size:11px}
+.duel-detail-heading .detail-badge{margin-left:auto;white-space:nowrap;font-size:10px}
+.duel-card-actions .actionbar{gap:5px}
+.duel-card-actions .actionbar .btn{flex:1 1 auto;font-size:11px}
+#view.duel-active>.hintbox{position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(660px,calc(100vw - 18px));max-height:40dvh;overflow:auto;z-index:33;padding:13px 14px;box-shadow:0 10px 35px #0009;background:#26364af7}
+#view.duel-active>.respond{position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(660px,calc(100vw - 18px));max-height:48dvh;overflow-y:auto;z-index:33;box-shadow:0 10px 38px #000a;background:linear-gradient(135deg,#4a2b45f8,#29223df9)}
+.duel-tools,.duel-log{padding:10px 12px}
+.duel-tools summary,.duel-log summary{cursor:pointer;font-size:12px;font-weight:800;list-style-position:inside;color:#cad4df;min-height:25px;display:flex;align-items:center;gap:6px}
+.duel-tools summary:before,.duel-log summary:before{content:'▸';color:#d7bf8e;font-size:13px}
+.duel-tools[open] summary:before,.duel-log[open] summary:before{content:'▾'}
+.duel-tools .battle-tools,.duel-log .loglist{margin-top:10px}
+@media(max-width:390px){.duel-commandbar{gap:5px;padding:7px 8px}.duel-command-state{gap:5px}.duel-command-buttons .btn{padding:7px 9px;font-size:10px}}
+@media(prefers-reduced-motion:reduce){.duel-card-actions,.duel-commandbar{backdrop-filter:none}}
+
+/* SAHOVERSE v1.5: lightweight iPhone compact duel, no gameplay changes. */
+#view.duel-active{padding-top:8px}
+.duel-layout-button{flex:0 0 auto;font-size:10px!important;min-height:32px!important;padding:6px 8px!important;white-space:nowrap}
+.duel-compact .rooms{margin-bottom:4px}
+.duel-compact .duel-commandbar{margin-bottom:5px;padding:6px 8px;gap:5px}
+.duel-compact .duel-command-state{gap:5px}
+.duel-compact .duel-who{display:none}
+.duel-compact .duel-hud{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:6px 0}
+.duel-compact .duel-hud-seat{min-width:0;border:1px solid #6b88a34b;border-radius:10px;background:#0e1d31d9;padding:6px 9px}
+.duel-compact .duel-hud-seat:last-child{background:linear-gradient(120deg,#14283b,#172339);border-color:#dbb77d70}
+.duel-compact .duel-hud-label{display:block;font-size:9px;color:#afc1d6;line-height:1.1;letter-spacing:.08em}
+.duel-compact .seat{gap:0;justify-content:flex-start;min-width:0;text-align:left}
+.duel-compact .avatar,.duel-compact .turn-chip{display:none}
+.duel-compact .seat>div:last-child{min-width:0;width:100%}
+.duel-compact .seat-name{font-size:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.duel-compact .lp{font-size:21px;margin:2px 0 0;line-height:1.05}
+.duel-compact .lp .tiny{font-size:9px}
+.duel-compact .mini-stats{font-size:9px;white-space:nowrap;letter-spacing:-.02em;overflow:hidden;text-overflow:clip}
+.duel-compact .battlefield{padding:5px 5px;margin-bottom:5px;border-radius:10px;box-shadow:inset 0 0 18px #0003}
+.duel-compact .zone-caption{font-size:9px;letter-spacing:0;margin:1px 0;line-height:1.2;color:#aac0d8}
+.duel-compact .slots{gap:4px}
+.duel-compact .slot{height:69px;padding:1px;border-radius:5px}
+.duel-compact .slot.empty:after{font-size:16px;opacity:.14}
+.duel-compact .slot-tag{font-size:8px;top:0;right:1px;padding:0 2px}
+.duel-compact .slot .card{padding:2px 1px;gap:0;border-width:1px}
+.duel-compact .slot .card-name{font-size:7px;max-height:16px}
+.duel-compact .slot .card-stars{font-size:7px;min-height:6px}
+.duel-compact .slot .card-art{min-height:23px}
+.duel-compact .slot .card-emoji{font-size:21px}
+.duel-compact .slot .card-lore{display:none}
+.duel-compact .slot .card-info{font-size:7px}
+.duel-compact .field-zone-line{padding:3px 6px;gap:8px;margin:3px 0;font-size:10px;min-height:46px}
+.duel-compact .field-zone-line .field-slot{width:39px;height:46px;min-width:39px}
+.duel-compact .field-zone-line .field-slot .card-art{min-height:12px}
+.duel-compact .field-zone-line .field-slot .card-emoji{font-size:13px}
+.duel-compact .field-center{margin:4px 2px;padding:1px;min-height:12px;background:transparent;border:0}
+.duel-compact .hand-count{font-size:11px;margin:6px 3px 2px}
+.duel-compact .hand-scroll{gap:5px;padding:4px 0 8px}
+.duel-compact .hand-slot{flex:0 0 79px;height:113px}
+.duel-compact .hand-slot .card-art{min-height:31px}
+.duel-compact .duel-demo-switch{display:flex;justify-content:flex-end;margin:3px 0}
+.duel-compact .duel-demo-switch .btn{min-height:28px;font-size:10px;padding:4px 9px}
+@media(max-width:390px){
+ .duel-compact .duel-commandbar{top:60px}
+ .duel-compact .duel-command-buttons .btn{padding:7px 8px;font-size:10px}
+ .duel-compact .slots{gap:3px}
+ .duel-compact .slot{height:65px}
+ .duel-compact .seat-name{font-size:9px}
+ .duel-compact .mini-stats{font-size:8px}
+}
+@media(min-width:600px){
+ .duel-compact .slot{height:90px}
+ .duel-compact .field-zone-line .field-slot{height:60px;width:52px;min-width:52px}
+ .duel-compact .hand-slot{flex-basis:94px;height:132px}
+}
+
+/* v1.6: standard draft shares all card styles with two-choice draft. */
+.sv-draft-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 0}
+.sv-draft-modes .sv-draft-launch{margin:0;font-size:13px;padding:12px 4px;white-space:nowrap}
+.sv-draft-modes .sv-draft-open-launch{color:#b5e5f1;border-color:#64cce861;background:linear-gradient(100deg,#142c40,#10283b)}
+.draft-offers-open{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.draft-offers-open .draft-card-art{height:185px;max-width:140px}
+.draft-offers-open .draft-offer{padding:8px 5px 10px}
+.draft-offers-open .draft-card-name{font-size:11px;min-height:30px}
+.draft-offers-open .draft-offer-select{padding:7px}
+@media(min-width:590px){.draft-offers-open{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:365px){.sv-draft-modes{gap:5px}.sv-draft-modes .sv-draft-launch{font-size:11px}.draft-offers-open .draft-card-art{height:165px}}
+
+/* SAHOVERSE v1.7 — compact deck and card management; thumbnail DOM is intentionally minimal. */
+.sv-mini-thumb{position:relative;display:grid;place-items:center;overflow:hidden;isolation:isolate;flex:0 0 37px;width:37px;height:49px;border-radius:6px;border:1px solid #d6ad695c;background:linear-gradient(150deg,#352e39,#171e32);box-shadow:0 1px 4px #0006}
+.sv-mini-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.sv-mini-thumb .sv-mini-mark{font-size:21px;line-height:1;filter:drop-shadow(0 1px 6px #0008)}
+.sv-mini-thumb i{position:absolute;inset:3px;border:1px solid #f6df9a47;border-radius:3px;pointer-events:none}
+.sv-mini-monster{background:linear-gradient(145deg,#795239,#342433);border-color:#bda171}
+.sv-mini-fusion{background:linear-gradient(140deg,#66478d,#242343);border-color:#c6a4f1}
+.sv-mini-ritual{background:linear-gradient(145deg,#376f9d,#1c3555);border-color:#8ecdeb}
+.sv-mini-spell{background:linear-gradient(145deg,#27736b,#15383e);border-color:#5fbfb6}
+.sv-mini-trap{background:linear-gradient(145deg,#713c7c,#322047);border-color:#c996d8}
+.sv-card-manager .card-manage-item{min-height:57px;padding:5px 7px;gap:9px;border-color:#ffffff13;background:#0b1d3190}
+.sv-card-manager .card-manage-item[hidden]{display:none}
+.sv-card-manager .card-manage-item .btn{font-size:11px;min-height:36px;padding:6px 11px}
+.sv-card-manager .card-manage-item b{font-size:12px;line-height:1.25;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-card-manager .card-manage-item .tiny{font-size:10px;margin-top:4px}
+.sv-card-manager .card-manage-list{max-height:60dvh;gap:4px;overscroll-behavior:contain}
+.sv-card-manager .form-duo{gap:6px}
+.sv-card-manager .form-duo .input{font-size:12px;padding:9px 6px;min-height:39px}
+.sv-list-caption{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;color:#adc0d5;margin:7px 2px 4px}
+.sv-list-caption span:first-child{color:#e6c68d;font-weight:750}
+.deck-manager .deck-item{min-height:55px;padding:4px 5px;gap:5px}
+.deck-manager .deck-item[hidden]{display:none}
+.deck-manager .deck-item .sv-mini-thumb{flex-basis:31px;width:31px;height:44px}
+.deck-manager .deck-item-title{font-size:11px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck-manager .deck-item-detail{font-size:9px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.deck-manager .deck-list{max-height:42dvh;overscroll-behavior:contain}
+.deck-manager .deck-item .btn.square{min-height:39px;height:39px;flex:0 0 35px;width:35px;font-size:17px;padding:0}
+.deck-manager .deck-item .count,.deck-manager .deck-item .ex-count{min-width:16px;text-align:center;font-weight:800;font-variant-numeric:tabular-nums;font-size:12px}
+.sv-deck-stats{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 2px;padding:8px 9px;border:1px solid #d5b57a3e;border-radius:9px;background:#0e2339a6;font-size:11px;color:#dbe3ea}
+.sv-deck-stats .deck-total{font-size:14px;font-variant-numeric:tabular-nums}
+.sv-deck-types{font-size:10px;color:#b5cbdd}
+.sv-filter-strip{display:flex;gap:6px;align-items:center;margin-top:8px}
+.sv-filter-strip .input{flex:1;min-width:0}
+.sv-check-chip{flex:0 0 auto;display:inline-flex;gap:4px;align-items:center;border:1px solid #66758b;background:#14263a;border-radius:10px;min-height:43px;padding:0 9px;font-size:11px;color:#d6e6f4;white-space:nowrap}
+.sv-check-chip input{width:17px;height:17px;accent-color:#e4bc78}
+.sv-sticky-actions{position:sticky;bottom:-15px;z-index:4;margin-top:11px;padding:9px 2px calc(9px + env(safe-area-inset-bottom));background:linear-gradient(180deg,#18263af2,#152338 24%,#152338 100%);border-top:1px solid #d3ae7150;backdrop-filter:blur(8px)}
+.sv-sticky-actions .btn{min-height:44px}
+.sv-save-total{text-align:center;color:#b9cbe0;font-size:10px;margin-bottom:5px}
+.sv-save-total strong{color:#ecd29d;font-variant-numeric:tabular-nums}
+.sv-advanced-fields{border:1px solid #7187a352;border-radius:11px;background:#10223a9a;padding:9px 11px;margin-top:12px}
+.sv-advanced-fields>summary{cursor:pointer;list-style:disc inside;font-size:12px;font-weight:850;color:#ecd19e;min-height:25px}
+.sv-advanced-fields>summary span{font-size:10px;color:#a9bad1;font-weight:500;margin-left:6px}
+.sv-advanced-fields[open] .fx-card-editor{margin-top:9px}
+.sv-advanced-fields .field-label{font-size:11px}
+.sv-card-save{margin-top:8px}
+/* Conserve battery by avoiding unnecessary compositing on low-power devices. */
+@media(prefers-reduced-motion:reduce){.sv-sticky-actions{backdrop-filter:none}}
+@media(max-width:360px){.deck-manager .deck-item .sv-mini-thumb{width:27px;flex-basis:27px}.deck-manager .deck-item .btn.square{width:32px;flex-basis:32px}.sv-check-chip{font-size:10px;padding:0 7px}.sv-list-caption{font-size:9px}}
+
+/* SAHOVERSE v1.9: backups, resumable drafts and tap-based targeting */
+.sv-backup-group{margin-top:12px;padding-top:12px;border-top:1px solid #c4a06a38;display:grid;gap:9px}
+.sv-import-label{display:flex!important;align-items:center;justify-content:center;min-height:42px;cursor:pointer;text-align:center}
+.sv-draft-reminder{padding:10px;margin:9px 0;background:#1c3442;border:1px solid #6ec5bc55;border-radius:12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px}
+.sv-draft-reminder .btn{margin-left:auto}
+.sv-autosave-note{margin:4px 0 10px}
+.sv-resume-button{display:block;max-width:100%;width:100%;padding:10px;margin:7px 0 12px;border:1px solid #6db2b866;border-radius:12px;background:#102331c7;color:#c5edf1;font-weight:700}
+.sv-target-choice{position:sticky;top:64px;z-index:21;box-shadow:0 6px 22px #0008}
+.slot.sv-target-eligible{border-color:#92dada!important;outline:1px solid #92dada88;cursor:pointer}
+.slot.sv-target-picked{border-color:#f5d38b!important;outline:3px solid #f5d38b;box-shadow:0 0 14px #f5d38b66}
+.slot.sv-target-empty{border:2px dashed #79ecb4!important;box-shadow:inset 0 0 15px #79ecb420;cursor:pointer}

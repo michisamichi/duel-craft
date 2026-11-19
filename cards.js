@@ -1,4 +1,4 @@
-import {LIMITS,cardLimit,isValidAbility,abilityText} from './rules.js?v=80';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=191';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},
@@ -34,11 +34,17 @@ export const CARDS = [
   {id:'s07',name:'守護の紋章',type:'spell',spellKind:'continuous',emoji:'🪬',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:300},desc:'指定した自分モンスター1体の攻撃力を300アップ。'},
   {id:'s08',name:'雷刃の剣',type:'spell',spellKind:'equip',emoji:'⚔️',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:500},desc:'装備モンスターの攻撃力を500アップ。'},
   {id:'s09',name:'星界の祭壇',type:'spell',spellKind:'field',emoji:'🌌',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:300},desc:'自分フィールドの表側モンスターの攻撃力を300アップ。'},
+  {id:'m25',name:'星冠の儀式竜',type:'monster',summonKind:'ritual',subtype:'normal',level:7,atk:2700,def:2100,emoji:'✨',rarity:'SR',desc:'儀式魔法とレベル合計7以上のリリースで手札から呼び出す。'},
+  {id:'m26',name:'炎海の双竜',type:'monster',summonKind:'fusion',subtype:'normal',fusionMaterials:['m03','m12'],level:8,atk:2900,def:2400,emoji:'🐲',rarity:'UR',desc:'「焔の小竜」＋「潮騒の海獣」'},
+  {id:'s10',name:'星冠の儀式',type:'spell',spellKind:'ritual',effect:'ritualSummon',ritualFor:'m25',emoji:'🌟',rarity:'R',desc:'「星冠の儀式竜」を儀式召喚する。'},
+  {id:'s11',name:'双竜の融合',type:'spell',spellKind:'fusion',effect:'fusionSummon',emoji:'🌀',rarity:'R',desc:'手札・フィールドの指定素材2体で融合召喚する。'},
   {id:'t01',name:'緊急防御',type:'trap',emoji:'🛡️',effect:'negate',desc:'相手の攻撃時に任意発動。その攻撃を無効にする。'},
   {id:'t02',name:'逆襲の落とし穴',type:'trap',emoji:'🕳️',effect:'counterdestroy',desc:'相手の攻撃時に任意発動。攻撃したモンスターを破壊する。'},
   {id:'t03',name:'反撃の炎',type:'trap',emoji:'💥',effect:'counterburn',desc:'相手の攻撃時に任意発動。攻撃を無効にし、相手に700ダメージ。'},
 ];
-export const SPELL_KINDS={normal:'通常魔法',quick:'速攻魔法',continuous:'永続魔法',equip:'装備魔法',field:'フィールド魔法'};
+export const SPELL_KINDS={normal:'通常魔法',quick:'速攻魔法',continuous:'永続魔法',equip:'装備魔法',field:'フィールド魔法',ritual:'儀式魔法',fusion:'融合魔法'};
+export const SUMMON_KINDS={normal:'通常',ritual:'儀式',fusion:'融合'};
+export const summonKind=c=>c?.type==='monster'&&['ritual','fusion'].includes(c.summonKind)?c.summonKind:'normal';
 export const spellKind=c=>c?.type==='spell'&&Object.hasOwn(SPELL_KINDS,c.spellKind)?c.spellKind:'normal';
 export const persistentSpell=c=>['continuous','equip','field'].includes(spellKind(c));
 export const RARITIES={N:'ノーマル',R:'レア',SR:'スーパーレア',UR:'ウルトラレア',SEC:'シークレット'};
@@ -47,7 +53,7 @@ const DEFAULT_RARITY={
   m23:'SR',m10:'SR',s01:'SR',s03:'SR',t02:'SR',
   m14:'R',m16:'R',m22:'R',s02:'R',s04:'R',t03:'R',m08:'R',m19:'R'
 };
-for(const c of CARDS)c.rarity=DEFAULT_RARITY[c.id]||'N';
+for(const c of CARDS)c.rarity=DEFAULT_RARITY[c.id]||c.rarity||'N';
 export const CARD = Object.fromEntries(CARDS.map(c => [c.id,c]));
 const ORIGINAL_CARDS = CARDS.map(c=>({...c}));
 export const MONSTER_EFFECTS = {
@@ -80,16 +86,20 @@ export function isSafeCustomCard(c){
   if(typeof c.owner!=='string'||c.owner.length<2||c.owner.length>150)return false;
   if(c.rarity!==undefined&&!Object.hasOwn(RARITIES,c.rarity))return false;
   if(c.limit!==undefined&&!Object.hasOwn(LIMITS,c.limit))return false;
+  if(c.cost!==undefined&&(!Number.isInteger(c.cost)||c.cost<1||c.cost>20))return false;
   if(c.ability!==undefined&&!isValidAbility(c.ability,c.type,c.spellKind||'normal'))return false;
   if(c.type==='spell'&&c.spellKind!==undefined&&!Object.hasOwn(SPELL_KINDS,c.spellKind))return false;
-  if(c.fx && (typeof c.fx!=='object'||!['auto','flame','lightning','slash','aqua','shadow','star','heal','none'].includes(c.fx.visual)||!['auto','slash','spark','boom','chime','water','heal','none'].includes(c.fx.sound)))return false;
+  if(c.type==='spell'&&c.spellKind==='ritual'&&c.ritualFor!==undefined&&c.ritualFor!==''&&!/^([a-z][0-9]{2}|u_[0-9a-f]{16,32})$/.test(c.ritualFor))return false;
+  if(c.fx && (typeof c.fx!=='object'||!['auto','flame','lightning','slash','aqua','shadow','star','heal','ritual','fusion','none'].includes(c.fx.visual)||!['auto','slash','spark','boom','chime','water','heal','none'].includes(c.fx.sound)))return false;
   if(c.image && (typeof c.image!=='string'||!/^data:image\/(jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(c.image)||c.image.length>90000))return false;
   if(c.type==='monster'){
     if(!Number.isInteger(c.level)||c.level<1||c.level>12||![c.atk,c.def].every(n=>Number.isInteger(n)&&n>=0&&n<=5000))return false;
+    if(c.summonKind!==undefined&&!Object.hasOwn(SUMMON_KINDS,c.summonKind))return false;
+    if(summonKind(c)==='fusion'&&(!Array.isArray(c.fusionMaterials)||c.fusionMaterials.length!==2||!c.fusionMaterials.every(id=>typeof id==='string'&&/^([a-z][0-9]{2}|u_[0-9a-f]{16,32})$/.test(id))))return false;
     if(c.subtype==='effect')return !!(c.ability||MONSTER_EFFECTS[c.monsterEffect?.kind]?.[c.monsterEffect?.code]);
     return c.subtype==='normal';
   }
-  if(c.type==='spell')return !!c.ability||['draw2','heal1000','destroy','boost500','burn800'].includes(c.effect);
+  if(c.type==='spell')return ['ritual','fusion'].includes(spellKind(c))?c.effect===(spellKind(c)==='ritual'?'ritualSummon':'fusionSummon'):!!c.ability||['draw2','heal1000','destroy','boost500','burn800'].includes(c.effect);
   if(c.type==='trap')return !!c.ability||['negate','counterdestroy','counterburn'].includes(c.effect);
   return false;
 }
@@ -97,15 +107,15 @@ export const ORIGINAL_IDS = new Set(ORIGINAL_CARDS.map(c=>c.id));
 
 // 各デッキ40枚・同一カード3枚まで。
 const RED_COUNTS = {
-  m01:3,m02:3,m03:3,m04:3,m05:3,m06:3,
+  m01:2,m02:3,m03:3,m04:2,m05:3,m06:3,m12:1,m25:1,
   m13:2,m14:2,m17:1,m19:1,
-  s01:3,s02:2,s03:2,s04:2,s05:1,
+  s01:3,s02:2,s03:2,s04:1,s10:1,s11:1,
   t01:2,t02:2,t03:2,
 };
 const BLUE_COUNTS = {
-  m07:3,m08:3,m09:3,m10:3,m11:3,m12:3,
+  m07:2,m08:3,m09:2,m10:3,m11:3,m12:3,m03:1,m25:1,
   m15:2,m16:2,m18:1,m20:1,
-  s01:3,s02:2,s03:2,s04:2,s05:1,
+  s01:3,s02:2,s03:2,s04:1,s10:1,s11:1,
   t01:2,t02:2,t03:2,
 };
 export const PRESETS = {
@@ -115,10 +125,18 @@ export const PRESETS = {
 export function expandDeck(counts) {
   return Object.entries(counts).flatMap(([id,n])=>Array(Number(n)||0).fill(id));
 }
-export function validDeck(counts,rules={deckSize:40}) {
+export function validExtraDeck(counts={}){
+  if(!counts||typeof counts!=='object'||Array.isArray(counts))return false;
+  const entries=Object.entries(counts);
+  return entries.length<=15&&entries.reduce((n,[,qty])=>n+qty,0)<=15&&
+    entries.every(([id,qty])=>CARD[id]&&summonKind(CARD[id])==='fusion'&&Number.isInteger(qty)&&qty>=1&&qty<=cardLimit(CARD[id]));
+}
+export function validDeck(counts,rules={deckSize:40},extraCounts={}) {
   if(!counts||typeof counts!=='object')return false;
   return Object.values(counts).reduce((a,b)=>a+Number(b||0),0)===(rules.deckSize||40) &&
-    Object.entries(counts).every(([id,n]) => !!CARD[id] && Number.isInteger(n) && n>=1 && n<=cardLimit(CARD[id]));
+    Object.entries(counts).every(([id,n]) => !!CARD[id] && summonKind(CARD[id])!=='fusion' && Number.isInteger(n) && n>=1 && n<=cardLimit(CARD[id])) &&
+    validExtraDeck(extraCounts) &&
+    (!rules.costLimit || deckCost(counts,CARD)<=rules.costLimit);
 }
 export function copyPreset(id) { return {...PRESETS[id].counts}; }
 export function shuffle(xs) {

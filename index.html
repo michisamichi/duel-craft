@@ -8,16 +8,16 @@
   <meta name="apple-mobile-web-app-title" content="SAHOVERSE">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="SAHOVERSE - 2人で遊べるオリジナルカードゲーム。">
-  <link rel="manifest" href="./manifest.webmanifest?v=80">
-  <link rel="apple-touch-icon" sizes="180x180" href="./sahoverse-icon-180.png?v=80">
-  <link rel="icon" href="./sahoverse-icon-192.png?v=80" type="image/png">
-  <link rel="stylesheet" href="./style.css?v=80">
+  <link rel="manifest" href="./manifest.webmanifest?v=191">
+  <link rel="apple-touch-icon" sizes="180x180" href="./sahoverse-icon-180.png?v=191">
+  <link rel="icon" href="./sahoverse-icon-192.png?v=191" type="image/png">
+  <link rel="stylesheet" href="./style.css?v=191">
   <title>SAHOVERSE｜カードバトル</title>
 </head>
 <body>
 <div id="app">
   <header class="topbar">
-    <div class="brand"><img src="./sahoverse-icon-180.png?v=80" alt="" class="brand-logo"><span>SAHO<b>VERSE</b></span></div>
+    <div class="brand"><img src="./sahoverse-icon-180.png?v=191" alt="" class="brand-logo"><span>SAHO<b>VERSE</b></span></div>
     <span id="network" class="network">読み込み中</span>
   </header>
   <main id="view" aria-live="polite"></main>
@@ -50,7 +50,7 @@
     var reset=document.createElement('button');reset.className='btn ghost wide mt8';reset.textContent='ゲームの端末保存データを初期化して再試行';
     reset.addEventListener('click',function(){
       if(!confirm('この端末に保存されたSAHOVERSEのデッキ・カード・パック・設定が消えます。Firebaseの共有データは消えません。実行しますか？'))return;
-      try{var keys=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.startsWith('duel-'))keys.push(k);}
+      try{var keys=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&(k.startsWith('duel-')||k.startsWith('saho-')))keys.push(k);}
         keys.forEach(function(k){localStorage.removeItem(k);});}catch(e){}
       location.reload();
     });
@@ -75,7 +75,7 @@
 </script>
 <script type="module">
 // Unlike a static import, a failed dependency is caught and shown on the page.
-import('./app.js?v=80').catch(error=>window.DUEL_BOOT_FAILURE(error?.message||String(error)));
+import('./app.js?v=191').catch(error=>window.DUEL_BOOT_FAILURE(error?.message||String(error)));
 </script>
 </body>
 </html>

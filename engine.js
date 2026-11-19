@@ -1,5 +1,5 @@
-import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell} from './cards.js?v=80';
-import {normalizeRuleSettings} from './rules.js?v=80';
+import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind} from './cards.js?v=191';
+import {normalizeRuleSettings} from './rules.js?v=191';
 
 export const PHASES = {draw:'ドロー',main1:'メイン1',battle:'バトル',main2:'メイン2',end:'エンド'};
 const blank5 = () => [null,null,null,null,null];
@@ -56,6 +56,7 @@ export function normalizeRoom(s) {
       p[field]=Array.from({length:5},(_,i)=>original[i]??null);
     }
     p.banished=Array.isArray(p.banished)?p.banished:[];
+    const extra=p.extraDeck||[];p.extraDeck=Array.isArray(extra)?extra:Object.keys(extra).sort((a,b)=>+a-+b).map(k=>extra[k]);
     p.field=p.field||null;
     for(const field of ['hand','deck','grave']){
       const original=p[field]||[];
@@ -68,24 +69,24 @@ export function normalizeRoom(s) {
   s.pending=s.pending||null;
   return s;
 }
-const newPlayer = ({uid,name,counts,rules}) => {
-  assert(validDeck(counts,rules),`デッキは${rules.deckSize}枚・禁止制限を守る必要があります`);
+const newPlayer = ({uid,name,counts,extraCounts={},rules}) => {
+  assert(validDeck(counts,rules,extraCounts),`デッキは${rules.deckSize}枚・禁止制限を守る必要があります`);
   return {uid, name:String(name||'プレイヤー').slice(0,12),
-    deck:shuffle(expandDeck(counts)), hand:[], monsters:blank5(), backrow:blank5(), grave:[],banished:[],
+    deck:shuffle(expandDeck(counts)),extraDeck:expandDeck(extraCounts), hand:[], monsters:blank5(), backrow:blank5(), grave:[],banished:[],
     field:null,lp:rules.lp,normalUsed:false};
 };
-export function createRoom({uid,name,counts,rules}) {
+export function createRoom({uid,name,counts,extraCounts={},rules}) {
   rules=normalizeRuleSettings(rules);
-  return {status:'waiting',rules,players:[newPlayer({uid,name,counts,rules}),null],turn:0,turnNo:1,
+  return {status:'waiting',rules,players:[newPlayer({uid,name,counts,extraCounts,rules}),null],turn:0,turnNo:1,
     phase:'main1',nextKey:0,pending:null,winner:null,log:['対戦相手の入室を待っています'],revision:0,createdAt:Date.now()};
 }
-export function joinRoom(state,{uid,name,counts}) {
+export function joinRoom(state,{uid,name,counts,extraCounts={}}) {
   assert(state?.status==='waiting','参加できる部屋ではありません');
   assert(state.players[0].uid!==uid,'同じ端末からはオンライン対戦に参加できません');
   assert(!state.players[1],'すでに2人参加しています');
   const s=normalizeRoom(structuredClone(state));
   s.rules=normalizeRuleSettings(s.rules);
-  s.players[1]=newPlayer({uid,name,counts,rules:s.rules});
+  s.players[1]=newPlayer({uid,name,counts,extraCounts,rules:s.rules});
   s.status='playing';s.turn=Math.random()<0.5?0:1;
   s.turnNo=1; s.phase='draw';s.log=[];
   for(const p of s.players) draw(p,5,s,false);
@@ -93,9 +94,9 @@ export function joinRoom(state,{uid,name,counts}) {
   s.revision++;
   return s;
 }
-export function createDemo({counts1,counts2,rules}) {
-  const s=createRoom({uid:'demo-a',name:'プレイヤー1',counts:counts1,rules});
-  return joinRoom(s,{uid:'demo-b',name:'プレイヤー2',counts:counts2});
+export function createDemo({counts1,counts2,extra1={},extra2={},rules}) {
+  const s=createRoom({uid:'demo-a',name:'プレイヤー1',counts:counts1,extraCounts:extra1,rules});
+  return joinRoom(s,{uid:'demo-b',name:'プレイヤー2',counts:counts2,extraCounts:extra2});
 }
 function draw(p,n,s,loseOnShort=true) {
   for(let i=0;i<n;i++) {
@@ -231,6 +232,7 @@ function castSpell(s,seat,source,index,target){
   const id=fromHand?old:old?.id,c=mustCard(id);
   assert(c.type==='spell','魔法カードではありません');
   const kind=spellKind(c),quick=kind==='quick';
+  assert(!['ritual','fusion'].includes(kind),'この魔法は専用の召喚ボタンから発動してください');
   if(responding){
     assert(quick,'対応中は速攻魔法だけ発動できます');
     if(attackResponse)assert(seat!==ch.by,'攻撃への最初の対応は防御側が行います');
@@ -283,6 +285,85 @@ function castSpell(s,seat,source,index,target){
   if(attackResponse){startChain(s,entry,{...ch});return;}
   ch.stack.push(entry);ch.priority=1-seat;ch.passes=0;
   log(s,`チェーン${ch.stack.length}：「${c.name}」発動！`);
+}
+/** 召喚素材は「手札:番号」「場:番号」を明示する。配列をまとめて取り除き、手札インデックスのずれを防ぐ。 */
+function materialEntries(s,seat,materials,excludeHand=[]){
+  assert(Array.isArray(materials)&&materials.length>0&&materials.length<=8,'素材は1〜8体選んでください');
+  const p=s.players[seat],seen=new Set();
+  return materials.map(m=>{
+    assert(m&&['hand','monsters'].includes(m.zone)&&Number.isInteger(m.index),'素材の指定が不正です');
+    const key=`${m.zone}:${m.index}`;assert(!seen.has(key),'同じ素材は選べません');seen.add(key);
+    assert(m.zone!=='hand'||!excludeHand.includes(m.index),'召喚するカードと魔法カードは素材にできません');
+    const id=m.zone==='hand'?p.hand[m.index]:p.monsters[m.index]?.id;
+    assert(id&&CARD[id]?.type==='monster','素材となるモンスターがありません');
+    return {...m,id,level:CARD[id].level};
+  });
+}
+function consumeMaterials(s,seat,materials){
+  const p=s.players[seat];
+  for(const m of materials.filter(m=>m.zone==='monsters'))sendToGrave(p,'monsters',m.index);
+  for(const m of materials.filter(m=>m.zone==='hand').sort((a,b)=>b.index-a.index)){
+    p.grave.push(p.hand.splice(m.index,1)[0]);
+  }
+}
+function specialSpell(s,seat,a,kind){
+  const p=s.players[seat],source=a.spellSource,index=a.spellIndex;
+  assert(['hand','backrow'].includes(source)&&Number.isInteger(index),'魔法カードを選択してください');
+  const id=source==='hand'?p.hand[index]:p.backrow[index]?.id;
+  const c=mustCard(id);
+  assert(c.type==='spell'&&spellKind(c)===kind,'対応する召喚魔法がありません');
+  if(source==='backrow')assert(p.backrow[index]?.faceDown,'セットした魔法カードだけ発動できます');
+  return {id,card:c};
+}
+function doSpecialSummon(s,seat,a){
+  requireMain(s,seat);
+  const p=s.players[seat],isRitual=a.type==='ritualSummon',kind=isRitual?'ritual':'fusion';
+  const {id:spellId,card:spell}=specialSpell(s,seat,a,kind);
+  let id,excluded=[];
+  if(isRitual){
+    assert(Number.isInteger(a.ritualHand),'儀式モンスターを選んでください');
+    id=p.hand[a.ritualHand];excluded=[a.ritualHand];
+  } else {
+    id=a.fusionId;
+    assert(p.extraDeck.includes(id),'EXデッキに融合モンスターがありません');
+  }
+  const card=mustCard(id);
+  assert(card.type==='monster'&&summonKind(card)===kind,'召喚するモンスターの種類が違います');
+  if(isRitual&&spell.ritualFor)assert(spell.ritualFor===id,'この儀式魔法では召喚できません');
+  const items=materialEntries(s,seat,a.materials,excluded.concat(a.spellSource==='hand'?[a.spellIndex]:[]));
+  if(isRitual)assert(items.reduce((sum,m)=>sum+m.level,0)>=card.level,'リリースする素材のレベル合計が足りません');
+  else{
+    assert(items.length===2,'融合素材を2体選んでください');
+    assert([...items.map(m=>m.id)].sort().join(',')===[...card.fusionMaterials].sort().join(','),'融合素材が一致しません');
+  }
+  assert(p.monsters.some((m,i)=>!m||items.some(x=>x.zone==='monsters'&&x.index===i)),'モンスターゾーンが満杯です');
+  // 妥当性の検証がすべて終わった後に状態を変更する。
+  if(a.spellSource==='backrow'){p.backrow[a.spellIndex]=null;p.grave.push(spellId);}
+  consumeMaterials(s,seat,items);
+  // 手札番号は素材を取り除いた後には変わるため、IDと選択位置を使って追跡する。
+  if(isRitual){
+    const ritualAt=p.hand.indexOf(id);assert(ritualAt>=0,'儀式モンスターが見つかりません');
+    p.hand.splice(ritualAt,1);
+  } else p.extraDeck.splice(p.extraDeck.indexOf(id),1);
+  if(a.spellSource==='hand'){
+    const spellAt=p.hand.indexOf(spellId);assert(spellAt>=0,'魔法カードが見つかりません');
+    p.hand.splice(spellAt,1);p.grave.push(spellId);
+  }
+  const slot=p.monsters.indexOf(null);assert(slot>=0,'モンスターゾーンが満杯です');
+  const summoned={key:++s.nextKey,id,pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+  p.monsters[slot]=summoned;
+  log(s,`${p.name} は「${spell.name}」で「${card.name}」を${isRitual?'儀式':'融合'}召喚しました。`);
+  if(card.subtype==='effect'){
+    if(card.ability?.when==='summon'){
+      const ab=actionAbility(card),target=ab.target==='ownMonster'?slot:ab.target==='enemyMonster'?s.players[1-seat].monsters.findIndex(Boolean):null;
+      if(target!==-1)executeAbility(s,{seat,cardId:id,target},null);
+    }else if(card.monsterEffect?.kind==='trigger'){
+      const e=card.monsterEffect;
+      if(e.code!=='destroy1')activateMonsterAbility(s,seat,summoned,'trigger');
+    }
+  }
+  checkWinner(s);
+  return id;
 }
 function addChainTrap(s,seat,index,target){
  const ch=s.pending;assert(ch?.kind==='chain'&&ch.priority===seat,'チェーンの応答順ではありません');
@@ -343,6 +424,8 @@ export function applyAction(current,actorUid,action) {
   let cueType=null, cueCard=null;
   switch(a.type){
     case 'summon':cueType=a.faceDown?'set':'summon';cueCard=p.hand[a.hand];break;
+    case 'ritualSummon':cueType='ritual';cueCard=p.hand[a.ritualHand];break;
+    case 'fusionSummon':cueType='fusion';cueCard=a.fusionId;break;
     case 'flip':cueType='summon';cueCard=p.monsters[a.index]?.id;break;
     case 'activateMonsterEffect':cueType='effect';cueCard=p.monsters[a.index]?.id;break;
     case 'spellFromHand':cueType='spell';cueCard=p.hand[a.hand];break;
@@ -354,12 +437,14 @@ export function applyAction(current,actorUid,action) {
     case 'setBackrow':cueType='set';cueCard=p.hand[a.hand];break;
   }
   switch(a.type) {
+    case 'ritualSummon':
+    case 'fusionSummon':{doSpecialSummon(s,seat,a);break;}
     case 'summon': {
       requireMain(s,seat);
       assert(!p.normalUsed,'このターンはすでに通常召喚しました');
       assert(arrayIndex(p.hand,a.hand),'手札の位置が不正です');
       const id=p.hand[a.hand],c=mustCard(id);
-      assert(c.type==='monster','モンスターではありません');
+      assert(c.type==='monster'&&summonKind(c)==='normal','儀式・融合モンスターは通常召喚できません');
       const need=c.level<=4?0:c.level<=6?1:2;
       const tributes=a.tributes||[];
       assert(Array.isArray(tributes)&&tributes.length===need,'必要なリリース数が違います');
