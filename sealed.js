@@ -2,7 +2,7 @@
 // No online rule changes: the saved deck enters the existing duel engine unchanged.
 import {CARD,summonKind} from './cards.js?v=196';
 import {cardLimit} from './rules.js?v=196';
-import {openPack} from './packs.js?v=196';
+import {openPack} from './packs.js?v=1910';
 
 export const SEALED_STORAGE_KEY='duel-sealed-v1';
 const MAX_PACKS=30;

@@ -54,7 +54,7 @@ function activateMonsterAbility(s,seat,item,kind){
     case 'atk500':item.bonus=(item.bonus||0)+500;break;
     case 'destroy1':
       assert(kind==='ignition'&&Number.isInteger(target)&&!!getMonster(s,1-seat,target),'破壊する相手モンスターを選択してください');
-      sendToGrave(enemy,'monsters',target);break;
+      sendToGrave(enemy,'monsters',target,s);break;
     default:fail('このモンスター効果には未対応です');
   }
   log(s,`「${c.name}」の効果を発動！`);
@@ -144,9 +144,21 @@ function getMonster(s,seat,index) {
   assert(arrayIndex(s.players[seat].monsters,index),'場所が不正です');
   return s.players[seat].monsters[index];
 }
-function sendToGrave(p,zone,index) {
+// Control and original ownership differ when an effect steals a monster.
+// Existing room records without ownerSeat are treated as owned by the controller.
+function originalOwner(s,item,controller){
+  const seat=item?.ownerSeat;
+  return Number.isInteger(seat)&&s?.players?.[seat] ? s.players[seat] : controller;
+}
+function returnMonsterToOwner(s,item,controller,zone){
+  const owner=originalOwner(s,item,controller);
+  if(summonKind(CARD[item.id])==='fusion')owner.extraDeck.push(item.id);
+  else if(zone==='hand')owner.hand.push(item.id);
+  else {owner.deck.push(item.id);owner.deck=shuffle(owner.deck);}
+}
+function sendToGrave(p,zone,index,s=null) {
   const item=p[zone][index];
-  if(item){p.grave.push(item.id);p[zone][index]=null;
+  if(item){originalOwner(s,item,p).grave.push(item.id);p[zone][index]=null;
     if(zone==='monsters'&&item.key!==undefined)removeOrphanEquips(p);
   }
 }
@@ -188,15 +200,15 @@ function resolveAttack(s) {
     const isAtk=defender.pos==='atk';
     const power=isAtk?effectiveAtk(defender,s,1-a.by):effectiveDef(defender,s,1-a.by);
     if(atk>power){
-      sendToGrave(defP,'monsters',a.target);
+      sendToGrave(defP,'monsters',a.target,s);
       if(isAtk)defP.lp=Math.max(0,defP.lp-(atk-power));
       log(s,`${mustCard(attacker.id).name} が ${dc.name} を破壊！${isAtk?` ${atk-power}ダメージ。`:''}`);
     } else if(atk<power) {
-      if(isAtk)sendToGrave(atkP,'monsters',a.attacker);
+      if(isAtk)sendToGrave(atkP,'monsters',a.attacker,s);
       atkP.lp=Math.max(0,atkP.lp-(power-atk));
       log(s,`${dc.name} が攻撃を防ぎ、${atkP.name} に${power-atk}ダメージ。`);
     } else {
-      if(isAtk){sendToGrave(atkP,'monsters',a.attacker);sendToGrave(defP,'monsters',a.target);log(s,'攻撃力が同じため、両方のモンスターが破壊されました。');}
+      if(isAtk){sendToGrave(atkP,'monsters',a.attacker,s);sendToGrave(defP,'monsters',a.target,s);log(s,'攻撃力が同じため、両方のモンスターが破壊されました。');}
       else log(s,'攻撃力と守備力が同じため、どちらも破壊されません。');
     }
   }
@@ -272,10 +284,10 @@ function executeAbility(s,entry,chain){
   for(const {side,index} of monsters){
    const owner=s.players[side],item=owner.monsters[index];if(!item)continue;
    switch(ab.operation){
-    case 'destroy':case 'sendGrave':sendToGrave(owner,'monsters',index);break;
-    case 'banish':owner.banished.push(item.id);owner.monsters[index]=null;break;
-    case 'returnHand':owner.hand.push(item.id);owner.monsters[index]=null;break;
-    case 'returnDeck':owner.deck.push(item.id);owner.deck=shuffle(owner.deck);owner.monsters[index]=null;break;
+    case 'destroy':case 'sendGrave':sendToGrave(owner,'monsters',index,s);break;
+    case 'banish':originalOwner(s,item,owner).banished.push(item.id);owner.monsters[index]=null;break;
+    case 'returnHand':returnMonsterToOwner(s,item,owner,'hand');owner.monsters[index]=null;break;
+    case 'returnDeck':returnMonsterToOwner(s,item,owner,'deck');owner.monsters[index]=null;break;
     case 'changePosition':if(item.pos==='set')item.pos='atk';else item.pos=item.pos==='atk'?'def':'atk';item.changedTurn=s.turnNo;break;
     case 'boost':item.bonus=(item.bonus||0)+qty;break;
     case 'weaken':item.bonus=(item.bonus||0)-qty;break;
@@ -287,7 +299,13 @@ function executeAbility(s,entry,chain){
     case 'lockEffect':item.effectLockedUntil=Math.max(item.effectLockedUntil||0,s.turnNo+2);break;
     case 'steal':{
      const receiver=s.players[1-side],where=receiver.monsters.indexOf(null);
-     if(where!==-1){owner.monsters[index]=null;receiver.monsters[where]={...item,attacked:true,changedTurn:s.turnNo,bornTurn:s.turnNo};}
+     if(where!==-1){
+       owner.monsters[index]=null;
+       receiver.monsters[where]={...item,ownerSeat:item.ownerSeat??side,attacked:true,changedTurn:s.turnNo,bornTurn:s.turnNo};
+       // Equipment follows its linked monster when control changes.
+       for(const p of s.players)for(const eq of p.backrow)
+         if(eq?.linkKey===item.key&&(eq.linkOwner??side)===side)eq.linkOwner=1-side;
+     }
      break;
     }
    }
@@ -334,14 +352,20 @@ function executeAbility(s,entry,chain){
   case 'mill':player.grave.push(...player.deck.splice(0,qty));break;
   case 'banishDeck':player.banished.push(...player.deck.splice(0,qty));break;
   case 'shuffleDeck':player.deck=shuffle(player.deck);break;
-  case 'graveRecover':player.hand.push(...player.grave.splice(Math.max(0,player.grave.length-qty),qty));break;
+  case 'graveRecover':{for(const id of player.grave.splice(Math.max(0,player.grave.length-qty),qty))
+    (summonKind(CARD[id])==='fusion'?player.extraDeck:player.hand).push(id);break;}
   case 'graveBanish':player.banished.push(...player.grave.splice(Math.max(0,player.grave.length-qty),qty));break;
   case 'graveRecycle':{
    const reclaimed=player.grave.splice(Math.max(0,player.grave.length-qty),qty);
-   if(reclaimed.length){player.deck.push(...reclaimed);player.deck=shuffle(player.deck);}
+   if(reclaimed.length){
+     const main=reclaimed.filter(id=>summonKind(CARD[id])!=='fusion');
+     player.extraDeck.push(...reclaimed.filter(id=>summonKind(CARD[id])==='fusion'));
+     if(main.length){player.deck.push(...main);player.deck=shuffle(player.deck);}
+   }
    break;
   }
-  case 'banishedRecover':player.hand.push(...player.banished.splice(Math.max(0,player.banished.length-qty),qty));break;
+  case 'banishedRecover':{for(const id of player.banished.splice(Math.max(0,player.banished.length-qty),qty))
+    (summonKind(CARD[id])==='fusion'?player.extraDeck:player.hand).push(id);break;}
   case 'graveRevive':{
    for(let i=0;i<qty;i++){
     const slot=player.monsters.indexOf(null);
@@ -360,9 +384,18 @@ function executeAbility(s,entry,chain){
  log(s,`${p.name}：「${card.name}」の効果を解決しました。`);
  sweepOrphanEquips(s);checkWinner(s);
 }
+// Firebase Realtime Database rejects undefined anywhere inside transaction data.
+// Non-targeted spells/traps/effects must omit target rather than store target: undefined.
+const chainEntry=(seat,cardId,target,discardOnResolve=false)=>{
+ const entry=target===undefined?{seat,cardId}:{seat,cardId,target};
+ // Keep a newly activated normal spell/trap in the chain rather than its grave.
+ // Old saved rooms lacking this flag have already sent those cards to the grave.
+ if(discardOnResolve)entry.discardOnResolve=true;
+ return entry;
+};
 function startChain(s,entry,afterAttack=null){
  assert(!s.pending||s.pending.kind==='attack','対応処理中です');
- s.pending={kind:'chain',stack:[entry],priority:1-entry.seat,passes:0,afterAttack,attackNegated:false};
+ s.pending={kind:'chain',stack:[{...chainEntry(entry.seat,entry.cardId,entry.target,entry.discardOnResolve),...(entry.persistentZone?{persistentZone:entry.persistentZone,...entry.persistentZone==='backrow'?{persistentIndex:entry.persistentIndex}:{}}:{})}],priority:1-entry.seat,passes:0,afterAttack,attackNegated:false};
  log(s,`チェーン1：「${mustCard(entry.cardId).name}」発動。相手の応答を待ちます。`);
 }
 function castSpell(s,seat,source,index,target){
@@ -413,16 +446,20 @@ function castSpell(s,seat,source,index,target){
         if(p.field)p.grave.push(p.field.id);
         p.field=slotItem;
       }else p.backrow[p.backrow.indexOf(null)]=slotItem;
-    }else p.grave.push(id);
+    } // Non-persistent cards move to the grave only when the chain finishes.
   }else if(source==='field'){
     assert(kind==='field','フィールドゾーンにある魔法ではありません');
     p.field=slotItem;
   }else{
     assert(arrayIndex(p.backrow,index),'ゾーンが不正です');
     if(ongoing)p.backrow[index]=slotItem;
-    else{p.backrow[index]=null;p.grave.push(id);}
+    else{p.backrow[index]=null;}
   }
-  const entry={seat,cardId:id,target};
+  const entry=chainEntry(seat,id,target,!ongoing);
+  if(ongoing){
+    entry.persistentZone=kind==='field'?'field':'backrow';
+    if(kind!=='field')entry.persistentIndex=fromHand?p.backrow.indexOf(slotItem):index;
+  }
   if(!responding){startChain(s,entry);return;}
   if(attackResponse){startChain(s,entry,{...ch});return;}
   ch.stack.push(entry);ch.priority=1-seat;ch.passes=0;
@@ -443,7 +480,7 @@ function materialEntries(s,seat,materials,excludeHand=[]){
 }
 function consumeMaterials(s,seat,materials){
   const p=s.players[seat];
-  for(const m of materials.filter(m=>m.zone==='monsters'))sendToGrave(p,'monsters',m.index);
+  for(const m of materials.filter(m=>m.zone==='monsters'))sendToGrave(p,'monsters',m.index,s);
   for(const m of materials.filter(m=>m.zone==='hand').sort((a,b)=>b.index-a.index)){
     p.grave.push(p.hand.splice(m.index,1)[0]);
   }
@@ -514,8 +551,8 @@ function addChainTrap(s,seat,index,target){
  assert(item.setTurn<s.turnNo,'セットしたターンに罠は使えません');
  const c=mustCard(item.id),ab=actionAbility(c);assert(ab&&(ab.when==='response'||(ab.when==='attack'&&ch.afterAttack)),'今はこの罠を発動できません');
  abilityTargetCheck(s,seat,ab,target);
- s.players[seat].backrow[index]=null;s.players[seat].grave.push(item.id);
- ch.stack.push({seat,cardId:item.id,target});ch.priority=1-seat;ch.passes=0;
+ s.players[seat].backrow[index]=null;
+ ch.stack.push(chainEntry(seat,item.id,target,true));ch.priority=1-seat;ch.passes=0;
  log(s,`チェーン${ch.stack.length}：「${c.name}」発動！`);
 }
 function finishChain(s){
@@ -528,6 +565,15 @@ function finishChain(s){
    const entry=ch.stack[i];
    if(cancelPrevious){
      log(s,`「${mustCard(entry.cardId).name}」の効果を無効化しました。`);
+     // A negated continuous/equip/field spell cannot remain active on the board.
+     if(entry.persistentZone){
+       const owner=s.players[entry.seat];
+       if(entry.persistentZone==='field'){
+         if(owner.field?.id===entry.cardId){owner.field=null;owner.grave.push(entry.cardId);}
+       }else if(Number.isInteger(entry.persistentIndex)&&owner.backrow[entry.persistentIndex]?.id===entry.cardId){
+         owner.backrow[entry.persistentIndex]=null;owner.grave.push(entry.cardId);
+       }
+     }
      cancelPrevious=false;continue;
    }
    if(actionAbility(mustCard(entry.cardId))?.operation==='negateEffect'){
@@ -537,13 +583,23 @@ function finishChain(s){
    }
    executeAbility(s,entry,ch);
  }
+ // Finish moving cards from chain storage to their owners' graves.
+ // Even if an earlier effect ended the duel, every activated card leaves the chain.
+ for(const entry of ch.stack)if(entry.discardOnResolve)s.players[entry.seat].grave.push(entry.cardId);
  s.pending=null;
  sweepOrphanEquips(s);
   if(after&&s.status==='playing'&&!ch.attackNegated){s.pending={kind:'attack',...after};resolveAttack(s);}
  else if(after)log(s,'攻撃は無効になりました。');
  checkWinner(s);
 }
-function takeSnapshot(s){const snapshot={};for(const key of ['status','players','turn','turnNo','phase','pending','winner','log','lastEvent','lastRandom','rules','nextKey'])snapshot[key]=structuredClone(s[key]??null);return snapshot;}
+function takeSnapshot(s){
+ const snapshot={};
+ // Immutable room metadata (mode/completedDraft/createdAt) is deliberately not
+ // duplicated here. Restoring it from the current room keeps Firebase payloads small.
+ for(const key of ['status','players','turn','turnNo','phase','pending','winner','log','lastEvent','lastRandom','rules','nextKey'])
+   if(Object.hasOwn(s,key))snapshot[key]=structuredClone(s[key]);
+ return snapshot;
+}
 
 function endTurn(s) {
   assert(!s.pending,'相手の対応が終わっていません');
@@ -583,7 +639,15 @@ export function applyAction(current,actorUid,action) {
     fail('エンドフェイズです。手札から捨てるカードを選んでください。');
   if(a.type==='requestUndo'){assert(s.undoSnapshot&&s.undoActor===seat&&!s.undoRequest,'直前の自分の操作だけ取り消しを依頼できます');s.undoRequest=seat;s.revision++;log(s,'直前の操作の取り消しを相手に依頼しました。');return s;}
   if(a.type==='rejectUndo'){assert(s.undoRequest!==null&&s.undoRequest!==undefined&&s.undoRequest!==seat,'依頼がありません');s.undoRequest=null;s.revision++;log(s,'取り消し依頼を断りました。');return s;}
-  if(a.type==='approveUndo'){assert(s.undoRequest!==null&&s.undoRequest!==undefined&&s.undoRequest!==seat&&s.undoSnapshot,'依頼がありません');const restored=normalizeRoom(structuredClone(s.undoSnapshot));restored.revision=(s.revision||0)+1;restored.undoRequest=null;restored.undoSnapshot=null;restored.undoActor=null;log(restored,'双方の同意により直前の操作を取り消しました。');return restored;}
+  if(a.type==='approveUndo'){
+   assert(s.undoRequest!==null&&s.undoRequest!==undefined&&s.undoRequest!==seat&&s.undoSnapshot,'依頼がありません');
+   const restored=normalizeRoom(structuredClone(s.undoSnapshot));
+   // Legacy undo snapshots (<= v1.9.11) did not include these properties.
+   for(const key of ['mode','completedDraft','createdAt'])
+     if(!Object.hasOwn(restored,key)&&Object.hasOwn(s,key))restored[key]=structuredClone(s[key]);
+   restored.revision=(s.revision||0)+1;restored.undoRequest=null;restored.undoSnapshot=null;restored.undoActor=null;
+   log(restored,'双方の同意により直前の操作を取り消しました。');return restored;
+  }
   // Store only a public, non-sensitive cue for audiovisual sync.
   let cueType=null, cueCard=null;
   switch(a.type){
@@ -616,7 +680,7 @@ export function applyAction(current,actorUid,action) {
       assert(tributes.every(i=>Number.isInteger(i)&&!!getMonster(s,seat,i)),'リリースするモンスターを正しく選んでください');
       const slot=p.monsters.findIndex((m,i)=>m===null||tributes.includes(i));
       assert(slot>=0,'モンスターゾーンが満杯です');
-      for(const i of tributes)sendToGrave(p,'monsters',i);
+      for(const i of tributes)sendToGrave(p,'monsters',i,s);
       p.hand.splice(a.hand,1);
       p.monsters[slot]={key:++s.nextKey,id,pos:a.faceDown?'set':(a.position==='def'?'def':'atk'),bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
       p.normalUsed=true;
@@ -709,8 +773,8 @@ export function applyAction(current,actorUid,action) {
       const c=mustCard(item.id),ab=actionAbility(c);assert(ab?.when==='attack','この攻撃に対応できない罠です');
       abilityTargetCheck(s,seat,ab,a.target);
       const attack=s.pending;
-      p.backrow[a.index]=null;p.grave.push(item.id);
-      startChain(s,{seat,cardId:item.id,target:a.target},attack);
+      p.backrow[a.index]=null;
+      startChain(s,{seat,cardId:item.id,target:a.target,discardOnResolve:true},attack);
       break;
     }
     case 'chainPass': {
@@ -742,7 +806,8 @@ export function applyAction(current,actorUid,action) {
       assert(a.zone==='field'?!!p.field:Number.isInteger(a.index)&&p[a.zone][a.index],'対象カードがありません');
       const item=a.zone==='field'?p.field:p[a.zone][a.index];
       if(a.zone==='field')p.field=null;else p[a.zone][a.index]=null;
-      if(a.type==='manualDestroy')p.grave.push(item.id);else p.banished.push(item.id);
+      const owner=a.zone==='monsters'?originalOwner(s,item,p):p;
+      if(a.type==='manualDestroy')owner.grave.push(item.id);else owner.banished.push(item.id);
       sweepOrphanEquips(s);
       log(s,`${p.name} が自分のカード「${mustCard(item.id).name}」を${a.type==='manualDestroy'?'墓地へ送りました':'除外しました'}。`);break;
     }
@@ -782,6 +847,9 @@ export function applyAction(current,actorUid,action) {
     }
     default:fail('不明な操作です');
   }
+  // Tributes, manual moves and other actions may detach equip cards.
+  // Clean up at the action boundary even when no effect chain was opened.
+  sweepOrphanEquips(s);
   s.undoSnapshot=before;s.undoActor=seat;s.undoRequest=null;
   s.revision=(s.revision||0)+1;
   if(s.status==='finished'&&current.status!=='finished'){cueType='win';cueCard=null;}

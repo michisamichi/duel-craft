@@ -1,11 +1,12 @@
+import {makeRoomCode,normalizeRoomCode,isRoomCode} from './room-code.js?v=1911';
 import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=196';
 import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=196';
 import {makeBackup,parseBackup,applyBackup} from './backup.js?v=196';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef} from './engine.js?v=196';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef} from './engine.js?v=1913';
 import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,abilityTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=196';
-import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=196';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=196';
-import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=196';
+import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=1913';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=1910';
+import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=1910';
 import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=196';
 
 const $=id=>document.getElementById(id);
@@ -55,7 +56,7 @@ const ui={
   packOpen:false,packDraft:null,packResults:null,packs:readPackStore(storage),collectionOnly:false,previewCardId:null,
   sealedOpen:false,sealedOnly:false,sealedSession:normalizeSealedSession(stored(SEALED_STORAGE_KEY,null)),
   duelToolsOpen:false,duelLogOpen:false,
-  lastRoom:existingDraft(LAST_ROOM_KEY),networkConnected:null,connectionUnsub:null,
+  lastRoom:existingDraft(LAST_ROOM_KEY),networkConnected:null,connectionUnsub:null,cardLibraryReady:false,
 };
 replaceCustomCards(ui.customCards);
 lastCardLibraryJSON=JSON.stringify(ui.customCards);
@@ -87,7 +88,17 @@ function persistDecks(){ui.decks=writeDeckStore(storage,ui.decks);ui.counts={...
 function toast(msg){const el=$('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(ui.toastTimer);ui.toastTimer=setTimeout(()=>el.classList.remove('show'),3500);}
 function setNetwork(msg,status=''){const el=$('network');if(!el)return;el.title=msg;el.textContent=msg.includes('オンライン接続')?'オンライン':msg.includes('お試し')?'練習中':status==='off'?'オフライン':'準備中';el.className='network '+status;}
 function setBusy(v){ui.busy=v;const view=$('view');if(view)view.setAttribute('aria-busy',String(v));}
-function makeCode(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const bytes=new Uint8Array(8);if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(bytes);else for(let i=0;i<8;i++)bytes[i]=Math.floor(Math.random()*256);return Array.from(bytes,b=>alphabet[b%alphabet.length]).join('');}
+// Never queue an interactive duel action while RTDB is disconnected, and don't
+// resolve a custom card against an incomplete library on a newly joined device.
+function onlineReady(){
+ if(!ui.sdk||!ui.uid||!ui.db){toast('オンラインの初期化が終わっていません');return false;}
+ if(ui.networkConnected!==true){toast('Firebaseへの接続が切れています。接続後にもう一度操作してください');return false;}
+ if(!ui.cardLibraryReady){toast('共有カードの読み込み中です。完了後にもう一度操作してください');return false;}
+ return true;
+}
+// Newly created rooms use a four-digit numerical passcode.
+// Existing 8-character rooms remain joinable until they are closed.
+const makeCode=()=>makeRoomCode();
 function btn(label,action,cls='btn',data='',disabled=false){return `<button type="button" class="${cls}" data-action="${action}" ${data} ${disabled?'disabled':''}>${label}</button>`;}
 function cardHtml(id,{hidden=false,def=false,card:previewCard=null}={}){
   if(hidden)return '<div class="card back" aria-label="裏側のカード"><div class="back-emblem">✦</div></div>';
@@ -148,7 +159,7 @@ function renderHome(){
     ${missingCards(ui.counts).length?`<div class="notice">未登録のカードがあります。カード共有を確認してください。</div>`:''}
     <h3 class="sv-section-title">オンライン対戦</h3>
     ${configReady?`<div class="stack">${btn('部屋を作る','createRoom','btn primary wide')}
-    <div class="row"><input id="roomCode" class="input grow" maxlength="8" value="${esc(linkCode)}" placeholder="部屋コード（8文字）" autocapitalize="characters">${btn('参加','joinRoom','btn secondary')}</div></div>`:
+    <div class="row"><input id="roomCode" class="input grow" inputmode="numeric" autocomplete="one-time-code" maxlength="8" value="${esc(linkCode)}" placeholder="部屋の合言葉（数字4桁）" autocapitalize="characters">${btn('参加','joinRoom','btn secondary')}</div></div>`:
     `<div class="notice">オンライン接続の準備ができていません。</div>`}
     <div class="sv-try">${btn('1台で練習','demo','btn secondary wide')}</div>
     ${!storageAvailable?`<div class="notice">端末への保存が制限されています。Safariで開いてください。</div>`:''}
@@ -170,7 +181,7 @@ function draftSetupModal(){
  <div class="draft-setup-actions">
  <h3>オンライン（iPhone 2台）</h3>
  ${configReady?`${btn('ドラフト部屋を作る','createDraftRoom','btn primary wide')}
- <div class="row"><input class="input grow" id="draftCodeInput" maxlength="8" placeholder="8文字の部屋コード" value="${esc(invite)}" autocapitalize="characters">${btn('参加','joinDraftRoom','btn secondary')}</div>`:'<div class="notice">オンライン接続が必要です</div>'}
+ <div class="row"><input class="input grow" id="draftCodeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="部屋の合言葉（数字4桁）" value="${esc(invite)}" autocapitalize="characters">${btn('参加','joinDraftRoom','btn secondary')}</div>`:'<div class="notice">オンライン接続が必要です</div>'}
  <h3>1台で練習</h3>${btn('2人分を交互に選ぶ','draftDemo','btn secondary wide')}
  </div></div></div>`;
 }
@@ -179,7 +190,7 @@ function renderDraftRoom(){
  const mine=s.players?.[ui.seat]||null;
  const open=s.draft?.format==='open',max=(s.rules?.deckSize||40)*(open?2:1);
  if(s.status==='waiting')return `<section class="panel draft-waiting"><h2>ドラフト待機中</h2>
- <div class="code">${esc(ui.draftCode)}</div><p class="muted small">コードを相手に送ってください。</p>
+ <div class="code">${esc(ui.draftCode)}</div><p class="muted small">数字4桁の合言葉を相手に送ってください。</p>
  ${btn('招待リンクをコピー','copyDraftInvite','btn primary wide')}
  ${btn('ホームへ','goHome','btn ghost wide mt8')}</section>`;
  const d=s.draft,turn=d.round%2,isPicker=ui.demoDraft||turn===ui.seat;
@@ -222,7 +233,7 @@ async function importBackup(file){
 }
 async function reconnectLastRoom(code,fromInvite=false){
   if(!ui.sdk||!ui.db||!ui.uid)return toast('オンライン接続を確認してください');
-  if(!/^[A-Z2-9]{8}$/.test(code))return toast('部屋コードが正しくありません');
+  if(!isRoomCode(code))return toast('部屋の合言葉を確認してください（数字4桁）');
   try{
     // One-time read: do not create a second permanent listener.
     const snap=await ui.sdk.get(ui.sdk.ref(ui.db,`rooms/${code}`));
@@ -790,9 +801,9 @@ function renderSelection(){
 function renderGame(){
   const s=ui.game;if(!s)return renderHome();
   const roombar=ui.demo?`<div class="rooms">練習モード</div>`:
-    `<div class="row between rooms"><span>部屋コード：<b>${esc(ui.roomCode)}</b></span>${btn('招待リンクをコピー','copyInvite','btn sm')}</div>`;
+    `<div class="row between rooms"><span>部屋の合言葉：<b>${esc(ui.roomCode)}</b></span>${btn('招待リンクをコピー','copyInvite','btn sm')}</div>`;
   if(s.status==='waiting')return `${roombar}<section class="hero"><div class="eyebrow">WAITING ROOM</div><h1>対戦相手を待っています</h1>
-    <p>次のコードか招待リンクを相手に送ってください。</p></section><section class="panel"><div class="code">${esc(ui.roomCode)}</div>
+    <p>数字4桁の合言葉、または招待リンクを相手に送ってください。</p></section><section class="panel"><div class="code">${esc(ui.roomCode)}</div>
     ${btn('招待リンクをコピー','copyInvite','btn primary wide')}
     <p class="small muted center mt8">相手が入室すると自動的に始まります。</p></section>
     ${btn('ホームに戻る','goHome','btn ghost wide')}`;
@@ -886,7 +897,7 @@ function render(){
  ui.renderedMode=mode;
  view.classList.toggle('duel-active',!!ui.game&&ui.game.status!=='waiting');
  view.classList.toggle('duel-compact',!!ui.game&&ui.game.status!=='waiting'&&ui.duelCompact);
- view.innerHTML=ui.draftRoom?renderDraftRoom():ui.game?renderGame():renderHome();
+ view.innerHTML=ui.draftRoom?renderDraftRoom():ui.game?renderGame():ui.roomCode?`<section class="panel"><h2>部屋の情報を読み込み中</h2><p class="small muted">接続状態を確認しています。</p>${btn('ホームに戻る','goHome','btn secondary')}</section>`:renderHome();
  // Apply saved filters only when their list is present.
  if($('deckSearch'))updateCardRows('deck');
  if($('cardSearch'))updateManagedCards();
@@ -1021,20 +1032,22 @@ function startLocalDraft(){
  }catch(e){toast(e.message);}
 }
 async function createOnlineDraft(){
- if(!ui.sdk||!ui.uid)return toast('オンラインに接続できません');readDraftName();setBusy(true);
+ if(ui.busy)return;
+ if(!onlineReady())return;readDraftName();setBusy(true);
  try{
-   for(let attempt=0;attempt<4;attempt++){
+   for(let attempt=0;attempt<24;attempt++){
      const code=makeCode(),r=ui.sdk.ref(ui.db,'rooms/'+code);
      const result=await ui.sdk.runTransaction(r,old=>old?undefined:createDraftRoom({uid:ui.uid,name:ui.nickname,rules:ui.rules,format:ui.draftFormat}),{applyLocally:false});
      if(result.committed){ui.draftOpen=false;await openRoom(code,true);return;}
    }
-   throw Error('部屋を作れませんでした');
+   throw Error('4桁の合言葉を発行できませんでした');
  }catch(e){toast('ドラフト作成エラー：'+e.message);}finally{setBusy(false);}
 }
 async function joinOnlineDraft(){
- if(!ui.sdk||!ui.uid)return toast('オンラインに接続できません');readDraftName();
- const code=($('draftCodeInput')?.value||'').toUpperCase().replace(/[^A-Z2-9]/g,'');
- if(code.length!==8)return toast('8文字の部屋コードを入力してください');
+ if(ui.busy)return;
+ if(!onlineReady())return;readDraftName();
+ const code=normalizeRoomCode($('draftCodeInput')?.value||'');
+ if(!isRoomCode(code))return toast('数字4桁の合言葉を入力してください（旧8文字コードも使用可）');
  setBusy(true);let problem='ドラフトが見つかりません';
  try{
    const r=ui.sdk.ref(ui.db,'rooms/'+code);
@@ -1070,10 +1083,13 @@ async function draftPick(index){
    }catch(e){toast(e.message);}
    return;
  }
+ if(!onlineReady())return;
  setBusy(true);let problem='ドラフト選択に失敗しました';
+ const expectedRevision=ui.draftRoom.revision;
  try{
    const result=await ui.sdk.runTransaction(ui.sdk.ref(ui.db,'rooms/'+ui.draftCode),old=>{
      if(!old)return;
+     if(old.revision!==expectedRevision){problem='ドラフトの候補が更新されました。再度カードを選んでください';return;}
      try{return applyDraftPick(old,ui.uid,index);}catch(e){problem=e.message;return;}
    },{applyLocally:false});
    if(!result.committed)toast(problem);
@@ -1089,22 +1105,24 @@ function startDemo(){readHomeValues();if(!validDeck(ui.counts,ui.rules,activeSav
  ui.game=createDemo({counts1:ui.counts,extra1:activeSavedDeck()?.extraCounts||{},counts2:other?.counts||ui.counts,extra2:other?.extraCounts||activeSavedDeck()?.extraCounts||{},rules:ui.rules});ui.seat=ui.game.turn;ui.lastFxRevision=ui.game.revision;ui.pendingDrawEvent=null;closeDrawReveal();storeDemo();setNetwork('お試し対戦','ok');render();}
 function storeDemo(){if(ui.demo&&ui.game){storage.setItem('duel-demo-state',JSON.stringify(ui.game));storage.setItem('duel-demo-seat',String(ui.seat));}}
 async function remoteCreate(){
- if(!ui.sdk)return toast('Firebaseの設定が必要です');readHomeValues();if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);
+ if(ui.busy)return;
+ if(!onlineReady())return;readHomeValues();if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);
  setBusy(true);
  try{
-   for(let tries=0;tries<4;tries++){
+   for(let tries=0;tries<24;tries++){
      const code=makeCode(),r=ui.sdk.ref(ui.db,`rooms/${code}`);
      const result=await ui.sdk.runTransaction(r,old=>old?undefined:createRoom({uid:ui.uid,name:ui.nickname,counts:ui.counts,extraCounts:activeSavedDeck()?.extraCounts||{},rules:ui.rules}),{applyLocally:false});
      if(result.committed){await openRoom(code);return;}
    }
-   throw Error('部屋コードを作れませんでした');
+   throw Error('4桁の合言葉を発行できませんでした');
  }catch(e){toast('部屋の作成に失敗しました：'+e.message)}finally{setBusy(false);}
 }
 async function remoteJoin(){
- if(!ui.sdk||!ui.uid)return toast('Firebaseの接続を確認してください');readHomeValues();
+ if(ui.busy)return;
+ if(!onlineReady())return;readHomeValues();
  // The host's deck rules may differ from the guest's default rules.
- const code=($('roomCode')?.value||'').trim().toUpperCase().replace(/[^A-Z2-9]/g,'');
- if(code.length!==8)return toast('8文字の部屋コードを入力してください');
+ const code=normalizeRoomCode($('roomCode')?.value||'');
+ if(!isRoomCode(code))return toast('数字4桁の合言葉を入力してください（旧8文字コードも使用可）');
  setBusy(true);
  try{
    const r=ui.sdk.ref(ui.db,`rooms/${code}`);
@@ -1141,16 +1159,19 @@ async function remoteJoin(){
 }
 async function openRoom(code,isDraft=false){
  if(ui.unsub){ui.unsub();ui.unsub=null;}
- ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.roomCode=code;ui.draftCode=code;ui.selected=null;ui.targetMode=null;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();
+ ui.demo=false;ui.demoDraft=false;ui.game=null;ui.draftRoom=null;ui.roomCode=code;ui.draftCode=code;ui.selected=null;ui.targetMode=null;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();
  history.replaceState({},'',`${location.pathname}?${isDraft?'draft':'room'}=${code}`);
  ui.lastRoom={code};storage.setItem(LAST_ROOM_KEY,JSON.stringify(ui.lastRoom));
  let lastRoomVersion='';
  ui.unsub=ui.sdk.onValue(ui.sdk.ref(ui.db,`rooms/${code}`),snap=>{
-   const v=snap.val();if(!v){toast('部屋が見つかりません');return;}
+   if(ui.roomCode!==code)return; // Ignore late callbacks from a previous room.
+   const v=snap.val();if(!v){ui.game=null;ui.draftRoom=null;render();toast('部屋が見つかりません');return;}
    // Every server-side duel/draft action increments revision. Avoid an identical repaint.
    const roomVersion=`${v.revision??0}:${v.status??''}:${v.draft?.round??''}`;
    if(lastRoomVersion===roomVersion)return;
    lastRoomVersion=roomVersion;
+   // A remote update may reorder hand/field indices: never keep a stale pick.
+   ui.selected=null;ui.targetMode=null;
    const draftActive=!!v.draft&&['waiting','drafting'].includes(v.status);
    ui.game=draftActive?null:normalizeRoom(v);
    ui.draftRoom=draftActive?normalizeDraftRoom(v):null;
@@ -1159,30 +1180,41 @@ async function openRoom(code,isDraft=false){
    if(ui.seat<0){ui.game=null;ui.draftRoom=null;toast('この部屋に参加していません');}
    if(ui.game?.completedDraft&&ui.seat>=0)saveCompletedDrafts(ui.game,code);
    render();if(ui.game)handleRoomCue(ui.game);
- },err=>{toast('同期エラー：'+err.message);setNetwork('同期エラー','off')});
+ },err=>{if(ui.roomCode===code){toast('同期エラー：'+err.message);setNetwork('同期エラー','off');}});
  render();
 }
 async function send(action){
  if(!ui.game||ui.busy)return;
+ if(!ui.demo&&!onlineReady())return;
  const hadTarget=!!ui.targetMode;ui.targetMode=null;
  if(hadTarget)render();
  if(ui.demo){
    if(action.type==='undoDemo'){
      if(!ui.game.undoSnapshot)return toast('取り消せる操作がありません');
-     const restored=normalizeRoom(structuredClone(ui.game.undoSnapshot));restored.revision=(ui.game.revision||0)+1;restored.undoSnapshot=null;restored.undoActor=null;restored.undoRequest=null;restored.log.unshift('直前の操作を取り消しました。');ui.game=restored;storeDemo();render();return;
+     const restored=normalizeRoom(structuredClone(ui.game.undoSnapshot));for(const key of ['mode','completedDraft','createdAt'])if(!Object.hasOwn(restored,key)&&Object.hasOwn(ui.game,key))restored[key]=structuredClone(ui.game[key]);restored.revision=(ui.game.revision||0)+1;restored.undoSnapshot=null;restored.undoActor=null;restored.undoRequest=null;restored.log.unshift('直前の操作を取り消しました。');ui.game=restored;storeDemo();render();return;
    }
    try {ui.game=applyAction(ui.game,ui.game.players[ui.seat].uid,action);ui.selected=null;storeDemo();render();handleRoomCue(ui.game);}
    catch(e){toast(e.message);}return;
  }
  setBusy(true);let problem=null;
+ const expectedRevision=ui.game.revision;
  try{
    const result=await ui.sdk.runTransaction(ui.sdk.ref(ui.db,`rooms/${ui.roomCode}`),old=>{
       if(!old){problem='部屋がありません';return;}
+      if(old.revision!==expectedRevision){problem='相手の操作で対戦状況が更新されました。確認してやり直してください';return;}
       try{return applyAction(old,ui.uid,action);}catch(e){problem=e.message;return;}
    },{applyLocally:false});
    if(!result.committed)toast(problem||'ほかの操作と重なりました。もう一度お試しください。');
    else ui.selected=null;
- }catch(e){toast('通信エラー：'+e.message)}finally{setBusy(false);}
+ }catch(e){
+   const message=String(e?.message||e),code=String(e?.code||'');
+   if(/permission.denied|PERMISSION_DENIED/i.test(message+' '+code))
+     toast('Firebase書き込み権限エラー：対戦ルールを確認してください。 '+message);
+   else if(/contains undefined|invalid data|undefined in property/i.test(message))
+     toast('対戦データの保存形式エラー：'+message);
+   else toast('通信・同期エラー：'+message);
+   console.error('[SAHOVERSE room transaction]',{action:action.type,code,message},e);
+ }finally{setBusy(false);}
 }
 function attemptSummon(faceDown){
  const hand=ui.selected?.index;if(ui.selected?.zone!=='hand')return;
@@ -1304,7 +1336,7 @@ async function copyInvite(){
  try{await navigator.clipboard.writeText(link);toast('招待リンクをコピーしました');}
  catch{prompt('招待リンクをコピーしてください',link);}
 }
-function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.draftCode='';ui.draftOpen=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.specialDraft=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork(ui.networkConnected===false?'再接続待ち':'オンライン接続可能',ui.networkConnected===false?'off':'ok');else setNetwork('お試し対戦可能');render();}
+function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.draftCode='';ui.draftOpen=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.specialDraft=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork(ui.networkConnected===true?'オンライン接続可能':ui.networkConnected===false?'再接続待ち':'接続確認中',ui.networkConnected===true?'ok':ui.networkConnected===false?'off':'');else setNetwork('お試し対戦可能');render();}
 function preserveInputBeforeNetworkRefresh(){
  // Firebase connects asynchronously, possibly while a card or pack editor is open.
  // Keep the user's in-progress input intact when we actually need to rebuild the UI.
@@ -1342,6 +1374,7 @@ async function initFirebase(){
      setNetwork(connected?'オンライン接続可能':'再接続待ち',connected?'ok':'off');
    });
    ui.cardUnsub=onValue(ref(ui.db,'cardLibrary/cards'),snapshot=>{
+     ui.cardLibraryReady=true;
      const cards=snapshot.val()||{};
      const encoded=JSON.stringify(cards);
      if(encoded===lastCardLibraryJSON)return; // No data change, no disk write, no repaint.
@@ -1353,13 +1386,13 @@ async function initFirebase(){
      render();
      // A custom card's art/data may arrive after the room event.
      if(ui.game)showPendingDraw(ui.game);
-   },err=>{toast('カード共有エラー：'+err.message);});
-   setNetwork(ui.networkConnected===false?'再接続待ち':'オンライン接続可能',ui.networkConnected===false?'off':'ok');
+   },err=>{ui.cardLibraryReady=false;toast('カード共有エラー：'+err.message);});
+   setNetwork(ui.networkConnected===true?'オンライン接続可能':ui.networkConnected===false?'再接続待ち':'接続確認中',ui.networkConnected===true?'ok':ui.networkConnected===false?'off':'');
    preserveInputBeforeNetworkRefresh();
    render(); // First connection: expose the online buttons exactly once.
    // URL invitation / reload: resume only for a participant with the same anonymous UID.
    const resumeCode=new URLSearchParams(location.search).get('room')||new URLSearchParams(location.search).get('draft');
-   if(resumeCode&&/^[A-Z2-9]{8}$/.test(resumeCode))await reconnectLastRoom(resumeCode,true);
+   if(resumeCode&&isRoomCode(resumeCode))await reconnectLastRoom(resumeCode,true);
  }catch(e){
    // Do not leave enabled online actions if the SDK failed to connect.
    configReady=false;

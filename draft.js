@@ -2,7 +2,7 @@
 // Weighting for newly offered cards: Monster 50%, Trap 25%, Spell 25%.
 import {CARDS,CARD,validDeck,summonKind} from './cards.js?v=196';
 import {cardLimit,normalizeRuleSettings} from './rules.js?v=196';
-import {createRoom,joinRoom} from './engine.js?v=196';
+import {createRoom,joinRoom} from './engine.js?v=1913';
 
 const fail = text => {throw Error(text);};
 const normalizeCounts=raw=>({...raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{}});

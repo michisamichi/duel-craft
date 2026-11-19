@@ -5,7 +5,7 @@ export const PACK_RARITY_DEFAULT={N:65,R:23,SR:9,UR:2.5,SEC:.5};
 const makeId=()=>`pack_${(globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,18)}`;
 export function defaultPack(){return {id:'starter',name:'はじまりの宝箱',ids:[],weights:{...PACK_RARITY_DEFAULT},size:5};}
 export function defaultPackStore(){return {packs:[defaultPack()],collection:{},history:[]};}
-export function readPackStore(storage){try{const raw=JSON.parse(storage.getItem(PACK_KEY)||'null');if(raw&&Array.isArray(raw.packs)&&raw.collection&&typeof raw.collection==='object')return raw;}catch{}return defaultPackStore();}
+export function readPackStore(storage){try{const raw=JSON.parse(storage.getItem(PACK_KEY)||'null');if(raw&&Array.isArray(raw.packs)&&raw.collection&&typeof raw.collection==='object'&&!Array.isArray(raw.collection))return {...raw,history:Array.isArray(raw.history)?raw.history.slice(0,30):[]};}catch{}return defaultPackStore();}
 export function savePackStore(storage,value){storage.setItem(PACK_KEY,JSON.stringify(value));return value;}
 export function newPack(){return {id:makeId(),name:'オリジナルパック',ids:[],weights:{...PACK_RARITY_DEFAULT},size:5};}
 export function normalizePack(p){if(!p||typeof p!=='object'||!Array.isArray(p.ids))throw Error('パックデータが不正です');
@@ -22,4 +22,4 @@ export function openPack(pack,rand=Math.random){const p=normalizePack(pack);cons
  const list=byRarity.get(rarity);picks.push(list[Math.floor(rand()*list.length)]);}
  return picks;
 }
-export function collect(store,ids){for(const id of ids)store.collection[id]=(store.collection[id]||0)+1;store.history.unshift({at:Date.now(),ids});store.history=store.history.slice(0,30);return store;}
+export function collect(store,ids){if(!Array.isArray(store.history))store.history=[];for(const id of ids)store.collection[id]=(store.collection[id]||0)+1;store.history.unshift({at:Date.now(),ids});store.history=store.history.slice(0,30);return store;}
