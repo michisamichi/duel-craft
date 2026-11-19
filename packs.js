@@ -1,5 +1,5 @@
 // Individual iPhone collection and original packs. No virtual currency or purchases.
-import {CARD,CARDS} from './cards.js?v=191';
+import {CARD,CARDS} from './cards.js?v=194';
 export const PACK_KEY='duel-packs-v5';
 export const PACK_RARITY_DEFAULT={N:65,R:23,SR:9,UR:2.5,SEC:.5};
 const makeId=()=>`pack_${(globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,18)}`;

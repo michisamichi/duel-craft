@@ -1,12 +1,12 @@
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=191';
-import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=191';
-import {makeBackup,parseBackup,applyBackup} from './backup.js?v=191';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=191';
-import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=191';
-import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=191';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=191';
-import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=191';
-import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=191';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=194';
+import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=194';
+import {makeBackup,parseBackup,applyBackup} from './backup.js?v=194';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=194';
+import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=194';
+import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=194';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=194';
+import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=194';
+import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=194';
 
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -50,7 +50,7 @@ const ui={
   game:null,roomCode:'',draftRoom:null,draftCode:'',demoDraft:false,seat:0,demo:false,selected:null,targetMode:null,specialDraft:null,deckOpen:false,
   busy:false,sdk:null,db:null,uid:null,unsub:null,cardUnsub:null,toastTimer:null,
   cardsOpen:false,cardDraft:null,cardManageType:'all',cardManageRarity:'all',cardManageQuery:'',customCards:stored('duel-custom-cards',{}),cardBusy:false,adminUnlocked:false,adminBusy:false,
-  fxOpen:false,fxSettings:readFxSettings(),lastFxRevision:null,
+  fxOpen:false,fxSettings:readFxSettings(),lastFxRevision:null,pendingDrawEvent:null,
   rules:readRuleSettings(storage),rulesOpen:false,appearanceOpen:false,appearance:stored('duel-appearance-v5',{mat:'nebula',back:'crest'}),
   packOpen:false,packDraft:null,packResults:null,packs:readPackStore(storage),collectionOnly:false,previewCardId:null,
   sealedOpen:false,sealedOnly:false,sealedSession:normalizeSealedSession(stored(SEALED_STORAGE_KEY,null)),
@@ -112,7 +112,7 @@ function renderHome(){
   const linkCode=new URLSearchParams(location.search).get('room')||'';
   return `<section class="sv-home" aria-label="ホーム">
     <div class="sv-hero">
-      <img src="./sahoverse-icon-192.png?v=191" width="98" height="98" alt="" class="sv-crest">
+      <img src="./sahoverse-icon-192.png?v=194" width="98" height="98" alt="" class="sv-crest">
       <div class="sv-hero-text"><div class="sv-hero-title">SAHOVERSE</div><div class="sv-hero-sub">CARD DUEL</div></div>
     </div>
     ${btn('<span class="sv-duel-icon" aria-hidden="true">⚔</span><span>デュエル</span><span class="sv-chevron" aria-hidden="true">›</span>','openDuel','sv-duel-button')}
@@ -208,7 +208,7 @@ async function importBackup(file){
     if(!storageAvailable)throw Error('端末保存が制限されています。Safariから開いてください');
     applyBackup(window.localStorage,imported);
     toast('復元しました。画面を再読み込みします');
-    location.href=location.pathname+'?v=191';
+    location.href=location.pathname+'?v=194';
   }catch(e){toast('復元できません：'+e.message);}
 }
 async function reconnectLastRoom(code){
@@ -256,15 +256,42 @@ function fxModal(){
     ${btn('閉じる','closeFx','btn primary wide mt8')}
   </div></div>`;
 }
+/** Show a large full card only on the drawing player's iPhone. */
+function revealDrawnCard(room,event){
+  if(event?.type!=='draw'||event.actor!==ui.seat||!room?.players?.[ui.seat])return false;
+  const hand=room.players[ui.seat].hand||[];
+  const id=hand[hand.length-1],card=CARD[id];
+  if(!card)return false;
+  const overlay=$('draw-reveal');if(!overlay)return false;
+  overlay.innerHTML=`<section class="draw-reveal-dialog" role="dialog" aria-modal="true" aria-label="ドローしたカード">
+    <div class="draw-reveal-kicker">DRAW</div><h2>ドローしたカード</h2>
+    <div class="draw-reveal-card">${cardHtml(id)}</div>
+    <div class="draw-reveal-name">${esc(card.name)}</div>
+    <div class="draw-reveal-summary">${esc(suffix(card))}</div>
+    <button class="btn primary draw-reveal-close" type="button">確認して続ける</button></section>`;
+  overlay.classList.add('visible');overlay.setAttribute('aria-hidden','false');
+  return true;
+}
+function closeDrawReveal(){const overlay=$('draw-reveal');if(overlay){overlay.classList.remove('visible');overlay.setAttribute('aria-hidden','true');overlay.replaceChildren();}}
+$('draw-reveal')?.addEventListener('click',closeDrawReveal);
+function showPendingDraw(room){
+  const event=ui.pendingDrawEvent;
+  if(event?.actor===ui.seat&&revealDrawnCard(room,event))ui.pendingDrawEvent=null;
+}
 function announceCue(event,room){
   if(!event||!document.getElementById('fx-overlay'))return;
+  if(event.type==='draw'){
+    ui.pendingDrawEvent=event;
+    showPendingDraw(room);
+    return;
+  }
   // Win/loss display is local to the viewer; no private information is written to Firebase.
   playCue({...event,winner:room?.winner,viewerSeat:ui.seat},CARD[event.cardId],ui.fxSettings);
 }
 function handleRoomCue(room){
   const ev=room?.lastEvent;
-  if(ui.lastFxRevision===null){ui.lastFxRevision=ev?.id??room?.revision??0;return;}
-  if(ev&&ev.id>ui.lastFxRevision){ui.lastFxRevision=ev.id;announceCue(ev,room);}
+  if(ui.lastFxRevision===null){ui.lastFxRevision=ev?.id??room?.revision??0;if(ev?.type==='draw'&&ev.actor===ui.seat)announceCue(ev,room);return;}
+  if(ev&&ev.id>ui.lastFxRevision){ui.lastFxRevision=ev.id;ui.pendingDrawEvent=null;announceCue(ev,room);}
 }
 function deckPool(){return ui.sealedOnly?ui.sealedSession?.pool||{}:ui.packs.collection;}
 function storeSealed(){if(ui.sealedSession)storage.setItem(SEALED_STORAGE_KEY,JSON.stringify(ui.sealedSession));else storage.removeItem(SEALED_STORAGE_KEY);}
@@ -735,7 +762,7 @@ function renderGame(){
   const ready=!!s.pending;
   const myStatus=playerStatus(me,ui.seat),enemyStatus=playerStatus(enemy,1-ui.seat);
   const hand=me.hand.map((id,i)=>`<button type="button" class="hand-slot ${ui.selected?.zone==='hand'&&ui.selected?.index===i?'selected':''}" data-select="1" data-owner="mine" data-zone="hand" data-index="${i}">${cardHtml(id)}</button>`).join('');
-  const phaseButton=!myTurn()||ready||s.status!=='playing'?'':s.phase==='main2'?btn('ターン終了','endTurn','btn primary'):btn(s.phase==='draw'?(s.turnNo===1?'メインへ':'ドローしてメインへ'):s.phase==='main1'?(s.turnNo===1?'メイン2へ':'バトルへ'):'メイン2へ','nextPhase','btn primary');
+  const phaseButton=!myTurn()||ready||s.status!=='playing'?'':s.phase==='main2'?btn('ターン終了','endTurn','btn primary'):btn(s.phase==='draw'?'メインへ':s.phase==='main1'?(s.turnNo===1?'メイン2へ':'バトルへ'):'メイン2へ','nextPhase','btn primary');
   const endButton=myTurn()&&!ready&&s.status==='playing'&&s.phase!=='main2'&&s.phase!=='draw'?btn('ターン終了','endTurn','btn ghost'):'';
   const winner=s.status==='finished'?`<section class="panel winner">🏆 ${s.winner==='draw'?'引き分け':`${esc(s.players[s.winner].name)} の勝利！`}</section>`:'';
   const layoutButton=btn(ui.duelCompact?'拡大表示':'省スペース','toggleCompact','btn sm ghost duel-layout-button');
@@ -763,7 +790,7 @@ function renderGame(){
    ${renderSelection()}
    <details class="panel duel-tools" ${ui.duelToolsOpen?'open':''}><summary>その他の操作</summary><div class="row wrap battle-tools">
      ${btn('🎲 サイコロ','rollDice','btn sm secondary')}${btn('🪙 コイン','flipCoin','btn sm secondary')}
-     ${myTurn()&&!ready&&['main1','main2'].includes(s.phase)?btn('山札を混ぜる','shuffleDeck','btn sm')+btn('＋1枚ドロー','manualDraw','btn sm'):''}
+     ${myTurn()&&!ready&&['main1','main2'].includes(s.phase)?btn('山札を混ぜる','shuffleDeck','btn sm'):''}
      ${ui.demo?btn('↶ 1操作戻す','undoDemo','btn sm ghost','',!s.undoSnapshot):
        (s.undoRequest!==null&&s.undoRequest!==undefined&&s.undoRequest!==ui.seat?
         btn('取り消し承認','approveUndo','btn sm primary')+btn('拒否','rejectUndo','btn sm ghost'):
@@ -1010,7 +1037,7 @@ async function copyDraftInvite(){
 }
 function startDemo(){readHomeValues();if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);ui.demo=true;ui.seat=0;ui.roomCode='';ui.selected=null;ui.targetMode=null;
  const other=ui.decks.decks.find(d=>d.id!==ui.decks.activeId&&validDeck(d.counts,ui.rules,d.extraCounts||{}));
- ui.game=createDemo({counts1:ui.counts,extra1:activeSavedDeck()?.extraCounts||{},counts2:other?.counts||ui.counts,extra2:other?.extraCounts||activeSavedDeck()?.extraCounts||{},rules:ui.rules});ui.seat=ui.game.turn;ui.lastFxRevision=ui.game.revision;storeDemo();setNetwork('お試し対戦','ok');render();}
+ ui.game=createDemo({counts1:ui.counts,extra1:activeSavedDeck()?.extraCounts||{},counts2:other?.counts||ui.counts,extra2:other?.extraCounts||activeSavedDeck()?.extraCounts||{},rules:ui.rules});ui.seat=ui.game.turn;ui.lastFxRevision=ui.game.revision;ui.pendingDrawEvent=null;closeDrawReveal();storeDemo();setNetwork('お試し対戦','ok');render();}
 function storeDemo(){if(ui.demo&&ui.game){storage.setItem('duel-demo-state',JSON.stringify(ui.game));storage.setItem('duel-demo-seat',String(ui.seat));}}
 async function remoteCreate(){
  if(!ui.sdk)return toast('Firebaseの設定が必要です');readHomeValues();if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`先に${ui.rules.deckSize}枚のデッキを完成させてください`);
@@ -1045,7 +1072,7 @@ async function remoteJoin(){
 }
 async function openRoom(code,isDraft=false){
  if(ui.unsub){ui.unsub();ui.unsub=null;}
- ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.roomCode=code;ui.draftCode=code;ui.selected=null;ui.targetMode=null;ui.lastFxRevision=null;
+ ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.roomCode=code;ui.draftCode=code;ui.selected=null;ui.targetMode=null;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();
  history.replaceState({},'',`${location.pathname}?${isDraft?'draft':'room'}=${code}`);
  ui.lastRoom={code};storage.setItem(LAST_ROOM_KEY,JSON.stringify(ui.lastRoom));
  let lastRoomVersion='';
@@ -1209,7 +1236,7 @@ async function copyInvite(){
  try{await navigator.clipboard.writeText(link);toast('招待リンクをコピーしました');}
  catch{prompt('招待リンクをコピーしてください',link);}
 }
-function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.draftCode='';ui.draftOpen=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.specialDraft=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork(ui.networkConnected===false?'再接続待ち':'オンライン接続可能',ui.networkConnected===false?'off':'ok');else setNetwork('お試し対戦可能');render();}
+function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.draftCode='';ui.draftOpen=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.specialDraft=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork(ui.networkConnected===false?'再接続待ち':'オンライン接続可能',ui.networkConnected===false?'off':'ok');else setNetwork('お試し対戦可能');render();}
 function preserveInputBeforeNetworkRefresh(){
  // Firebase connects asynchronously, possibly while a card or pack editor is open.
  // Keep the user's in-progress input intact when we actually need to rebuild the UI.
@@ -1256,6 +1283,8 @@ async function initFirebase(){
      storage.setItem('duel-custom-cards',encoded);
      replaceCustomCards(cards);
      render();
+     // A custom card's art/data may arrive after the room event.
+     if(ui.game)showPendingDraw(ui.game);
    },err=>{toast('カード共有エラー：'+err.message);});
    setNetwork(ui.networkConnected===false?'再接続待ち':'オンライン接続可能',ui.networkConnected===false?'off':'ok');
    preserveInputBeforeNetworkRefresh();
@@ -1436,7 +1465,7 @@ $('view').addEventListener('click',async e=>{
  if(action==='copyInvite')return copyInvite();
  if(action==='goHome')return goHome();
  if(action==='cancelSelection'){ui.selected=null;refreshDuelSelection();return;}
- if(action==='switchSeat'){ui.seat=1-ui.seat;ui.selected=null;ui.targetMode=null;storeDemo();render();return;}
+ if(action==='switchSeat'){ui.seat=1-ui.seat;ui.selected=null;ui.targetMode=null;closeDrawReveal();storeDemo();render();showPendingDraw(ui.game);return;}
  if(action==='nextPhase')return send({type:'nextPhase'});
  if(action==='chainPass')return send({type:'chainPass'});
  if(action==='quickResponse'){

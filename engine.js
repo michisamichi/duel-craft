@@ -1,5 +1,5 @@
-import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind} from './cards.js?v=191';
-import {normalizeRuleSettings} from './rules.js?v=191';
+import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind} from './cards.js?v=194';
+import {normalizeRuleSettings} from './rules.js?v=194';
 
 export const PHASES = {draw:'ドロー',main1:'メイン1',battle:'バトル',main2:'メイン2',end:'エンド'};
 const blank5 = () => [null,null,null,null,null];
@@ -88,7 +88,7 @@ export function joinRoom(state,{uid,name,counts,extraCounts={}}) {
   s.rules=normalizeRuleSettings(s.rules);
   s.players[1]=newPlayer({uid,name,counts,extraCounts,rules:s.rules});
   s.status='playing';s.turn=Math.random()<0.5?0:1;
-  s.turnNo=1; s.phase='draw';s.log=[];
+  s.turnNo=1; s.phase='main1';s.log=[];
   for(const p of s.players) draw(p,5,s,false);
   log(s,`対戦開始！ ${s.players[s.turn].name} が先攻です。`);
   s.revision++;
@@ -396,10 +396,13 @@ function endTurn(s) {
   assert(!s.pending,'相手の対応が終わっていません');
   const p=s.players[s.turn];assert(s.phase!=='draw','ドローフェイズを完了してください');assert(p.hand.length<=6,'手札が7枚以上あります。6枚以下になるまで手札を捨ててください。');
   for(const pl of s.players)for(const mon of pl.monsters)if(mon)mon.bonus=0;
-  s.turn=1-s.turn;s.turnNo++;s.phase='draw';s.players[s.turn].normalUsed=false;
+  s.turn=1-s.turn;s.turnNo++;s.phase='main1';s.players[s.turn].normalUsed=false;
   const active=s.players[s.turn];
   for(const mon of active.monsters)if(mon)mon.attacked=false;
   log(s,`${active.name} のターン。`);
+  // Turn-start draw runs once inside the same game-state transaction.
+  // The player who cannot draw loses immediately; no client-side draw action is needed.
+  if(draw(active,1,s))log(s,`${active.name} が1枚ドローしました。`);
   checkWinner(s);
 }
 /**
@@ -594,7 +597,7 @@ export function applyAction(current,actorUid,action) {
     }
     case 'nextPhase': {
       assert(ownTurn&&!s.pending,'今は進められません');
-      if(s.phase==='draw'){if(s.turnNo>1)draw(p,1,s);if(s.status==='playing')s.phase='main1';}
+      if(s.phase==='draw'){if(s.turnNo>1&&draw(p,1,s)){cueType='draw';cueCard=null;}if(s.status==='playing')s.phase='main1';}
       else if(s.phase==='main1')s.phase=s.turnNo===1?'main2':'battle';
       else if(s.phase==='battle')s.phase='main2';
       else fail('次はターン終了です');
@@ -617,7 +620,11 @@ export function applyAction(current,actorUid,action) {
   s.undoSnapshot=before;s.undoActor=seat;s.undoRequest=null;
   s.revision=(s.revision||0)+1;
   if(s.status==='finished'&&current.status!=='finished'){cueType='win';cueCard=null;}
-  if(cueType){
+  // Do not write a drawn card id into the shared event; only the drawing iPhone
+  // resolves its latest hand card when displaying the enlarged preview.
+  if(a.type==='endTurn'&&s.status==='playing'){
+    s.lastEvent={id:s.revision,type:'draw',cardId:null,actor:s.turn,damage:0};
+  }else if(cueType){
     const damage=lpBefore.reduce((v,old,i)=>v+Math.max(0,old-s.players[i].lp),0);
     s.lastEvent={id:s.revision,type:cueType,cardId:cueCard||null,actor:seat,damage};
   }
