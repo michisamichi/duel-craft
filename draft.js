@@ -1,8 +1,8 @@
 // Draft formats: 2-choice transfer and open-pick from 5 candidates.
 // Weighting for newly offered cards: Monster 50%, Trap 25%, Spell 25%.
-import {CARDS,CARD,validDeck,summonKind} from './cards.js?v=194';
-import {cardLimit,normalizeRuleSettings} from './rules.js?v=194';
-import {createRoom,joinRoom} from './engine.js?v=194';
+import {CARDS,CARD,validDeck,summonKind} from './cards.js?v=196';
+import {cardLimit,normalizeRuleSettings} from './rules.js?v=196';
+import {createRoom,joinRoom} from './engine.js?v=196';
 
 const fail = text => {throw Error(text);};
 const normalizeCounts=raw=>({...raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{}});

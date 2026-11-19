@@ -1,12 +1,12 @@
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=194';
-import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=194';
-import {makeBackup,parseBackup,applyBackup} from './backup.js?v=194';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk} from './engine.js?v=194';
-import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,EFFECT_VALUES,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=194';
-import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=194';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=194';
-import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=194';
-import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=194';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=196';
+import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=196';
+import {makeBackup,parseBackup,applyBackup} from './backup.js?v=196';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef} from './engine.js?v=196';
+import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,abilityTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=196';
+import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=196';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=196';
+import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=196';
+import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=196';
 
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -64,7 +64,16 @@ try{
   if(shared)ui.pendingShare=decodeDeckShare(shared);
 }catch(e){ui.shareError=e.message||'共有リンクを読めません';}
 
-const effectNeedsTarget=id=>{const c=CARD[id];if(c?.type==='spell'&&spellKind(c)==='field'&&c.ability?.when==='continuous')return false;return c?.ability?['ownMonster','enemyMonster'].includes(c.ability.target):['destroy','boost500'].includes(c?.effect);};
+const effectTarget=id=>{
+ const c=CARD[id];if(!c)return 'none';
+ if(c.ability)return c.ability.target;
+ if(c.effect==='destroy'||c.monsterEffect?.code==='destroy1')return 'enemyMonster';
+ if(c.effect==='boost500')return 'ownMonster';
+ return 'none';
+};
+const manualTarget=t=>['ownMonster','enemyMonster','ownBackrow','enemyBackrow'].includes(t);
+const effectNeedsTarget=id=>manualTarget(effectTarget(id));
+const targetSpot=t=>({owner:t.startsWith('enemy')?'opponent':'mine',zone:t.endsWith('Backrow')?'backrow':'monsters'});
 const cardTypeName=c=>c.type==='monster'?(summonKind(c)!=='normal'?SUMMON_KINDS[summonKind(c)]:'通常')+(c.subtype==='effect'?'・効果モンスター':'モンスター'):c.type==='spell'?SPELL_KINDS[spellKind(c)]:'罠';
 const isMine=()=>!!ui.game?.players?.[ui.seat];
 const activePlayer=()=>ui.game?.players?.[ui.seat];
@@ -112,7 +121,7 @@ function renderHome(){
   const linkCode=new URLSearchParams(location.search).get('room')||'';
   return `<section class="sv-home" aria-label="ホーム">
     <div class="sv-hero">
-      <img src="./sahoverse-icon-192.png?v=194" width="98" height="98" alt="" class="sv-crest">
+      <img src="./sahoverse-icon-192.png?v=196" width="98" height="98" alt="" class="sv-crest">
       <div class="sv-hero-text"><div class="sv-hero-title">SAHOVERSE</div><div class="sv-hero-sub">CARD DUEL</div></div>
     </div>
     ${btn('<span class="sv-duel-icon" aria-hidden="true">⚔</span><span>デュエル</span><span class="sv-chevron" aria-hidden="true">›</span>','openDuel','sv-duel-button')}
@@ -208,10 +217,10 @@ async function importBackup(file){
     if(!storageAvailable)throw Error('端末保存が制限されています。Safariから開いてください');
     applyBackup(window.localStorage,imported);
     toast('復元しました。画面を再読み込みします');
-    location.href=location.pathname+'?v=194';
+    location.href=location.pathname+'?v=196';
   }catch(e){toast('復元できません：'+e.message);}
 }
-async function reconnectLastRoom(code){
+async function reconnectLastRoom(code,fromInvite=false){
   if(!ui.sdk||!ui.db||!ui.uid)return toast('オンライン接続を確認してください');
   if(!/^[A-Z2-9]{8}$/.test(code))return toast('部屋コードが正しくありません');
   try{
@@ -220,7 +229,12 @@ async function reconnectLastRoom(code){
     const room=snap.val();
     if(!room)return toast('対戦部屋が見つかりません');
     const people=Array.isArray(room.players)?room.players:[room.players?.[0],room.players?.[1]];
-    if(!people.some(p=>p?.uid===ui.uid))return toast('この端末はその部屋の参加者ではありません');
+    if(!people.some(p=>p?.uid===ui.uid)){
+      // Invitation URLs are also opened by users who are not yet participants.
+      // Show the room code in the join form rather than trying to resume their session.
+      if(fromInvite){ui.duelOpen=true;render();return;}
+      return toast('この端末はその部屋の参加者ではありません');
+    }
     ui.duelOpen=false;ui.settingsOpen=false;
     await openRoom(code,!!room.draft&&['waiting','drafting'].includes(room.status));
     toast('対戦部屋に再接続しました');
@@ -405,28 +419,39 @@ function shareImportModal(){
 const selectOptions=(choices,selected)=>Object.entries(choices).map(([value,label])=>`<option value="${esc(value)}" ${value===selected?'selected':''}>${esc(label)}</option>`).join('');
 const MAGIC_EFFECTS={draw2:'カードを2枚ドロー',heal1000:'LPを1000回復',destroy:'相手モンスター1体を破壊',boost500:'自分モンスター1体のATK＋500',burn800:'相手に800ダメージ'};
 const TRAP_EFFECTS={negate:'攻撃を無効化',counterdestroy:'攻撃したモンスターを破壊',counterburn:'攻撃無効＋700ダメージ'};
-const abilityTargets=(op,when)=>({draw:['self'],heal:['self'],damage:['opponent'],boost:['ownMonster'],destroy:when==='attack'?['attacker','enemyMonster','ownMonster']:['enemyMonster','ownMonster'],banish:when==='attack'?['attacker','enemyMonster','ownMonster']:['enemyMonster','ownMonster'],negateAttack:['none']}[op]||['none']);
+const availableOperations=when=>Object.fromEntries(Object.entries(OPERATIONS).filter(([op])=>
+  when==='continuous'?['boost','weaken','boostDef','weakenDef'].includes(op):
+  when==='attack'?op!=='negateEffect':when==='response'?op!=='negateAttack':!['negateAttack','negateEffect'].includes(op)));
 function draftEffectFields(d){
  const isEffect=d.type!=='monster'||d.subtype==='effect';if(!isEffect)return '';
- const mode=d.type==='spell'&&spellKind(d)==='equip'?'builder':d.ability?'builder':'preset';
- const whenChoices=d.type==='trap'?{attack:TRIGGERS.attack,response:TRIGGERS.response}:d.type==='spell'? (spellKind(d)==='equip'?{continuous:TRIGGERS.continuous}:persistentSpell(d)?{main:TRIGGERS.main,continuous:TRIGGERS.continuous}:{main:TRIGGERS.main}):{main:TRIGGERS.main,summon:TRIGGERS.summon,continuous:TRIGGERS.continuous};
+ const mode=d.ability?'builder':'preset';
+ const kind=spellKind(d);
+ const whenChoices=d.type==='trap'?{attack:TRIGGERS.attack,response:TRIGGERS.response}:d.type==='spell'? (
+   kind==='equip'?{continuous:TRIGGERS.continuous}:persistentSpell(d)?{main:TRIGGERS.main,continuous:TRIGGERS.continuous}:{main:TRIGGERS.main}):
+   {main:TRIGGERS.main,summon:TRIGGERS.summon,continuous:TRIGGERS.continuous};
  const when=whenChoices[d.ability?.when]?d.ability.when:Object.keys(whenChoices)[0];
- const operations=when==='continuous'?{boost:OPERATIONS.boost}:when==='response'?Object.fromEntries(Object.entries(OPERATIONS).filter(([k])=>k!=='negateAttack')):OPERATIONS;
+ const operations=availableOperations(when);
  const op=operations[d.ability?.operation]?d.ability.operation:Object.keys(operations)[0];
- const ts=abilityTargets(op,when);
- const targets=Object.fromEntries(ts.map(k=>[k,TARGETS[k]]));
- const target=targets[d.ability?.target]?d.ability.target:ts[0];
- const values=EFFECT_VALUES[op]||[0];
- return `<div class="effect-builder"><h3>✦ 効果エディター</h3><label class="field-label" for="cardEffectMode">設定方式</label>
- ${d.type==='spell'&&spellKind(d)==='equip'?'<p class="small muted">装備魔法は対象モンスターを強化する効果として作成します。</p>':`<select id="cardEffectMode" class="input">${selectOptions({preset:'かんたん効果プリセット',builder:'条件・対象・処理を設定'},mode)}</select>`}
+ const targetsAllowed=abilityTargets(op,when,d.type,kind);
+ const targets=Object.fromEntries(targetsAllowed.map(k=>[k,TARGETS[k]]));
+ const target=targetsAllowed.includes(d.ability?.target)?d.ability.target:targetsAllowed[0];
+ const meta=ABILITY_META[op];
+ const numeric=meta.min!==undefined;
+ const amount=Number.isSafeInteger(d.ability?.amount)&&
+   (!numeric?d.ability.amount===0:d.ability.amount>=meta.min&&d.ability.amount<=meta.max)
+     ?d.ability.amount:meta.amount;
+ return `<div class="effect-builder"><h3>✦ 効果エディター</h3>
+ ${kind==='equip'&&d.type==='spell'?'<p class="small muted">装備魔法：自分・相手のモンスターを選んで強化／弱体化できます。</p>':
+ `<label class="field-label" for="cardEffectMode">設定方式</label><select id="cardEffectMode" class="input">${selectOptions({builder:'自由設定（おすすめ）',preset:'かんたん効果プリセット'},mode)}</select>`}
  ${mode==='builder'?`<div class="form-duo"><div><label class="field-label" for="cardAbilityWhen">発動条件</label><select id="cardAbilityWhen" class="input">${selectOptions(whenChoices,when)}</select></div>
- <div><label class="field-label" for="cardAbilityOperation">処理内容</label><select id="cardAbilityOperation" class="input">${selectOptions(operations,op)}</select></div></div>
- <div class="form-duo"><div><label class="field-label" for="cardAbilityTarget">対象</label><select id="cardAbilityTarget" class="input">${selectOptions(targets,target)}</select></div>
- <div><label class="field-label" for="cardAbilityAmount">数値</label><select id="cardAbilityAmount" class="input">${selectOptions(Object.fromEntries(values.map(n=>[String(n),n===0?'指定なし':String(n)])),String(values.includes(d.ability?.amount)?d.ability.amount:values[0]))}</select></div></div>
- <p class="small muted mt8">${esc(abilityText({when,operation:op,target,amount:values.includes(d.ability?.amount)?d.ability.amount:values[0]}))}</p>`:
+ <div><label class="field-label" for="cardAbilityOperation">処理内容（便利な順）</label><select id="cardAbilityOperation" class="input">${selectOptions(operations,op)}</select></div></div>
+ <div class="form-duo"><div><label class="field-label" for="cardAbilityTarget">効果を受ける対象</label><select id="cardAbilityTarget" class="input">${selectOptions(targets,target)}</select></div>
+ <div><label class="field-label" for="cardAbilityAmount">${numeric?'数値・枚数（直接入力）':'数値（指定不要）'}</label><input id="cardAbilityAmount" class="input" type="number" inputmode="numeric" step="1" min="${numeric?meta.min:0}" max="${numeric?meta.max:0}" value="${amount}" ${numeric?'':'disabled'}></div></div>
+ <p class="small muted mt8 sv-effect-preview">${esc(abilityText({when,operation:op,target,amount}))}</p>
+ <p class="tiny muted">整数を直接入力。自分へのダメージ・相手の回復も可能です。通常の攻守変化はターン終了で戻り、永続効果は継続します。対象がいない効果は不発です。</p>`:
  `<div class="form-duo">${d.type==='monster'?`<div><label class="field-label" for="cardEffectKind">効果タイプ</label><select class="input" id="cardEffectKind">${selectOptions({continuous:'永続',ignition:'起動',trigger:'召喚時'},d.monsterEffect?.kind||'ignition')}</select></div>`:''}
  <div><label class="field-label" for="cardEffectCode">効果</label><select class="input" id="cardEffectCode">${selectOptions(d.type==='monster'?MONSTER_EFFECTS[d.monsterEffect?.kind||'ignition']:d.type==='spell'?MAGIC_EFFECTS:TRAP_EFFECTS,d.type==='monster'?d.monsterEffect?.code:d.effect)}</select></div></div>`}
- <p class="tiny muted mt8">永続系の魔法は発動後も場に残ります。装備は自分のモンスター1体、フィールド魔法は専用ゾーンです。キラ演出や効果は後から編集できます。</p></div>`;
+ <p class="tiny muted mt8">召喚時の単体対象は最初に見つかったカードを自動選択します。永続効果は攻守変更に対応。儀式・融合魔法は専用の効果を使います。</p></div>`;
 }
 function ruleModal(){const r=ui.rules;
  return `<div class="modal" role="dialog" aria-modal="true"><div class="modal-box"><div class="modal-title-line"><h2>⚙ デュエルルール</h2>${btn('×','closeRules','btn sm square')}</div>
@@ -571,16 +596,19 @@ function readCardForm(){
     delete d.effect;
   }else{d.effect=d.type==='spell'&&['ritual','fusion'].includes(spellKind(d))?(spellKind(d)==='ritual'?'ritualSummon':'fusionSummon'):value('cardEffectCode',d.effect||'draw2');delete d.monsterEffect;delete d.subtype;}
   const mode=value('cardEffectMode',d.ability?'builder':'preset');
-  if(d.type==='spell'&&['ritual','fusion'].includes(spellKind(d))){delete d.ability;}else if(d.type==='spell'&&spellKind(d)==='equip'){
-    const a=Number(value('cardAbilityAmount',d.ability?.amount||500));
-    d.ability={when:'continuous',operation:'boost',target:'ownMonster',amount:EFFECT_VALUES.boost.includes(a)?a:500};
-  }else if((d.type!=='monster'||d.subtype==='effect')&&mode==='builder'){
+  if(d.type==='spell'&&['ritual','fusion'].includes(spellKind(d))){delete d.ability;}
+  else if((d.type!=='monster'||d.subtype==='effect')&&(mode==='builder'||d.type==='spell'&&spellKind(d)==='equip')){
     const when=value('cardAbilityWhen',d.ability?.when|| (d.type==='trap'?'attack':'main'));
-    const operation=value('cardAbilityOperation',d.ability?.operation||'damage');
-    const targets=abilityTargets(operation,when);
-    const oldTarget=value('cardAbilityTarget',d.ability?.target||targets[0]);
-    const values=EFFECT_VALUES[operation]||[0];
-    d.ability={when,operation,target:targets.includes(oldTarget)?oldTarget:targets[0],amount:values.includes(Number(value('cardAbilityAmount',d.ability?.amount??values[0])))?Number(value('cardAbilityAmount',values[0])):values[0]};
+    const allowed=availableOperations(when);
+    const previous=d.ability?.operation;
+    const chosen=value('cardAbilityOperation',previous||'draw');
+    const operation=Object.hasOwn(allowed,chosen)?chosen:Object.hasOwn(allowed,previous)?previous:Object.keys(allowed)[0];
+    const choices=abilityTargets(operation,when,d.type,d.spellKind||'normal');
+    const target=value('cardAbilityTarget',d.ability?.target||choices[0]);
+    const meta=ABILITY_META[operation];
+    const val=Number(value('cardAbilityAmount',d.ability?.amount??meta.amount));
+    // Preserve an invalid input until the user fixes it; validation rejects it at save time.
+    d.ability={when,operation,target:choices.includes(target)?target:choices[0],amount:meta.min===undefined?0:val};
   }else delete d.ability;
   saveCardDraft();
 }
@@ -638,13 +666,18 @@ function slotHtml(player,owner,zone,i){
   const occupied=item?.id;
   let marker='';
   if(zone==='monsters'&&occupied&&(!hide||owner==='mine')) {
-    const c=CARD[item.id];const attack=effectiveAtk(item,ui.game,owner==='mine'?ui.seat:1-ui.seat);
-    marker=`<span class="slot-tag">${item.pos==='atk'?'攻'+attack:item.pos==='set'?'裏守':'守'+(c?.def??0)}</span>`;
+    const seat=owner==='mine'?ui.seat:1-ui.seat;const attack=effectiveAtk(item,ui.game,seat);const defense=effectiveDef(item,ui.game,seat);
+    marker=`<span class="slot-tag">${item.pos==='atk'?'攻'+attack:item.pos==='set'?'裏守':'守'+defense}</span>`;
   }
   const eligible=ui.targetMode?.type==='tribute'&&owner==='mine'&&zone==='monsters'&&occupied;
   const picked=eligible&&ui.targetMode.indices.includes(i);
   const emptyTarget=ui.targetMode?.type==='move'&&owner==='mine'&&zone===ui.targetMode.zone&&!occupied;
-  return `<button type="button" aria-label="${owner==='mine'?'自分':'相手'}の${zone==='monsters'?'モンスター':'魔法・罠'}ゾーン${i+1}${occupied?' カードあり':' 空き'}" class="slot ${occupied?'':'empty'} ${selected?'selected':''} ${eligible?'sv-target-eligible':''} ${picked?'sv-target-picked':''} ${emptyTarget?'sv-target-empty':''}" data-select="1" data-owner="${owner}" data-zone="${zone}" data-index="${i}">
+  const targetId=ui.targetMode?.id|| (ui.targetMode?.type==='monsterEffect'?activePlayer()?.monsters[ui.targetMode.index]?.id:
+   ui.targetMode?.type==='chainTrap'?activePlayer()?.backrow[ui.targetMode.index]?.id:null);
+  const spot=targetSpot(effectTarget(targetId));
+  const effectEligible=ui.targetMode&&['spell','quick','monsterEffect','chainTrap'].includes(ui.targetMode.type)&&
+   owner===spot.owner&&zone===spot.zone&&occupied;
+  return `<button type="button" aria-label="${owner==='mine'?'自分':'相手'}の${zone==='monsters'?'モンスター':'魔法・罠'}ゾーン${i+1}${occupied?' カードあり':' 空き'}" class="slot ${occupied?'':'empty'} ${selected?'selected':''} ${eligible||effectEligible?'sv-target-eligible':''} ${picked?'sv-target-picked':''} ${emptyTarget?'sv-target-empty':''}" data-select="1" data-owner="${owner}" data-zone="${zone}" data-index="${i}">
   ${occupied?cardHtml(item.id,{hidden:hide,def:item.pos==='def'}):''}${marker}</button>`;
 }
 function fieldSlotHtml(player,owner){
@@ -698,8 +731,12 @@ function renderTargetHint(){
  const m=ui.targetMode;
  if(m.type==='tribute')return `<div class="hintbox sv-target-choice"><strong>リリースするモンスターをタップ</strong><div class="small">${m.indices.length} / ${m.needed}体選択</div><div class="row wrap mt8">${btn('選択して召喚','confirmTributes','btn primary sm','',m.indices.length!==m.needed)}${btn('やめる','cancelTarget','btn sm ghost')}</div></div>`;
  if(m.type==='move')return `<div class="hintbox sv-target-choice"><strong>移動先の空いているゾーンをタップ</strong><div class="row mt8">${btn('やめる','cancelTarget','btn sm ghost')}</div></div>`;
- return `<div class="hintbox">${m.type==='spell'||m.type==='quick'?'選択した効果の対象モンスターをタップしてください。':m.type==='chainTrap'?'✧ 罠の対象モンスターをタップしてください。':m.type==='monsterEffect'?'✦ 効果で破壊する相手のモンスターをタップしてください。':m.type==='attack'?`⚔ 攻撃対象となる相手モンスターをタップしてください。${!ui.game.players[1-ui.seat].monsters.some(Boolean)?'「直接攻撃」もできます。':''}`:m.id==='s03'?'⚡ 破壊する相手のモンスターをタップしてください。':'💪 強化する自分の攻撃表示モンスターをタップしてください。'}
-   <div class="row mt8">${m.type==='attack'&&!ui.game.players[1-ui.seat].monsters.some(Boolean)?btn('直接攻撃','directAttack','btn sm primary'):''}${btn('キャンセル','cancelTarget','btn sm ghost')}</div></div>`;
+ const id=m.id|| (m.type==='monsterEffect'?activePlayer()?.monsters[m.index]?.id:
+    m.type==='chainTrap'?activePlayer()?.backrow[m.index]?.id:null);
+ const target=effectTarget(id);
+ const text=m.type==='attack'?`⚔ 攻撃対象となる相手モンスターをタップしてください。`:
+   `✦ ${TARGETS[target]||'対象'}をタップしてください。`;
+ return `<div class="hintbox">${esc(text)}<div class="row mt8">${m.type==='attack'&&!ui.game.players[1-ui.seat].monsters.some(Boolean)?btn('直接攻撃','directAttack','btn sm primary'):''}${btn('キャンセル','cancelTarget','btn sm ghost')}</div></div>`;
 }
 function renderSelection(){
   const s=ui.game,sel=ui.selected;if(!sel||!isMine())return '';
@@ -724,16 +761,16 @@ function renderSelection(){
       options=btn(['ritual','fusion'].includes(spellKind(c))?(spellKind(c)==='ritual'?'儀式召喚':'融合召喚'):'魔法を発動','spellHand','btn primary sm')+(canMain?btn('伏せてセット','setHand','btn sm'):'');
     }else if(canMain)options=btn('伏せてセット','setHand','btn primary sm');
   }
-  if(sel.owner==='mine'&&sel.zone==='hand'&&myTurn()&&p.hand.length>6)
-     options+=btn('手札から捨てる','discard','btn sm danger');
+  if(sel.owner==='mine'&&sel.zone==='hand'&&myTurn()&&s.phase==='end'&&p.hand.length>6)
+     options=btn('このカードを捨てる','discard','btn primary sm');
   if(sel.owner==='mine'&&sel.zone==='monsters'&&item){
     if(canMain){
       if(item.pos==='set')options+=btn('反転召喚','flip','btn primary sm');
       else options+=btn('表示形式変更','changePosition','btn sm');
     }
-    if(canMain&&item.pos!=='set'&&c.subtype==='effect'&&(c.ability?.when==='main'||c.monsterEffect?.kind==='ignition')&&item.effectUsedTurn!==s.turnNo)
+    if(canMain&&item.pos!=='set'&&c.subtype==='effect'&&(c.ability?.when==='main'||c.monsterEffect?.kind==='ignition')&&item.effectUsedTurn!==s.turnNo&&(item.effectLockedUntil||0)<s.turnNo)
       options+=btn('✦ モンスター効果を発動','monsterEffect','btn secondary sm');
-    if(myTurn()&&s.phase==='battle'&&!s.pending&&item.pos==='atk'&&!item.attacked&&s.turnNo>1)
+    if(myTurn()&&s.phase==='battle'&&!s.pending&&item.pos==='atk'&&!item.attacked&&(item.attackLockedUntil||0)<s.turnNo&&s.turnNo>1)
       options+=btn('このモンスターで攻撃','attackSelect','btn primary sm');
   }
   if(sel.owner==='mine'&&sel.zone==='monsters'&&canMain&&item){options+=btn('位置移動','moveSelected','btn sm')+btn('墓地へ','destroySelected','btn sm ghost')+btn('除外','banishSelected','btn sm ghost');}
@@ -762,13 +799,15 @@ function renderGame(){
   const ready=!!s.pending;
   const myStatus=playerStatus(me,ui.seat),enemyStatus=playerStatus(enemy,1-ui.seat);
   const hand=me.hand.map((id,i)=>`<button type="button" class="hand-slot ${ui.selected?.zone==='hand'&&ui.selected?.index===i?'selected':''}" data-select="1" data-owner="mine" data-zone="hand" data-index="${i}">${cardHtml(id)}</button>`).join('');
-  const phaseButton=!myTurn()||ready||s.status!=='playing'?'':s.phase==='main2'?btn('ターン終了','endTurn','btn primary'):btn(s.phase==='draw'?'メインへ':s.phase==='main1'?(s.turnNo===1?'メイン2へ':'バトルへ'):'メイン2へ','nextPhase','btn primary');
-  const endButton=myTurn()&&!ready&&s.status==='playing'&&s.phase!=='main2'&&s.phase!=='draw'?btn('ターン終了','endTurn','btn ghost'):'';
+  const phaseButton=!myTurn()||ready||s.status!=='playing'||s.phase==='end'?'':s.phase==='main2'?btn('ターン終了','endTurn','btn primary'):btn(s.phase==='draw'?'メインへ':s.phase==='main1'?(s.turnNo===1?'メイン2へ':'バトルへ'):'メイン2へ','nextPhase','btn primary');
+  const endButton=myTurn()&&!ready&&s.status==='playing'&&!['main2','draw','end'].includes(s.phase)?btn('ターン終了','endTurn','btn ghost'):'';
+  const handAdjustment=s.phase==='end'&&myTurn()&&me.hand.length>6;
   const winner=s.status==='finished'?`<section class="panel winner">🏆 ${s.winner==='draw'?'引き分け':`${esc(s.players[s.winner].name)} の勝利！`}</section>`:'';
   const layoutButton=btn(ui.duelCompact?'拡大表示':'省スペース','toggleCompact','btn sm ghost duel-layout-button');
   const commandBar=`<div class="duel-commandbar" role="group" aria-label="フェイズ操作"><div class="duel-command-state"><span class="duel-turn">TURN ${s.turnNo}</span><strong>${esc(PHASES[s.phase]||'終了')}</strong><span class="duel-who">${s.status==='finished'?'決着':s.pending?'応答中':myTurn()?'自分のターン':'相手のターン'}</span></div>${phaseButton||endButton?`<div class="duel-command-buttons">${phaseButton}${endButton}</div>`:''}${layoutButton}</div>`;
   const duelHud=ui.duelCompact?`<div class="duel-hud" aria-label="ライフポイントとデッキ残数"><div class="duel-hud-seat"><span class="duel-hud-label">相手</span>${enemyStatus}</div><div class="duel-hud-seat"><span class="duel-hud-label">自分</span>${myStatus}</div></div>`:`<div class="statusbar">${enemyStatus}</div>`;
   return `${roombar}${commandBar}${duelHud}
+   ${handAdjustment?`<div class="notice hand-adjust-banner">エンドフェイズ：あと${me.hand.length-6}枚捨ててください ${btn('手札を見る','scrollToHand','btn sm primary')}</div>`:''}
    ${ui.targetMode&&['tribute','move'].includes(ui.targetMode.type)?renderTargetHint():''}
    <div class="battlefield">
      <div class="field-zone-line"><span>相手のフィールド魔法</span>${fieldSlotHtml(enemy,'opponent')}</div><div class="zone-caption">相手の魔法・罠</div>
@@ -785,7 +824,7 @@ function renderGame(){
    ${winner}
    ${renderPending()}
    ${ui.targetMode&&['tribute','move'].includes(ui.targetMode.type)?'':renderTargetHint()}
-   <div class="hand-count">自分の手札 (${me.hand.length}枚)　${!myTurn()?'・相手のターン中':''}</div>
+   <div class="hand-count">自分の手札 (${me.hand.length}枚)　${handAdjustment?'・捨てるカードをタップ':!myTurn()?'・相手のターン中':''}</div>
    <div class="hand-scroll">${hand||'<div class="muted small">手札がありません</div>'}</div>
    ${renderSelection()}
    <details class="panel duel-tools" ${ui.duelToolsOpen?'open':''}><summary>その他の操作</summary><div class="row wrap battle-tools">
@@ -1052,23 +1091,37 @@ async function remoteCreate(){
  }catch(e){toast('部屋の作成に失敗しました：'+e.message)}finally{setBusy(false);}
 }
 async function remoteJoin(){
- if(!ui.sdk)return toast('Firebaseの設定が必要です');readHomeValues();
- if(!validDeck(ui.counts,ui.rules,activeSavedDeck()?.extraCounts||{}))return toast(`対戦できる${ui.rules.deckSize}枚のデッキを選んでください`);
+ if(!ui.sdk||!ui.uid)return toast('Firebaseの接続を確認してください');readHomeValues();
+ // The host's deck rules may differ from the guest's default rules.
  const code=($('roomCode')?.value||'').trim().toUpperCase().replace(/[^A-Z2-9]/g,'');
  if(code.length!==8)return toast('8文字の部屋コードを入力してください');
  setBusy(true);
  try{
    const r=ui.sdk.ref(ui.db,`rooms/${code}`);
+   // Firebase transactions can see an empty local cache on a second iPhone.
+   // Read the room first to populate the local view and distinguish missing/full rooms.
+   const initial=(await ui.sdk.get(r)).val();
+   if(!initial)return toast('部屋が見つかりません。部屋コードを確認してください');
+   const participants=Array.isArray(initial.players)?initial.players:[initial.players?.[0],initial.players?.[1]];
+   if(participants.some(p=>p?.uid===ui.uid)){await openRoom(code);return;}
+   if(initial.status!=='waiting'||participants[1])return toast('この部屋はすでに対戦中か満室です');
+   const roomRules=normalizeRuleSettings(initial.rules||ui.rules);
+   if(!validDeck(ui.counts,roomRules,activeSavedDeck()?.extraCounts||{}))return toast(`部屋のルールに合う${roomRules.deckSize}枚のデッキを選んでください`);
+   let failure='';
    const result=await ui.sdk.runTransaction(r,old=>{
-     if(!old)return;
+     if(!old){failure='部屋の情報が読み込まれていません。再度お試しください';return;}
      const players=Array.isArray(old.players)?old.players:[old.players?.[0],old.players?.[1]];
      if(players.some(p=>p?.uid===ui.uid))return old;
-     if(old.status!=='waiting'||old.players?.[1])return;
-     return joinRoom(old,{uid:ui.uid,name:ui.nickname,counts:ui.counts,extraCounts:activeSavedDeck()?.extraCounts||{}});
+     if(old.status!=='waiting'||players[1]){failure='この部屋はすでに対戦中か満室です';return;}
+     try{return joinRoom(old,{uid:ui.uid,name:ui.nickname,counts:ui.counts,extraCounts:activeSavedDeck()?.extraCounts||{}});}
+     catch(e){failure=e.message;return;}
    },{applyLocally:false});
-   if(!result.committed)return toast('部屋が見つからないか、すでに満員です');
+   if(!result.committed)return toast(failure||'参加処理が完了しませんでした。もう一度お試しください');
    await openRoom(code);
- }catch(e){toast('参加できませんでした：'+e.message)}finally{setBusy(false);}
+ }catch(e){
+   const message=String(e?.message||e);
+   toast(/permission.denied|PERMISSION_DENIED/i.test(message)?'Firebaseの部屋への書き込み権限がありません。ルールを確認してください':'参加できませんでした：'+message);
+ }finally{setBusy(false);}
 }
 async function openRoom(code,isDraft=false){
  if(ui.unsub){ui.unsub();ui.unsub=null;}
@@ -1188,7 +1241,7 @@ function chooseSpell(source,index){
  if(CARD[id]?.type==='spell'&&['ritual','fusion'].includes(spellKind(CARD[id])))return beginSpecial(spellKind(CARD[id]),{source,index});
  if(effectNeedsTarget(id)){
    ui.targetMode={type:'spell',source,index,id};ui.selected=null;render();
-   toast(CARD[id].ability?.target==='ownMonster'||CARD[id].effect==='boost500'?'自分の対象モンスターを選択':'相手の対象モンスターを選択');
+   toast('効果を受けるカードをフィールドからタップしてください');
  }else send({type:source==='hand'?'spellFromHand':'spellFromField',[source==='hand'?'hand':'index']:index,field:source==='field'});
 }
 function chooseSlot(owner,zone,index){
@@ -1206,21 +1259,20 @@ function chooseSlot(owner,zone,index){
    }
    if(mode.type==='attack'&&owner==='opponent'&&zone==='monsters'&&ui.game.players[1-ui.seat].monsters[index])
      return send({type:'attack',index:mode.index,target:index});
-   if(mode.type==='monsterEffect'&&owner===(mode.owner||'opponent')&&zone==='monsters'&&ui.game.players[owner==='mine'?ui.seat:1-ui.seat].monsters[index])
-     return send({type:'activateMonsterEffect',index:mode.index,target:index});
-   if(mode.type==='chainTrap'&&zone==='monsters'&&owner===mode.owner)return send({type:mode.attack?'activateTrap':'chainTrap',index:mode.index,target:index});
-   if(mode.type==='quick'){
-     const c=CARD[mode.id],need=c?.ability?.target==='enemyMonster'||c?.effect==='destroy'?'opponent':'mine';
-     const pl=ui.game.players[need==='mine'?ui.seat:1-ui.seat];
-     if(zone==='monsters'&&owner===need&&pl.monsters[index])return send({type:'quickResponse',source:mode.source,index:mode.index,target:index});
-   }
-   if(mode.type==='spell'){
-     const correct=(CARD[mode.id]?.ability?CARD[mode.id].ability.target==='enemyMonster':CARD[mode.id]?.effect==='destroy')?owner==='opponent':owner==='mine';
+   if(['monsterEffect','chainTrap','quick','spell'].includes(mode.type)){
+     const id=mode.id|| (mode.type==='monsterEffect'?activePlayer()?.monsters[mode.index]?.id:
+       mode.type==='chainTrap'?activePlayer()?.backrow[mode.index]?.id:null);
+     const spot=targetSpot(effectTarget(id));
      const targetPlayer=ui.game.players[owner==='mine'?ui.seat:1-ui.seat];
-     if(zone==='monsters'&&correct&&targetPlayer.monsters[index])
-       return send({type:mode.source==='hand'?'spellFromHand':'spellFromField',[mode.source==='hand'?'hand':'index']:mode.index,field:mode.source==='field',target:index});
+     if(owner===spot.owner&&zone===spot.zone&&targetPlayer?.[zone]?.[index]){
+       if(mode.type==='monsterEffect')return send({type:'activateMonsterEffect',index:mode.index,target:index});
+       if(mode.type==='chainTrap')return send({type:mode.attack?'activateTrap':'chainTrap',index:mode.index,target:index});
+       if(mode.type==='quick')return send({type:'quickResponse',source:mode.source,index:mode.index,target:index});
+       if(mode.type==='spell')return send({type:mode.source==='hand'?'spellFromHand':'spellFromField',
+          [mode.source==='hand'?'hand':'index']:mode.index,field:mode.source==='field',target:index});
+     }
    }
-   return toast('対象となるモンスターを選んでください');
+   return toast('指定された側のカードをタップしてください');
  }
  if(zone==='hand'){
    if(owner!=='mine')return;
@@ -1248,7 +1300,7 @@ async function initFirebase(){
  // The config is OPTIONAL for the offline UI, and is loaded after the home screen.
  // A missing/incorrect export must not prevent the whole game from starting.
  try {
-   const configModule=await import('./firebase-config.js?config=191');
+   const configModule=await import('./firebase-config.js?config=196');
    firebaseConfig=configModule.firebaseConfig||null;
    configReady=['apiKey','authDomain','databaseURL','projectId','appId'].every(key=>
      typeof firebaseConfig?.[key]==='string'&&firebaseConfig[key].trim()!=='');
@@ -1291,7 +1343,7 @@ async function initFirebase(){
    render(); // First connection: expose the online buttons exactly once.
    // URL invitation / reload: resume only for a participant with the same anonymous UID.
    const resumeCode=new URLSearchParams(location.search).get('room')||new URLSearchParams(location.search).get('draft');
-   if(resumeCode&&/^[A-Z2-9]{8}$/.test(resumeCode))await reconnectLastRoom(resumeCode);
+   if(resumeCode&&/^[A-Z2-9]{8}$/.test(resumeCode))await reconnectLastRoom(resumeCode,true);
  }catch(e){
    // Do not leave enabled online actions if the SDK failed to connect.
    configReady=false;
@@ -1477,7 +1529,7 @@ $('view').addEventListener('click',async e=>{
    return send({type:'quickResponse',source,index});
  }
  if(action==='chainTrap'){const i=Number(el.dataset.index),c=CARD[activePlayer()?.backrow[i]?.id];
-  if(c?.ability&&['ownMonster','enemyMonster'].includes(c.ability.target)){ui.targetMode={type:'chainTrap',index:i,owner:c.ability.target==='ownMonster'?'mine':'opponent'};render();return;}
+  if(c&&effectNeedsTarget(c.id)){ui.targetMode={type:'chainTrap',index:i,id:c.id};render();return;}
   return send({type:'chainTrap',index:i});}
  if(action==='manualDraw')return send({type:'manualDraw'});
  if(action==='shuffleDeck')return send({type:'shuffleDeck'});
@@ -1488,12 +1540,13 @@ $('view').addEventListener('click',async e=>{
  if(action==='moveSelected'){const x=ui.selected;if(!x||x.owner!=='mine')return;ui.targetMode={type:'move',zone:x.zone,from:x.index};ui.selected=null;render();return;}
  if(action==='destroySelected'||action==='banishSelected'){const x=ui.selected;if(x?.owner!=='mine')return;return send({type:action==='destroySelected'?'manualDestroy':'manualBanish',zone:x.zone,index:x.index});}
  if(action==='banishFromGrave'){const n=Number(prompt('除外する墓地のカード番号を指定\n'+(activePlayer()?.grave||[]).map((id,i)=>`${i+1}: ${CARD[id]?.name||id}`).join('\n')));if(Number.isInteger(n))return send({type:'banishGrave',index:n-1});return;}
+ if(action==='scrollToHand'){document.querySelector('.hand-count')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
  if(action==='endTurn')return send({type:'endTurn'});
  if(action==='passAttack')return send({type:'passAttack'});
  if(action==='trap'){
   const i=Number(el.dataset.index??ui.selected?.index),c=CARD[activePlayer()?.backrow[i]?.id];
-  if(c?.ability&&['enemyMonster','ownMonster'].includes(c.ability.target)){
-   ui.targetMode={type:'chainTrap',attack:true,index:i,owner:c.ability.target==='ownMonster'?'mine':'opponent'};render();return;
+  if(c&&effectNeedsTarget(c.id)){
+   ui.targetMode={type:'chainTrap',attack:true,index:i,id:c.id};render();return;
   }
   return send({type:'activateTrap',index:i});
  }
@@ -1509,8 +1562,8 @@ $('view').addEventListener('click',async e=>{
  if(action==='monsterEffect'){
    const i=ui.selected?.index,m=activePlayer()?.monsters[i],c=CARD[m?.id];
    if(!c)return;
-   if((c.ability&&['ownMonster','enemyMonster'].includes(c.ability.target))||c.monsterEffect?.code==='destroy1'){
-     ui.targetMode={type:'monsterEffect',index:i,owner:c.ability?.target==='ownMonster'?'mine':'opponent'};ui.selected=null;render();return;
+   if(effectNeedsTarget(c.id)){
+     ui.targetMode={type:'monsterEffect',index:i,id:c.id};ui.selected=null;render();return;
    }
    return send({type:'activateMonsterEffect',index:i});
  }
@@ -1527,9 +1580,12 @@ $('view').addEventListener('input',e=>{
  if(e.target.id==='deckSearch'){updateCardRows('deck');return;}
  if(e.target.id==='deckName'&&ui.deckDraft){ui.deckDraft.name=e.target.value;saveSealedDraft();saveDeckDraft();return;}
  if(e.target.id==='cardSearch'){updateManagedCards();return;}
- if(ui.cardDraft&&['cardName','cardLevel','cardAtk','cardDef','cardCost','cardEmoji','cardDesc'].includes(e.target.id)){
+ if(ui.cardDraft&&['cardName','cardLevel','cardAtk','cardDef','cardCost','cardEmoji','cardDesc','cardAbilityAmount'].includes(e.target.id)){
    readCardForm();
    const preview=document.querySelector('.card-demo');if(preview)preview.innerHTML=cardHtmlPreview(ui.cardDraft);
+   if(e.target.id==='cardAbilityAmount'){
+     const note=document.querySelector('.sv-effect-preview');if(note)note.textContent=abilityText(ui.cardDraft.ability);
+   }
  }
 
 });
@@ -1556,32 +1612,49 @@ $('view').addEventListener('change',async e=>{
    readCardForm();
    if(e.target.id==='cardType'){
      ui.cardDraft.type=e.target.value;
-     if(ui.cardDraft.type==='monster'){ui.cardDraft.subtype='normal';delete ui.cardDraft.effect;}
-     else{ui.cardDraft.effect=ui.cardDraft.type==='spell'?'draw2':'negate';if(ui.cardDraft.type==='spell')ui.cardDraft.spellKind='normal';delete ui.cardDraft.monsterEffect;}
+     if(ui.cardDraft.type==='monster'){ui.cardDraft.subtype='normal';delete ui.cardDraft.effect;delete ui.cardDraft.ability;}
+     else{
+       ui.cardDraft.effect=ui.cardDraft.type==='spell'?'draw2':'negate';
+       if(ui.cardDraft.type==='spell')ui.cardDraft.spellKind='normal';
+       ui.cardDraft.ability=ui.cardDraft.type==='spell'?{when:'main',operation:'draw',target:'self',amount:1}:
+         {when:'attack',operation:'negateAttack',target:'none',amount:0};
+       delete ui.cardDraft.monsterEffect;
+     }
    }
-   if(e.target.id==='cardSubtype')ui.cardDraft.subtype=e.target.value;
+   if(e.target.id==='cardSubtype'){
+     ui.cardDraft.subtype=e.target.value;
+     if(e.target.value==='effect'&&!ui.cardDraft.ability)ui.cardDraft.ability={when:'main',operation:'draw',target:'self',amount:1};
+     if(e.target.value==='normal')delete ui.cardDraft.ability;
+   }
    if(e.target.id==='cardSummonKind'){ui.cardDraft.summonKind=e.target.value;if(e.target.value==='fusion')ui.cardDraft.fusionMaterials=['m03','m12'];else delete ui.cardDraft.fusionMaterials;}
    if(e.target.id==='cardSpellKind'){
      ui.cardDraft.spellKind=e.target.value;
      if(ui.cardDraft.ability?.when==='continuous'&&!persistentSpell(ui.cardDraft))ui.cardDraft.ability.when='main';
      if(['ritual','fusion'].includes(e.target.value)){ui.cardDraft.effect=e.target.value==='ritual'?'ritualSummon':'fusionSummon';delete ui.cardDraft.ability;}
      if(e.target.value==='equip')ui.cardDraft.ability={when:'continuous',operation:'boost',target:'ownMonster',amount:500};
-     if(e.target.value==='field')ui.cardDraft.ability={when:'continuous',operation:'boost',target:'ownMonster',amount:500};
+     if(e.target.value==='field')ui.cardDraft.ability={when:'continuous',operation:'boost',target:'ownAllMonsters',amount:500};
    }
    if(e.target.id==='cardEffectKind')ui.cardDraft.monsterEffect={kind:e.target.value,code:Object.keys(MONSTER_EFFECTS[e.target.value])[0]};
    if(e.target.id==='cardEffectMode'){
      if(e.target.value==='builder'){
-       const when=ui.cardDraft.type==='trap'?'attack':'main';ui.cardDraft.ability={when,operation:'damage',target:'opponent',amount:500};
+       const when=ui.cardDraft.type==='trap'?'attack':'main';
+       const op=when==='attack'?'negateAttack':'draw';
+       ui.cardDraft.ability={when,operation:op,target:abilityTargets(op,when,ui.cardDraft.type,spellKind(ui.cardDraft))[0],amount:ABILITY_META[op].amount};
      }else delete ui.cardDraft.ability;
    }
    if(e.target.id==='cardAbilityWhen'&&ui.cardDraft.ability){
      ui.cardDraft.ability.when=e.target.value;
-     if(e.target.value==='continuous')ui.cardDraft.ability={when:'continuous',operation:'boost',target:'ownMonster',amount:500};
-     else if(ui.cardDraft.ability.operation==='negateAttack'&&e.target.value!=='attack')ui.cardDraft.ability={when:e.target.value,operation:'damage',target:'opponent',amount:500};
+     const operations=availableOperations(e.target.value);
+     if(!Object.hasOwn(operations,ui.cardDraft.ability.operation)){
+       const op=e.target.value==='continuous'?'boost':e.target.value==='response'?'negateEffect':e.target.value==='attack'?'negateAttack':'draw';
+       ui.cardDraft.ability.operation=op;ui.cardDraft.ability.amount=ABILITY_META[op].amount;
+     }
+     const validTargets=abilityTargets(ui.cardDraft.ability.operation,e.target.value,ui.cardDraft.type,spellKind(ui.cardDraft));
+     if(!validTargets.includes(ui.cardDraft.ability.target))ui.cardDraft.ability.target=validTargets[0];
    }
    if(e.target.id==='cardAbilityOperation'&&ui.cardDraft.ability){
      const op=e.target.value,when=ui.cardDraft.ability.when;
-     ui.cardDraft.ability.operation=op;ui.cardDraft.ability.target=abilityTargets(op,when)[0];ui.cardDraft.ability.amount=EFFECT_VALUES[op][0];
+     ui.cardDraft.ability.operation=op;ui.cardDraft.ability.target=abilityTargets(op,when,ui.cardDraft.type,spellKind(ui.cardDraft))[0];ui.cardDraft.ability.amount=ABILITY_META[op].amount;
    }
    saveCardDraft();render();return;
  }

@@ -634,3 +634,8 @@ body{
 @keyframes draw-dialog-enter{0%{opacity:0;transform:translateY(20px) scale(.84)}65%{opacity:1;transform:translateY(-5px) scale(1.02)}100%{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-height:650px){.draw-reveal-card{width:min(54vw,215px,calc((100dvh - 180px)*.69));max-height:calc(100dvh - 180px)}.draw-reveal-dialog{gap:4px}.draw-reveal-dialog h2{margin-bottom:0}.draw-reveal-close{margin-top:4px}}
 @media(prefers-reduced-motion:reduce){.draw-reveal-dialog{animation:none}.draw-reveal{backdrop-filter:none}}
+
+/* v1.9.6: comfortable direct numeric input on iPhone */
+.effect-builder input[type="number"]{font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield}
+.effect-builder input[type="number"]::-webkit-inner-spin-button,.effect-builder input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.effect-builder .form-duo>div{min-width:0}
