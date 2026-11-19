@@ -639,3 +639,104 @@ body{
 .effect-builder input[type="number"]{font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield}
 .effect-builder input[type="number"]::-webkit-inner-spin-button,.effect-builder input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .effect-builder .form-duo>div{min-width:0}
+
+
+/* SAHOVERSE v1.9.7 — iPad adaptive layout. CSS only: no viewport listeners or rerenders. */
+@media (min-width:700px) {
+  #app { max-width:1160px; }
+  .topbar { height:68px; padding-inline:24px; }
+  #view { padding:15px 22px calc(30px + env(safe-area-inset-bottom)); }
+  .sv-home { max-width:840px; }
+  .sv-hero { min-height:190px; margin-top:14px; }
+  .sv-crest { width:100px; height:100px; }
+  .sv-home-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+  .sv-menu-tile { min-height:110px; gap:9px; }
+  .sv-home-footer { gap:12px; }
+  .sv-duel-setup { max-width:840px; }
+  .modal { padding:20px max(20px,env(safe-area-inset-left)) 20px max(20px,env(safe-area-inset-right)); }
+  .modal-box { width:100%; max-width:800px; padding:20px 22px; max-height:calc(100dvh - 40px); }
+  .gallery-dialog { max-width:930px; }
+  .gallery-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+  .gallery-card { max-width:135px; }
+  .gallery-caption { font-size:12px; }
+  .deck-manager, .card-manager { max-width:980px; }
+  .deck-manager .deck-list,
+  .sv-card-manager .card-manage-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-content:start; column-gap:13px; row-gap:5px; max-height:48dvh; }
+  .deck-manager .deck-item { min-width:0; }
+  .deck-manager .deck-item-title { font-size:12px; }
+  .deck-manager .deck-item-detail { font-size:10px; }
+  .deck-manager .deck-item .sv-mini-thumb { width:36px; height:49px; flex-basis:36px; }
+  .sv-card-manager .card-manage-item { min-width:0; }
+  .sv-card-manager .card-manage-item b { font-size:13px; }
+  .sv-card-manager .card-manage-item .sv-mini-thumb { width:42px; height:57px; flex-basis:42px; }
+  .sv-editor-main { display:grid; grid-template-columns:minmax(210px,.43fr) minmax(0,1fr); align-items:start; gap:22px; }
+  .sv-editor-main .editor-preview { position:sticky; top:0; align-self:start; flex-direction:column; gap:12px; margin:0; padding:10px; border:1px solid #66829b45; border-radius:13px; background:#0b1c3080; }
+  .sv-editor-main .card-demo { margin:0 auto; flex:0 0 auto; }
+  .sv-editor-main .upload-tools { width:100%; gap:8px; }
+  .sv-editor-main .card-form { min-width:0; margin:0; }
+  .sv-editor-main .effect-builder { margin-top:12px; }
+  .pack-manager { max-width:860px; }
+  .pack-results { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .collection-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .sv-draft-setup { max-width:660px; }
+  .special-manager { max-width:700px; }
+  .sv-draft-screen { max-width:1050px; padding:20px; }
+  .draft-offers { gap:16px; }
+  .draft-offer { padding:14px; }
+  .draft-card-art { max-width:175px; height:248px; }
+  .draft-offers-open { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .draw-reveal-dialog { max-width:420px; }
+  .draw-reveal-card { width:min(290px,calc((100dvh - 255px)*.69)); max-height:min(420px,calc(100dvh - 255px)); }
+  #view.duel-active { padding-inline:22px; }
+  #view.duel-active .duel-commandbar { top:68px; }
+  #view.duel-active .battlefield { max-width:1000px; margin-inline:auto; padding:12px 14px; }
+  #view.duel-active .slots { gap:9px; }
+  #view.duel-active .slot { height:138px; }
+  #view.duel-active .slot .card-name { font-size:9px; }
+  #view.duel-active .slot .card-info { font-size:8px; }
+  #view.duel-active .slot .card-emoji { font-size:29px; }
+  #view.duel-active .field-zone-line .field-slot { width:73px; min-width:73px; height:99px; }
+  #view.duel-active .hand-scroll { max-width:1000px; margin-inline:auto; gap:10px; }
+  #view.duel-active .hand-slot { flex-basis:116px; height:163px; }
+  #view.duel-active .hand-count { max-width:1000px; margin-inline:auto; }
+  #view.duel-active .duel-tools,
+  #view.duel-active .duel-log { max-width:1000px; margin-inline:auto; }
+  #view.duel-active .duel-card-actions { width:min(680px,calc(100vw - 50px)); }
+  .sv-sticky-actions { bottom:-20px; }
+  .sv-card-admin .input { max-width:540px; }
+}
+/* Landscape iPad: wider workspace, shorter card rows, side-positioned action sheet. */
+@media (min-width:950px) {
+  .gallery-grid { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  .draft-offers-open { grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+  .draft-offers-open .draft-card-art { height:194px; max-width:144px; }
+  .draft-offers-open .draft-offer { padding:11px 6px; }
+  .draft-offers-open .draft-card-name { font-size:12px; }
+  .sv-editor-main { grid-template-columns:260px minmax(0,1fr); gap:28px; }
+  #view.duel-active .duel-card-actions { left:auto; right:max(24px,calc((100vw - 1160px)/2 + 24px)); transform:none; width:min(430px,42vw); max-height:65dvh; bottom:20px; }
+  #view.duel-active>.hintbox,
+  #view.duel-active>.respond { left:auto; right:max(24px,calc((100vw - 1160px)/2 + 24px)); transform:none; width:min(430px,42vw); max-height:65dvh; bottom:20px; }
+}
+@media (min-width:700px) and (max-height:850px) {
+  /* Keep the four monster/spell rows visible on shorter landscape tablets. */
+  #view.duel-active .slot { height:105px; }
+  #view.duel-active .field-zone-line { padding-block:4px; margin-block:4px; }
+  #view.duel-active .field-zone-line .field-slot { width:55px; min-width:55px; height:75px; }
+  #view.duel-active .zone-caption { margin-block:2px; }
+  #view.duel-active .field-center { margin-block:5px; padding-block:3px; }
+  #view.duel-active .hand-slot { flex-basis:101px; height:143px; }
+  #view.duel-active .duel-commandbar { padding-block:6px; }
+  .draw-reveal-card { width:min(235px,calc((100dvh - 160px)*.69)); max-height:calc(100dvh - 160px); }
+}
+/* Compact is an explicit player preference; keep it compact on iPad too. */
+@media (min-width:700px) {
+  #view.duel-compact .slot { height:99px; }
+  #view.duel-compact .field-zone-line .field-slot { width:54px; min-width:54px; height:64px; }
+  #view.duel-compact .hand-slot { flex-basis:100px; height:143px; }
+  #view.duel-compact .battlefield { padding:8px 11px; }
+}
+@media (min-width:700px) and (max-height:850px) {
+  #view.duel-compact .slot { height:85px; }
+  #view.duel-compact .field-zone-line .field-slot { width:48px; min-width:48px; height:55px; }
+  #view.duel-compact .hand-slot { flex-basis:94px; height:134px; }
+}

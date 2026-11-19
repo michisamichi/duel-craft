@@ -217,7 +217,7 @@ async function importBackup(file){
     if(!storageAvailable)throw Error('端末保存が制限されています。Safariから開いてください');
     applyBackup(window.localStorage,imported);
     toast('復元しました。画面を再読み込みします');
-    location.href=location.pathname+'?v=196';
+    location.href=location.pathname+'?v=197';
   }catch(e){toast('復元できません：'+e.message);}
 }
 async function reconnectLastRoom(code,fromInvite=false){
@@ -535,6 +535,7 @@ function editorModal(){
   return `<div class="modal" role="dialog" aria-modal="true" aria-label="カードを編集"><div class="modal-box card-manager">
     <div class="modal-title-line"><h2>${ORIGINAL_IDS.has(d.id)?'カードを編集':custom?'カードを編集':'カードを作成'}</h2>${btn('×','cardList','btn sm square')}</div>
     <p class="tiny muted sv-autosave-note">入力内容は下書きとして自動保存されます</p>
+    <div class="sv-editor-main">
     <div class="editor-preview"><div class="card-demo">${cardHtmlPreview(d)}</div>
       <div class="upload-tools"><label class="btn secondary upload-label">🖼 画像を選ぶ<input id="cardImage" type="file" accept="image/*" hidden></label>
       ${d.image?btn('画像を削除','removeCardImage','btn sm ghost'):''}
@@ -564,6 +565,7 @@ function editorModal(){
         <div class="row mt8">${btn('▶ この演出を試す','previewCardFx','btn sm secondary')}</div>
       </div>
       </details>
+    </div>
     </div>
     <div class="sv-sticky-actions sv-card-save">
       ${btn('カードを保存','saveCard','btn primary wide','',!editable||ui.cardBusy)}
@@ -1036,15 +1038,23 @@ async function joinOnlineDraft(){
  setBusy(true);let problem='ドラフトが見つかりません';
  try{
    const r=ui.sdk.ref(ui.db,'rooms/'+code);
+   const initial=(await ui.sdk.get(r)).val();
+   if(!initial)throw Error('ドラフト部屋が見つかりません。コードを確認してください');
+   const guests=Array.isArray(initial.players)?initial.players:[initial.players?.[0],initial.players?.[1]];
+   if(guests.some(p=>p?.uid===ui.uid)){ui.draftOpen=false;await openRoom(code,true);return;}
+   if(initial.status!=='waiting'||guests[1])throw Error('ドラフト部屋はすでに開始済みか満室です');
    const result=await ui.sdk.runTransaction(r,old=>{
-     if(!old){problem='部屋が見つかりません';return;}
-     const players=Array.isArray(old.players)?old.players:[old.players?.[0],old.players?.[1]];
-     if(players.some(p=>p?.uid===ui.uid))return old;
-     try{return joinDraftRoom(old,{uid:ui.uid,name:ui.nickname});}catch(e){problem=e.message;return;}
+     // The first invocation can be null on an uncached second device.
+     const current=old??initial;
+     if(!current){problem='部屋が見つかりません';return;}
+     const players=Array.isArray(current.players)?current.players:[current.players?.[0],current.players?.[1]];
+     if(players.some(p=>p?.uid===ui.uid))return current;
+     if(current.status!=='waiting'||players[1]){problem='ドラフト部屋はすでに開始済みか満室です';return;}
+     try{return joinDraftRoom(current,{uid:ui.uid,name:ui.nickname});}catch(e){problem=e.message;return;}
    },{applyLocally:false});
    if(!result.committed)throw Error(problem);
    ui.draftOpen=false;await openRoom(code,true);
- }catch(e){toast('参加エラー：'+e.message);}finally{setBusy(false);}
+ }catch(e){const message=String(e?.message||e);toast(/permission.denied|PERMISSION_DENIED/i.test(message)?'Firebaseの部屋への書き込み権限がありません。ルールを確認してください':'参加エラー：'+message);}finally{setBusy(false);}
 }
 async function draftPick(index){
  if(!ui.draftRoom||ui.busy)return;
@@ -1108,12 +1118,18 @@ async function remoteJoin(){
    const roomRules=normalizeRuleSettings(initial.rules||ui.rules);
    if(!validDeck(ui.counts,roomRules,activeSavedDeck()?.extraCounts||{}))return toast(`部屋のルールに合う${roomRules.deckSize}枚のデッキを選んでください`);
    let failure='';
+   // A Realtime Database transaction may first receive null even though get()
+   // just confirmed the room exists on the server (cold transaction cache).
+   // Use the confirmed snapshot as the optimistic value; Firebase compares the
+   // transaction against the server and retries this callback on any conflict.
+   // Returning undefined for the initial null would permanently abort joining.
    const result=await ui.sdk.runTransaction(r,old=>{
-     if(!old){failure='部屋の情報が読み込まれていません。再度お試しください';return;}
-     const players=Array.isArray(old.players)?old.players:[old.players?.[0],old.players?.[1]];
-     if(players.some(p=>p?.uid===ui.uid))return old;
-     if(old.status!=='waiting'||players[1]){failure='この部屋はすでに対戦中か満室です';return;}
-     try{return joinRoom(old,{uid:ui.uid,name:ui.nickname,counts:ui.counts,extraCounts:activeSavedDeck()?.extraCounts||{}});}
+     const current=old??initial;
+     if(!current){failure='部屋が見つかりません';return;}
+     const players=Array.isArray(current.players)?current.players:[current.players?.[0],current.players?.[1]];
+     if(players.some(p=>p?.uid===ui.uid))return current;
+     if(current.status!=='waiting'||players[1]){failure='この部屋はすでに対戦中か満室です';return;}
+     try{return joinRoom(current,{uid:ui.uid,name:ui.nickname,counts:ui.counts,extraCounts:activeSavedDeck()?.extraCounts||{}});}
      catch(e){failure=e.message;return;}
    },{applyLocally:false});
    if(!result.committed)return toast(failure||'参加処理が完了しませんでした。もう一度お試しください');
