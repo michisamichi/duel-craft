@@ -1,4 +1,4 @@
-import {LIMITS,cardLimit,isValidAbility,abilityText} from './rules.js?v=62';
+import {LIMITS,cardLimit,isValidAbility,abilityText} from './rules.js?v=80';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},
@@ -30,10 +30,17 @@ export const CARDS = [
   {id:'s03',name:'雷の一撃',type:'spell',emoji:'⚡',effect:'destroy',desc:'相手のモンスター1体を破壊する。'},
   {id:'s04',name:'勇気の紋章',type:'spell',emoji:'💪',effect:'boost500',desc:'自分の表側モンスター1体の攻撃力を、このターンだけ500上げる。'},
   {id:'s05',name:'火球の呪文',type:'spell',emoji:'☄️',effect:'burn800',desc:'相手に800ダメージを与える。'},
+  {id:'s06',name:'閃光の障壁',type:'spell',spellKind:'quick',emoji:'✨',ability:{when:'main',operation:'heal',target:'self',amount:500},desc:'自分のターンは手札から、セット後は次のターン以降にも使える。LP500回復。'},
+  {id:'s07',name:'守護の紋章',type:'spell',spellKind:'continuous',emoji:'🪬',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:300},desc:'指定した自分モンスター1体の攻撃力を300アップ。'},
+  {id:'s08',name:'雷刃の剣',type:'spell',spellKind:'equip',emoji:'⚔️',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:500},desc:'装備モンスターの攻撃力を500アップ。'},
+  {id:'s09',name:'星界の祭壇',type:'spell',spellKind:'field',emoji:'🌌',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:300},desc:'自分フィールドの表側モンスターの攻撃力を300アップ。'},
   {id:'t01',name:'緊急防御',type:'trap',emoji:'🛡️',effect:'negate',desc:'相手の攻撃時に任意発動。その攻撃を無効にする。'},
   {id:'t02',name:'逆襲の落とし穴',type:'trap',emoji:'🕳️',effect:'counterdestroy',desc:'相手の攻撃時に任意発動。攻撃したモンスターを破壊する。'},
   {id:'t03',name:'反撃の炎',type:'trap',emoji:'💥',effect:'counterburn',desc:'相手の攻撃時に任意発動。攻撃を無効にし、相手に700ダメージ。'},
 ];
+export const SPELL_KINDS={normal:'通常魔法',quick:'速攻魔法',continuous:'永続魔法',equip:'装備魔法',field:'フィールド魔法'};
+export const spellKind=c=>c?.type==='spell'&&Object.hasOwn(SPELL_KINDS,c.spellKind)?c.spellKind:'normal';
+export const persistentSpell=c=>['continuous','equip','field'].includes(spellKind(c));
 export const RARITIES={N:'ノーマル',R:'レア',SR:'スーパーレア',UR:'ウルトラレア',SEC:'シークレット'};
 const DEFAULT_RARITY={
   m17:'SEC',m18:'SEC',m21:'UR',m24:'UR',m13:'SR',m15:'SR',
@@ -73,7 +80,8 @@ export function isSafeCustomCard(c){
   if(typeof c.owner!=='string'||c.owner.length<2||c.owner.length>150)return false;
   if(c.rarity!==undefined&&!Object.hasOwn(RARITIES,c.rarity))return false;
   if(c.limit!==undefined&&!Object.hasOwn(LIMITS,c.limit))return false;
-  if(c.ability!==undefined&&!isValidAbility(c.ability,c.type))return false;
+  if(c.ability!==undefined&&!isValidAbility(c.ability,c.type,c.spellKind||'normal'))return false;
+  if(c.type==='spell'&&c.spellKind!==undefined&&!Object.hasOwn(SPELL_KINDS,c.spellKind))return false;
   if(c.fx && (typeof c.fx!=='object'||!['auto','flame','lightning','slash','aqua','shadow','star','heal','none'].includes(c.fx.visual)||!['auto','slash','spark','boom','chime','water','heal','none'].includes(c.fx.sound)))return false;
   if(c.image && (typeof c.image!=='string'||!/^data:image\/(jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(c.image)||c.image.length>90000))return false;
   if(c.type==='monster'){

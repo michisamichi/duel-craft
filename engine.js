@@ -1,5 +1,5 @@
-import {CARD, expandDeck, shuffle, validDeck} from './cards.js?v=62';
-import {normalizeRuleSettings} from './rules.js?v=62';
+import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell} from './cards.js?v=80';
+import {normalizeRuleSettings} from './rules.js?v=80';
 
 export const PHASES = {draw:'ドロー',main1:'メイン1',battle:'バトル',main2:'メイン2',end:'エンド'};
 const blank5 = () => [null,null,null,null,null];
@@ -7,13 +7,24 @@ const fail = msg => {throw new Error(msg)};
 const assert = (cond,msg) => {if(!cond) fail(msg)};
 const opponent = seat => 1-seat;
 const mustCard = id => {assert(!!CARD[id],'不明なカードです');return CARD[id];};
-export function effectiveAtk(item){
+export function effectiveAtk(item,state=null,seat=null){
   if(!item)return 0;
   const c=CARD[item.id];if(!c)return 0;
   const extra=item.pos!=='set'&&c.ability?.when==='continuous'&&c.ability.operation==='boost'?c.ability.amount:
     c.subtype==='effect'&&c.monsterEffect?.kind==='continuous'&&item.pos!=='set'?
     (c.monsterEffect.code==='atk300'?300:c.monsterEffect.code==='atk500'?500:0):0;
-  return c.atk+(item.bonus||0)+extra;
+  let spellBonus=0;
+  if(state&&seat!==null&&item.pos!=='set'){
+    const p=state.players[seat];
+    for(const slot of [...(p.backrow||[]),p.field]){
+      if(!slot||slot.faceDown)continue;
+      const spell=CARD[slot.id];if(!spell||spell.type!=='spell')continue;
+      const kind=spellKind(spell),ab=actionAbility(spell);
+      if(!persistentSpell(spell)||ab?.operation!=='boost')continue;
+      if(kind==='field'||(slot.linkKey!==undefined&&slot.linkKey===item.key))spellBonus+=ab.amount||0;
+    }
+  }
+  return c.atk+(item.bonus||0)+extra+spellBonus;
 }
 function activateMonsterAbility(s,seat,item,kind){
   const c=mustCard(item.id), e=c.monsterEffect;
@@ -45,12 +56,14 @@ export function normalizeRoom(s) {
       p[field]=Array.from({length:5},(_,i)=>original[i]??null);
     }
     p.banished=Array.isArray(p.banished)?p.banished:[];
+    p.field=p.field||null;
     for(const field of ['hand','deck','grave']){
       const original=p[field]||[];
       p[field]=Array.isArray(original)?original:Object.keys(original).sort((a,b)=>+a-+b).map(k=>original[k]);
     }
     p.normalUsed=!!p.normalUsed;
   }
+  s.nextKey=Number.isInteger(s.nextKey)?s.nextKey:0;
   s.log=Array.isArray(s.log)?s.log:[];
   s.pending=s.pending||null;
   return s;
@@ -59,12 +72,12 @@ const newPlayer = ({uid,name,counts,rules}) => {
   assert(validDeck(counts,rules),`デッキは${rules.deckSize}枚・禁止制限を守る必要があります`);
   return {uid, name:String(name||'プレイヤー').slice(0,12),
     deck:shuffle(expandDeck(counts)), hand:[], monsters:blank5(), backrow:blank5(), grave:[],banished:[],
-    lp:rules.lp,normalUsed:false};
+    field:null,lp:rules.lp,normalUsed:false};
 };
 export function createRoom({uid,name,counts,rules}) {
   rules=normalizeRuleSettings(rules);
   return {status:'waiting',rules,players:[newPlayer({uid,name,counts,rules}),null],turn:0,turnNo:1,
-    phase:'main1',pending:null,winner:null,log:['対戦相手の入室を待っています'],revision:0,createdAt:Date.now()};
+    phase:'main1',nextKey:0,pending:null,winner:null,log:['対戦相手の入室を待っています'],revision:0,createdAt:Date.now()};
 }
 export function joinRoom(state,{uid,name,counts}) {
   assert(state?.status==='waiting','参加できる部屋ではありません');
@@ -115,15 +128,26 @@ function getMonster(s,seat,index) {
 }
 function sendToGrave(p,zone,index) {
   const item=p[zone][index];
-  if(item){p.grave.push(item.id);p[zone][index]=null;}
+  if(item){p.grave.push(item.id);p[zone][index]=null;
+    if(zone==='monsters'&&item.key!==undefined)removeOrphanEquips(p);
+  }
 }
+function removeOrphanEquips(p){
+  const alive=new Set(p.monsters.filter(Boolean).map(m=>m.key));
+  for(let i=0;i<p.backrow.length;i++){
+    const v=p.backrow[i];if(v?.linkKey!==undefined&&!alive.has(v.linkKey)){
+      p.grave.push(v.id);p.backrow[i]=null;
+    }
+  }
+}
+function sweepOrphanEquips(s){for(const p of s.players){if(p)removeOrphanEquips(p);}}
 function resolveAttack(s) {
   const a=s.pending;
   assert(a?.kind==='attack','処理する攻撃がありません');
   const atkP=s.players[a.by],defP=s.players[1-a.by];
   const attacker=atkP.monsters[a.attacker];
   if(!attacker){log(s,'攻撃モンスターがいないため、攻撃は終了しました。');s.pending=null;return;}
-  const atk=effectiveAtk(attacker);
+  const atk=effectiveAtk(attacker,s,a.by);
   if(a.target===null) {
     if(defP.monsters.some(Boolean)) {log(s,'相手のモンスターがいるため直接攻撃できません。');}
     else{defP.lp=Math.max(0,defP.lp-atk);log(s,`${atkP.name} の直接攻撃！ ${defP.name} に${atk}ダメージ。`);}
@@ -133,7 +157,7 @@ function resolveAttack(s) {
     const dc=mustCard(defender.id);
     if(defender.pos==='set'){defender.pos='def';log(s,`${dc.name} が表になりました。`);}
     const isAtk=defender.pos==='atk';
-    const power=isAtk?effectiveAtk(defender):dc.def;
+    const power=isAtk?effectiveAtk(defender,s,1-a.by):dc.def;
     if(atk>power){
       sendToGrave(defP,'monsters',a.target);
       if(isAtk)defP.lp=Math.max(0,defP.lp-(atk-power));
@@ -186,17 +210,79 @@ function executeAbility(s,entry,chain){
   case 'damage':enemy.lp=Math.max(0,enemy.lp-ab.amount);break;
   case 'destroy':if(item)sendToGrave(s.players[targetSeat],'monsters',targetIndex);break;
   case 'banish':if(item){s.players[targetSeat].banished.push(item.id);s.players[targetSeat].monsters[targetIndex]=null;}break;
-  case 'boost':if(item)item.bonus=(item.bonus||0)+ab.amount;break;
+  case 'boost':if(item&&!(card.type==='spell'&&persistentSpell(card)))item.bonus=(item.bonus||0)+ab.amount;break;
   case 'negateAttack':if(chain)chain.attackNegated=true;break;
  }
  if(card.type==='trap'&&chain?.afterAttack&&ab.when==='attack')chain.attackNegated=true; // legacy attack traps prevent damage
  log(s,`${p.name}：「${card.name}」の効果を解決しました。`);
+ sweepOrphanEquips(s);
  checkWinner(s);
 }
 function startChain(s,entry,afterAttack=null){
  assert(!s.pending||s.pending.kind==='attack','対応処理中です');
  s.pending={kind:'chain',stack:[entry],priority:1-entry.seat,passes:0,afterAttack,attackNegated:false};
  log(s,`チェーン1：「${mustCard(entry.cardId).name}」発動。相手の応答を待ちます。`);
+}
+function castSpell(s,seat,source,index,target){
+  const p=s.players[seat],ch=s.pending;
+  const responding=!!ch,attackResponse=ch?.kind==='attack';
+  const fromHand=source==='hand';
+  const old=fromHand?p.hand[index]:source==='field'?p.field:p.backrow[index];
+  const id=fromHand?old:old?.id,c=mustCard(id);
+  assert(c.type==='spell','魔法カードではありません');
+  const kind=spellKind(c),quick=kind==='quick';
+  if(responding){
+    assert(quick,'対応中は速攻魔法だけ発動できます');
+    if(attackResponse)assert(seat!==ch.by,'攻撃への最初の対応は防御側が行います');
+    else assert(ch.kind==='chain'&&ch.priority===seat&&ch.stack.length<8,'チェーンの応答順ではありません');
+  } else {
+    assert(s.turn===seat,'相手ターンに手札から魔法は使えません');
+    assert(quick||['main1','main2'].includes(s.phase),'メインフェイズで発動してください');
+    assert(!quick||['draw','main1','battle','main2'].includes(s.phase),'このフェイズでは使えません');
+  }
+  if(fromHand)assert(s.turn===seat&&arrayIndex(p.hand,index),'手札からの発動は自分ターンのみです');
+  else {
+    assert(old&&old.faceDown,'セット済みの魔法カードを選んでください');
+    if(kind==='quick')assert(old.setTurn<s.turnNo,'速攻魔法はセットしたターンには発動できません');
+  }
+  const ab=actionAbility(c);assert(ab,'この魔法の効果は未対応です');
+  if(!(kind==='field'&&ab.when==='continuous'&&ab.operation==='boost'))abilityTargetCheck(s,seat,ab,target);
+  // 装備魔法は対象のモンスターに紐付ける。移動しても装備関係は維持する。
+  if(kind==='equip'){
+    assert(ab.target==='ownMonster'&&Number.isInteger(target),'装備する自分のモンスターを選んでください');
+    const monster=getMonster(s,seat,target);
+    if(monster.key===undefined)monster.key=++s.nextKey;
+  }
+  const ongoing=persistentSpell(c);
+  let slotItem={id,faceDown:false,setTurn:s.turnNo};
+  if(!fromHand)slotItem={...old,faceDown:false};
+  if(kind==='equip'||(kind==='continuous'&&ab.target==='ownMonster'&&ab.operation==='boost')){
+    const monster=getMonster(s,seat,target);
+    if(monster.key===undefined)monster.key=++s.nextKey;
+    slotItem.linkKey=monster.key;
+  }
+  if(fromHand){
+    if(ongoing&&kind!=='field')assert(p.backrow.some(v=>v===null),'魔法・罠ゾーンが満杯です');
+    p.hand.splice(index,1);
+    if(ongoing){
+      if(kind==='field'){
+        if(p.field)p.grave.push(p.field.id);
+        p.field=slotItem;
+      }else p.backrow[p.backrow.indexOf(null)]=slotItem;
+    }else p.grave.push(id);
+  }else if(source==='field'){
+    assert(kind==='field','フィールドゾーンにある魔法ではありません');
+    p.field=slotItem;
+  }else{
+    assert(arrayIndex(p.backrow,index),'ゾーンが不正です');
+    if(ongoing)p.backrow[index]=slotItem;
+    else{p.backrow[index]=null;p.grave.push(id);}
+  }
+  const entry={seat,cardId:id,target};
+  if(!responding){startChain(s,entry);return;}
+  if(attackResponse){startChain(s,entry,{...ch});return;}
+  ch.stack.push(entry);ch.priority=1-seat;ch.passes=0;
+  log(s,`チェーン${ch.stack.length}：「${c.name}」発動！`);
 }
 function addChainTrap(s,seat,index,target){
  const ch=s.pending;assert(ch?.kind==='chain'&&ch.priority===seat,'チェーンの応答順ではありません');
@@ -218,11 +304,12 @@ function finishChain(s){
    executeAbility(s,entry,ch);
  }
  s.pending=null;
- if(after&&s.status==='playing'&&!ch.attackNegated){s.pending={kind:'attack',...after};resolveAttack(s);}
+ sweepOrphanEquips(s);
+  if(after&&s.status==='playing'&&!ch.attackNegated){s.pending={kind:'attack',...after};resolveAttack(s);}
  else if(after)log(s,'攻撃は無効になりました。');
  checkWinner(s);
 }
-function takeSnapshot(s){const snapshot={};for(const key of ['status','players','turn','turnNo','phase','pending','winner','log','lastEvent','lastRandom','rules'])snapshot[key]=structuredClone(s[key]??null);return snapshot;}
+function takeSnapshot(s){const snapshot={};for(const key of ['status','players','turn','turnNo','phase','pending','winner','log','lastEvent','lastRandom','rules','nextKey'])snapshot[key]=structuredClone(s[key]??null);return snapshot;}
 
 function endTurn(s) {
   assert(!s.pending,'相手の対応が終わっていません');
@@ -259,6 +346,7 @@ export function applyAction(current,actorUid,action) {
     case 'flip':cueType='summon';cueCard=p.monsters[a.index]?.id;break;
     case 'activateMonsterEffect':cueType='effect';cueCard=p.monsters[a.index]?.id;break;
     case 'spellFromHand':cueType='spell';cueCard=p.hand[a.hand];break;
+    case 'quickResponse':cueType='spell';cueCard=a.source==='hand'?p.hand[a.index]:p.backrow[a.index]?.id;break;
     case 'spellFromField':cueType='spell';cueCard=p.backrow[a.index]?.id;break;
     case 'activateTrap':cueType='trap';cueCard=p.backrow[a.index]?.id;break;
     case 'attack':cueType='attack';cueCard=p.monsters[a.index]?.id;break;
@@ -281,7 +369,7 @@ export function applyAction(current,actorUid,action) {
       assert(slot>=0,'モンスターゾーンが満杯です');
       for(const i of tributes)sendToGrave(p,'monsters',i);
       p.hand.splice(a.hand,1);
-      p.monsters[slot]={id,pos:a.faceDown?'set':(a.position==='def'?'def':'atk'),bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+      p.monsters[slot]={key:++s.nextKey,id,pos:a.faceDown?'set':(a.position==='def'?'def':'atk'),bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
       p.normalUsed=true;
       if(!a.faceDown&&c.subtype==='effect'&&s.status==='playing'){
         if(c.ability?.when==='summon'){
@@ -314,25 +402,23 @@ export function applyAction(current,actorUid,action) {
       assert(arrayIndex(p.hand,a.hand),'手札の位置が不正です');
       const id=p.hand[a.hand],c=mustCard(id);
       assert(c.type==='spell'||c.type==='trap','魔法・罠カードではありません');
-      const slot=p.backrow.indexOf(null);assert(slot>=0,'魔法・罠ゾーンが満杯です');
-      p.hand.splice(a.hand,1);p.backrow[slot]={id,faceDown:true,setTurn:s.turnNo};
+      const slot=p.backrow.indexOf(null);assert(c.type==='spell'&&spellKind(c)==='field'||slot>=0,'魔法・罠ゾーンが満杯です');
+      p.hand.splice(a.hand,1);
+      if(c.type==='spell'&&spellKind(c)==='field'){
+        if(p.field)p.grave.push(p.field.id);
+        p.field={id,faceDown:true,setTurn:s.turnNo};
+      }else p.backrow[slot]={id,faceDown:true,setTurn:s.turnNo};
       log(s,`${p.name} は魔法・罠を1枚セットしました。`);break;
     }
     case 'spellFromHand': {
-      requireMain(s,seat);
-      assert(arrayIndex(p.hand,a.hand),'手札の位置が不正です');
-      const id=p.hand[a.hand],c=mustCard(id);
-      assert(c.type==='spell','魔法カードではありません');
-      assert(p.backrow.includes(null),'魔法・罠ゾーンが満杯です');
-      const ab=actionAbility(c);abilityTargetCheck(s,seat,ab,a.target);
-      p.hand.splice(a.hand,1);p.grave.push(id);startChain(s,{seat,cardId:id,target:a.target});break;
+      castSpell(s,seat,'hand',a.hand,a.target);break;
     }
     case 'spellFromField': {
-      requireMain(s,seat);
-      assert(arrayIndex(p.backrow,a.index),'ゾーンが不正です');
-      const item=p.backrow[a.index];assert(item&&mustCard(item.id).type==='spell','セットした魔法カードがありません');
-      const ab=actionAbility(mustCard(item.id));abilityTargetCheck(s,seat,ab,a.target);
-      p.backrow[a.index]=null;p.grave.push(item.id);startChain(s,{seat,cardId:item.id,target:a.target});break;
+      castSpell(s,seat,a.field?'field':'backrow',a.index,a.target);break;
+    }
+    case 'quickResponse': {
+      assert(['hand','backrow'].includes(a.source),'発動場所が不正です');
+      castSpell(s,seat,a.source,a.index,a.target);break;
     }
     case 'flip': {
       requireMain(s,seat);const m=getMonster(s,seat,a.index);
@@ -363,7 +449,7 @@ export function applyAction(current,actorUid,action) {
     }
     case 'passAttack': {
       assert(s.pending?.kind==='attack'&&s.pending.by!==seat,'対応できる攻撃がありません');
-      log(s,`${p.name} は罠を発動しませんでした。`);resolveAttack(s);break;
+      log(s,`${p.name} はカードを発動しませんでした。`);resolveAttack(s);break;
     }
     case 'activateTrap': {
       assert(s.pending?.kind==='attack'&&s.pending.by!==seat,'相手の攻撃時に発動できます');
@@ -402,10 +488,12 @@ export function applyAction(current,actorUid,action) {
       p[zone][a.to]=p[zone][a.from];p[zone][a.from]=null;log(s,`${p.name} がカードの位置を移動しました。`);break;
     }
     case 'manualDestroy': case 'manualBanish':{
-      requireMain(s,seat);assert(['monsters','backrow'].includes(a.zone),'ゾーンが不正です');
-      assert(Number.isInteger(a.index)&&p[a.zone][a.index],'対象カードがありません');
-      const item=p[a.zone][a.index];p[a.zone][a.index]=null;
+      requireMain(s,seat);assert(['monsters','backrow','field'].includes(a.zone),'ゾーンが不正です');
+      assert(a.zone==='field'?!!p.field:Number.isInteger(a.index)&&p[a.zone][a.index],'対象カードがありません');
+      const item=a.zone==='field'?p.field:p[a.zone][a.index];
+      if(a.zone==='field')p.field=null;else p[a.zone][a.index]=null;
       if(a.type==='manualDestroy')p.grave.push(item.id);else p.banished.push(item.id);
+      sweepOrphanEquips(s);
       log(s,`${p.name} が自分のカード「${mustCard(item.id).name}」を${a.type==='manualDestroy'?'墓地へ送りました':'除外しました'}。`);break;
     }
     case 'banishGrave':{

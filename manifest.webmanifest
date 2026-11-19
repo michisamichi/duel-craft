@@ -1,11 +1,26 @@
 {
-  "name": "DUEL CRAFT - オリジナルカード対戦",
-  "short_name": "DUEL CRAFT",
+  "name": "SAHOVERSE",
+  "short_name": "SAHOVERSE",
+  "description": "オリジナルカードで2人対戦",
+  "lang": "ja",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#111727",
-  "theme_color": "#111727",
-  "icons": [{"src":"./icons/app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+  "background_color": "#0a1222",
+  "theme_color": "#0a1222",
+  "icons": [
+    {
+      "src": "./sahoverse-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./sahoverse-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }

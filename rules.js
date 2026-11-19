@@ -7,11 +7,11 @@ export const OPERATIONS={draw:'カードを引く',heal:'LPを回復',damage:'LP
 export const EFFECT_VALUES={draw:[1,2,3],heal:[300,500,800,1000,1500],damage:[300,500,800,1000,1500],boost:[300,500,800,1000,1500],destroy:[0],banish:[0],negateAttack:[0]};
 export function normalizeRuleSettings(input){const lp=Number(input?.lp),deckSize=Number(input?.deckSize);return {lp:Number.isInteger(lp)&&lp>=1000&&lp<=20000&&lp%500===0?lp:8000,deckSize:Number.isInteger(deckSize)&&deckSize>=20&&deckSize<=60?deckSize:40};}
 export function cardLimit(c){return LIMITS[c?.limit]?.max??3;}
-export function isValidAbility(a,type='monster'){
+export function isValidAbility(a,type='monster',spellKind='normal'){
   if(!a||typeof a!=='object'||!Object.hasOwn(TRIGGERS,a.when)||!Object.hasOwn(TARGETS,a.target)||!Object.hasOwn(OPERATIONS,a.operation))return false;
   if(!EFFECT_VALUES[a.operation].includes(a.amount))return false;
   if(type==='monster'&&!['main','summon','continuous'].includes(a.when))return false;
-  if(type==='spell'&&a.when!=='main')return false;
+  if(type==='spell'&&a.when!=='main'&&!(a.when==='continuous'&&['continuous','equip','field'].includes(spellKind)))return false;
   if(type==='trap'&&!['attack','response'].includes(a.when))return false;
   if(a.when==='continuous'&&!(a.operation==='boost'&&a.target==='ownMonster'))return false;
   if(a.operation==='draw'&&a.target!=='self')return false;
