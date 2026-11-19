@@ -49,7 +49,7 @@ const ui={
   pendingShare:null,shareError:'',
   game:null,roomCode:'',draftRoom:null,draftCode:'',demoDraft:false,seat:0,demo:false,selected:null,targetMode:null,specialDraft:null,deckOpen:false,
   busy:false,sdk:null,db:null,uid:null,unsub:null,cardUnsub:null,toastTimer:null,
-  cardsOpen:false,cardDraft:null,cardManageType:'all',cardManageRarity:'all',cardManageQuery:'',customCards:stored('duel-custom-cards',{}),cardBusy:false,
+  cardsOpen:false,cardDraft:null,cardManageType:'all',cardManageRarity:'all',cardManageQuery:'',customCards:stored('duel-custom-cards',{}),cardBusy:false,adminUnlocked:false,adminBusy:false,
   fxOpen:false,fxSettings:readFxSettings(),lastFxRevision:null,
   rules:readRuleSettings(storage),rulesOpen:false,appearanceOpen:false,appearance:stored('duel-appearance-v5',{mat:'nebula',back:'crest'}),
   packOpen:false,packDraft:null,packResults:null,packs:readPackStore(storage),collectionOnly:false,previewCardId:null,
@@ -456,14 +456,18 @@ function cardsModal(){
   if(ui.cardDraft)return editorModal();
   return `<div class="modal" role="dialog" aria-modal="true" aria-label="カード管理"><div class="modal-box card-manager sv-card-manager">
     <div class="modal-title-line"><h2>カード管理</h2>${btn('×','closeCards','btn sm square')}</div>
-    ${existingDraft(CARD_DRAFT_KEY)?`<div class="sv-draft-reminder">編集中のカードがあります ${btn('再開','resumeCardDraft','btn sm primary')}${btn('破棄','discardCardDraft','btn sm ghost')}</div>`:''}
-    ${btn('＋ カードを作成','newCard','btn primary wide')}
+    <div class="sv-card-admin">${ui.adminUnlocked
+      ?`<div class="row between"><span class="sv-admin-status">✓ 編集モード</span>${btn('ロック','lockCards','btn sm ghost','',ui.adminBusy)}</div>`
+      :`<div class="row sv-admin-login"><input id="cardAdminPassword" class="input grow" type="password" placeholder="管理パスワード" aria-label="管理パスワード" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64">${btn('解除','unlockCards','btn primary','',!ui.sdk||ui.adminBusy)}</div>`}
+    </div>
+    ${ui.adminUnlocked&&existingDraft(CARD_DRAFT_KEY)?`<div class="sv-draft-reminder">編集中のカードがあります ${btn('再開','resumeCardDraft','btn sm primary')}${btn('破棄','discardCardDraft','btn sm ghost')}</div>`:''}
+    ${btn('＋ カードを作成','newCard','btn primary wide','',!ui.adminUnlocked)}
     <input id="cardSearch" class="input mt8" value="${esc(ui.cardManageQuery)}" placeholder="カード名を検索" autocomplete="off">
     <div class="form-duo mt8"><select id="cardManageType" class="input" aria-label="カードの種類">${selectOptions({all:'すべての種類',monster:'モンスター',spell:'魔法',trap:'罠'},ui.cardManageType)}</select>
     <select id="cardManageRarity" class="input" aria-label="レアリティ">${selectOptions({all:'すべてのレアリティ',...RARITIES},ui.cardManageRarity)}</select></div>
     <div class="sv-list-caption"><span id="cardManageCount"></span><span>編集するカードを選択</span></div>
     <div class="card-manage-list">${CARDS.map(c=>{
-       const canEdit=!ui.customCards[c.id]||ui.customCards[c.id].owner===(ui.uid||'local');
+       const canEdit=ui.adminUnlocked;
        return `<div class="card-manage-item" data-cardname="${esc(c.name)}" data-cardsearch="${esc(c.name.toLocaleLowerCase('ja'))}" data-cardtype="${esc(c.type)}" data-rarity="${esc(c.rarity||'N')}">
          ${cardThumb(c)}
          <div class="grow"><b>${esc(c.name)}</b><div class="tiny muted"><span class="rarity-label rarity-text-${esc(c.rarity||'N')}">${esc(c.rarity||'N')}</span> ${esc(suffix(c))}</div></div>
@@ -475,7 +479,7 @@ function editorModal(){
   const d=ui.cardDraft;
   const isMonster=d.type==='monster';
   const custom=!!ui.customCards[d.id];
-  const editable=(!custom||ui.customCards[d.id]?.owner===(ui.uid||'local'));
+  const editable=ui.adminUnlocked;
   return `<div class="modal" role="dialog" aria-modal="true" aria-label="カードを編集"><div class="modal-box card-manager">
     <div class="modal-title-line"><h2>${ORIGINAL_IDS.has(d.id)?'カードを編集':custom?'カードを編集':'カードを作成'}</h2>${btn('×','cardList','btn sm square')}</div>
     <p class="tiny muted sv-autosave-note">入力内容は下書きとして自動保存されます</p>
@@ -554,6 +558,7 @@ function readCardForm(){
   saveCardDraft();
 }
 async function saveCardFromForm(){
+  if(!ui.adminUnlocked||!ui.sdk||!ui.uid)return toast('管理パスワードを解除し、オンラインで保存してください');
   if(ui.cardBusy)return;
   readCardForm();
   const d={...ui.cardDraft,owner:ui.customCards[ui.cardDraft.id]?.owner||ui.uid||'local'};
@@ -562,24 +567,18 @@ async function saveCardFromForm(){
   if(!isSafeCustomCard(d))return toast('名前・攻守・効果・画像サイズを確認してください');
   ui.cardBusy=true;
   try{
-    if(ui.sdk)await ui.sdk.set(ui.sdk.ref(ui.db,`cardLibrary/cards/${d.id}`),d);
-    else{
-      ui.customCards[d.id]=d;
-      lastCardLibraryJSON=JSON.stringify(ui.customCards);
-      storage.setItem('duel-custom-cards',lastCardLibraryJSON);
-      replaceCustomCards(ui.customCards);
-    }
-    clearCardDraft();ui.cardDraft=null;render();toast(ui.sdk?'共有カードを保存しました':'このiPhoneに保存しました（共有にはFirebaseが必要）');
+    await ui.sdk.set(ui.sdk.ref(ui.db,`cardLibrary/cards/${d.id}`),d);
+    clearCardDraft();ui.cardDraft=null;render();toast('共有カードを保存しました');
   }catch(e){toast('保存に失敗しました：'+e.message);}
   finally{ui.cardBusy=false;}
 }
 async function deleteCard(){
+  if(!ui.adminUnlocked||!ui.sdk||!ui.uid)return toast('管理パスワードを解除し、オンラインで削除してください');
   const id=ui.cardDraft?.id;
   if(!ui.customCards[id])return;
   if(!confirm(ORIGINAL_IDS.has(id)?'カードを初期状態に戻しますか？':'このカードを削除しますか？ デッキに入れている場合は組み直しが必要です。'))return;
   try{
-    if(ui.sdk)await ui.sdk.remove(ui.sdk.ref(ui.db,`cardLibrary/cards/${id}`));
-    else{delete ui.customCards[id];replaceCustomCards(ui.customCards);lastCardLibraryJSON=JSON.stringify(ui.customCards);storage.setItem('duel-custom-cards',lastCardLibraryJSON);}
+    await ui.sdk.remove(ui.sdk.ref(ui.db,`cardLibrary/cards/${id}`));
     clearCardDraft();ui.cardDraft=null;render();toast('反映しました');
   }catch(e){toast('削除に失敗しました：'+e.message);}
 }
@@ -1357,12 +1356,33 @@ $('view').addEventListener('click',async e=>{
  if(action==='previewCardFx'&&ui.cardDraft){readCardForm();
    const card=ui.cardDraft;
    Promise.resolve(unlockAudio()).then(()=>playCue({type:card.type==='trap'?'trap':card.type==='spell'?'spell':card.summonKind==='ritual'?'ritual':card.summonKind==='fusion'?'fusion':card.subtype==='effect'?'effect':'summon',cardId:card.id},card,ui.fxSettings));return;}
+ if(action==='unlockCards'){
+   if(ui.adminBusy)return;
+   if(!ui.sdk||!ui.uid)return toast('Firebaseへの接続を確認してください');
+   const password=$('cardAdminPassword')?.value||'';
+   if(!password)return toast('管理パスワードを入力してください');
+   ui.adminBusy=true;
+   try{
+     await ui.sdk.set(ui.sdk.ref(ui.db,`adminSessions/${ui.uid}`),password);
+     ui.adminUnlocked=true;render();toast('編集モードを解除しました');
+   }catch{if($('cardAdminPassword'))$('cardAdminPassword').value='';toast('パスワードが違うか、Firebaseルールが未更新です');}
+   finally{ui.adminBusy=false;}
+   return;
+ }
+ if(action==='lockCards'){
+   if(ui.adminBusy)return;
+   ui.adminUnlocked=false;ui.adminBusy=true;ui.cardDraft=null;clearCardDraft();render();
+   try{if(ui.sdk&&ui.uid)await ui.sdk.remove(ui.sdk.ref(ui.db,`adminSessions/${ui.uid}`));}
+   catch{toast('ロック状態の同期に失敗しました。再度開いて確認してください');}
+   finally{ui.adminBusy=false;}
+   return;
+ }
  if(action==='openCards'){readHomeValues();ui.cardsOpen=true;ui.cardDraft=null;render();return;}
  if(action==='closeCards'){ui.cardsOpen=false;ui.cardDraft=null;render();return;}
- if(action==='resumeCardDraft'){ui.cardDraft=existingDraft(CARD_DRAFT_KEY);render();return;}
+ if(action==='resumeCardDraft'){if(!ui.adminUnlocked)return toast('管理パスワードを入力してください');ui.cardDraft=existingDraft(CARD_DRAFT_KEY);render();return;}
  if(action==='discardCardDraft'){clearCardDraft();render();return;}
- if(action==='newCard'){ui.cardDraft=newCardDraft();saveCardDraft();render();return;}
- if(action==='editCard'){ui.cardDraft={...CARD[el.dataset.id],subtype:CARD[el.dataset.id]?.type==='monster'?(CARD[el.dataset.id]?.subtype||'normal'):undefined,monsterEffect:CARD[el.dataset.id]?.monsterEffect?{...CARD[el.dataset.id].monsterEffect}:undefined};saveCardDraft();render();return;}
+ if(action==='newCard'){if(!ui.adminUnlocked)return toast('管理パスワードを入力してください');ui.cardDraft=newCardDraft();saveCardDraft();render();return;}
+ if(action==='editCard'){if(!ui.adminUnlocked)return toast('管理パスワードを入力してください');ui.cardDraft={...CARD[el.dataset.id],subtype:CARD[el.dataset.id]?.type==='monster'?(CARD[el.dataset.id]?.subtype||'normal'):undefined,monsterEffect:CARD[el.dataset.id]?.monsterEffect?{...CARD[el.dataset.id].monsterEffect}:undefined};saveCardDraft();render();return;}
  if(action==='cardList'){ui.cardDraft=null;render();return;}
  if(action==='saveCard')return saveCardFromForm();
  if(action==='deleteCard')return deleteCard();

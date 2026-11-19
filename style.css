@@ -611,3 +611,10 @@ body{
 .slot.sv-target-eligible{border-color:#92dada!important;outline:1px solid #92dada88;cursor:pointer}
 .slot.sv-target-picked{border-color:#f5d38b!important;outline:3px solid #f5d38b;box-shadow:0 0 14px #f5d38b66}
 .slot.sv-target-empty{border:2px dashed #79ecb4!important;box-shadow:inset 0 0 15px #79ecb420;cursor:pointer}
+
+/* v1.9.3: shared card manager password gate */
+.sv-card-admin{padding:10px 12px;margin:0 0 12px;border:1px solid #b6a16a65;border-radius:12px;background:linear-gradient(120deg,#16243a,#0c1d2d)}
+.sv-admin-login{align-items:stretch;gap:8px}
+.sv-admin-login .input{min-width:0;flex:1 1 auto}
+.sv-admin-login .btn{flex:0 0 auto}
+.sv-admin-status{font-weight:800;font-size:13px;color:#ebcc88}
