@@ -1,4 +1,4 @@
-import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind} from './cards.js?v=196';
+import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind} from './cards.js?v=1919';
 import {normalizeRuleSettings} from './rules.js?v=196';
 
 export const PHASES = {draw:'ドロー',main1:'メイン1',battle:'バトル',main2:'メイン2',end:'エンド'};
@@ -246,6 +246,14 @@ function abilityTargetCheck(s,seat,ab,target,sourceIndex){
   assert(Number.isInteger(target)&&target>=0&&target<5&&s.players[side][zone][target],
     zone==='monsters'?'対象モンスターを選んでください':'対象の魔法・罠を選んでください');
  }
+ if(ab.target==='eitherGraveMonster'){
+  assert(s.players[seat].monsters.some(m=>m===null),'自分のモンスターゾーンに空きがありません');
+  assert(target&&typeof target==='object'&&!Array.isArray(target)&&
+    (target.seat===0||target.seat===1)&&Number.isInteger(target.index)&&
+    typeof target.cardId==='string','蘇生する墓地のモンスターを指定してください');
+  const targetId=s.players[target.seat].grave[target.index];
+  assert(typeof target.cardId==='string'&&targetId===target.cardId&&CARD[targetId]?.type==='monster','墓地の対象を確認してください');
+ }
  if(ab.target==='attacker')assert(s.pending?.kind==='attack'||s.pending?.afterAttack,'攻撃中のみ選べます');
 }
 function abilityMonsterRefs(s,seat,target,index,chain){
@@ -366,6 +374,21 @@ function executeAbility(s,entry,chain){
   }
   case 'banishedRecover':{for(const id of player.banished.splice(Math.max(0,player.banished.length-qty),qty))
     (summonKind(CARD[id])==='fusion'?player.extraDeck:player.hand).push(id);break;}
+  case 'reviveSelected':{
+   // Unlike the existing auto-revive, this precisely selects either player's public grave.
+   // Index+cardId prevents a stale chain target from reviving a different card.
+   const target=entry.target;
+   if(!target||![0,1].includes(target.seat)||!Number.isInteger(target.index))break;
+   const grave=s.players[target.seat]?.grave;
+   const slot=p.monsters.indexOf(null);
+   if(slot<0||!grave||grave[target.index]!==target.cardId||CARD[target.cardId]?.type!=='monster'){
+     log(s,`「${card.name}」の蘇生対象が移動したか、モンスターゾーンが満杯のため不発になりました。`);break;
+   }
+   const [id]=grave.splice(target.index,1);
+   p.monsters[slot]={key:++s.nextKey,id,ownerSeat:target.seat,pos:'atk',bornTurn:s.turnNo,attacked:true,changedTurn:s.turnNo,bonus:0};
+   log(s,`${p.name} は「${CARD[id].name}」を墓地から特殊召喚しました。`);
+   break;
+  }
   case 'graveRevive':{
    for(let i=0;i<qty;i++){
     const slot=player.monsters.indexOf(null);
@@ -649,7 +672,7 @@ export function applyAction(current,actorUid,action) {
    log(restored,'双方の同意により直前の操作を取り消しました。');return restored;
   }
   // Store only a public, non-sensitive cue for audiovisual sync.
-  let cueType=null, cueCard=null;
+  let cueType=null, cueCard=null, cueActor=seat, cueSlot=null, cueTarget=null, cueTargetSeat=null;
   switch(a.type){
     case 'summon':cueType=a.faceDown?'set':'summon';cueCard=p.hand[a.hand];break;
     case 'ritualSummon':cueType='ritual';cueCard=p.hand[a.ritualHand];break;
@@ -763,6 +786,8 @@ export function applyAction(current,actorUid,action) {
     }
     case 'passAttack': {
       assert(s.pending?.kind==='attack'&&s.pending.by!==seat,'対応できる攻撃がありません');
+      cueType='impact';cueActor=s.pending.by;cueCard=s.players[cueActor].monsters[s.pending.attacker]?.id||null;
+      cueSlot=s.pending.attacker;cueTarget=s.pending.target===null?-1:s.pending.target;cueTargetSeat=1-cueActor;
       log(s,`${p.name} はカードを発動しませんでした。`);resolveAttack(s);break;
     }
     case 'activateTrap': {
@@ -780,8 +805,16 @@ export function applyAction(current,actorUid,action) {
     case 'chainPass': {
       const ch=s.pending;assert(ch?.kind==='chain'&&ch.priority===seat,'あなたの応答順ではありません');
       ch.passes++;ch.priority=1-seat;
-      if(ch.passes>=2)finishChain(s);
-      else log(s,`${p.name} はチェーンを追加しませんでした。`);
+      if(ch.passes>=2){
+        // Playback happens only after resolution succeeds, not at spell activation.
+        const possible=ch.stack.filter(e=>CARD[e.cardId]?.ability?.operation==='reviveSelected');
+        finishChain(s);
+        for(const e of possible){
+          const old=s.players[e.seat]?.monsters||[],previous=before.players[e.seat]?.monsters||[];
+          const slot=old.findIndex((m,i)=>m&&(!previous[i]||previous[i].key!==m.key)&&m.id===e.target?.cardId);
+          if(slot>=0){cueType='revive';cueActor=e.seat;cueCard=old[slot].id;cueSlot=slot;}
+        }
+      }else log(s,`${p.name} はチェーンを追加しませんでした。`);
       break;
     }
     case 'chainTrap': {
@@ -859,7 +892,9 @@ export function applyAction(current,actorUid,action) {
     s.lastEvent={id:s.revision,type:'draw',cardId:null,actor:s.turn,damage:0};
   }else if(cueType){
     const damage=lpBefore.reduce((v,old,i)=>v+Math.max(0,old-s.players[i].lp),0);
-    s.lastEvent={id:s.revision,type:cueType,cardId:cueCard||null,actor:seat,damage};
+    s.lastEvent={id:s.revision,type:cueType,cardId:cueType==='set'?null:(cueCard||null),actor:cueActor,damage,
+      ...(cueType==='revive'||cueType==='impact'?{slot:cueSlot}:{}),
+      ...(cueType==='impact'?{target:cueTarget,targetSeat:cueTargetSeat}:{})};
   }
   return s;
 }

@@ -1,13 +1,14 @@
 import {makeRoomCode,normalizeRoomCode,isRoomCode} from './room-code.js?v=1911';
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=196';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS} from './cards.js?v=1919';
 import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=196';
 import {makeBackup,parseBackup,applyBackup} from './backup.js?v=196';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef} from './engine.js?v=1913';
-import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,abilityTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=196';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef} from './engine.js?v=1919';
+import {LIMITS,cardLimit,cardCost,deckCost,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,abilityTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=1919';
 import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=1913';
 import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=1910';
 import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=1910';
-import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=196';
+import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=1922';
+import {playBoardCue,clearBoardCue} from './board-effects.js?v=1923';
 
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -73,6 +74,7 @@ const effectTarget=id=>{
  return 'none';
 };
 const manualTarget=t=>['ownMonster','enemyMonster','ownBackrow','enemyBackrow'].includes(t);
+const isGraveRevive=id=>CARD[id]?.ability?.operation==='reviveSelected'&&CARD[id]?.ability?.target==='eitherGraveMonster';
 const effectNeedsTarget=id=>manualTarget(effectTarget(id));
 const targetSpot=t=>({owner:t.startsWith('enemy')?'opponent':'mine',zone:t.endsWith('Backrow')?'backrow':'monsters'});
 const cardTypeName=c=>c.type==='monster'?(summonKind(c)!=='normal'?SUMMON_KINDS[summonKind(c)]:'通常')+(c.subtype==='effect'?'・効果モンスター':'モンスター'):c.type==='spell'?SPELL_KINDS[spellKind(c)]:'罠';
@@ -100,23 +102,33 @@ function onlineReady(){
 // Existing 8-character rooms remain joinable until they are closed.
 const makeCode=()=>makeRoomCode();
 function btn(label,action,cls='btn',data='',disabled=false){return `<button type="button" class="${cls}" data-action="${action}" ${data} ${disabled?'disabled':''}>${label}</button>`;}
+const cardMarkupCache=new WeakMap();
 function cardHtml(id,{hidden=false,def=false,card:previewCard=null}={}){
   if(hidden)return '<div class="card back" aria-label="裏側のカード"><div class="back-emblem">✦</div></div>';
   const c=previewCard||CARD[id];if(!c)return '<div class="card back"><div class="back-emblem">✦</div></div>';
+  // WeakMap invalidates automatically when the shared card library replaces its objects.
+  // Exclude base64 artwork to avoid retaining a second large copy of every uploaded image.
+  const cacheable=!previewCard&&!c.image,cacheKey=def?'defense':'face';
+  const oldMarkup=cacheable?cardMarkupCache.get(c)?.[cacheKey]:null;
+  if(oldMarkup)return oldMarkup;
   const face=c.type==='monster'?(summonKind(c)!=='normal'?summonKind(c)+'-monster':c.subtype==='effect'?'effect-monster':'normal-monster'):c.type;
   const rarity=Object.hasOwn(RARITIES,c.rarity)?c.rarity:'N';
+  const category=c.type==='monster'?'MONSTER':c.type==='spell'?'SPELL':'TRAP';
+  const categoryLabel=cardTypeName(c);
   const art=c.image?.startsWith('data:image/jpeg;base64,')||c.image?.startsWith('data:image/webp;base64,')
     ?`<img class="card-art-image" src="${esc(c.image)}" alt="${esc(c.name)}" loading="lazy">`
     :`<div class="card-emoji" aria-hidden="true">${esc(c.emoji||'✦')}</div>`;
   const detail=effectText(c)||c.desc||'';
-  return `<div class="card ${esc(face)} rarity-${rarity} ${def?'defense':''}">
-    <div class="card-head"><div class="card-name">${esc(c.name)}</div><span class="card-symbol">${c.type==='monster'?'✹':c.type==='spell'?'✦':'✧'}</span></div>
+  const markup=`<div class="card ${esc(face)} rarity-${rarity} ${def?'defense':''}" data-card-kind="${category}" aria-label="${esc(c.name)} ${esc(categoryLabel)}">
+    <div class="card-head"><div class="card-name">${esc(c.name)}</div><span class="card-symbol" aria-hidden="true">${c.type==='monster'?'✹':c.type==='spell'?'✦':'✧'}</span></div>
     <span class="card-rarity">${rarity}</span>
-    <div class="card-stars">${c.type==='monster'?'★'.repeat(Math.max(1,Math.min(c.level,12))):c.type==='spell'?'SPELL':'TRAP'}</div>
-    <div class="card-art">${art}</div>
-    <div class="card-lore"><b>${esc(cardTypeName(c))}</b><span>${esc(detail)}</span></div>
-    <div class="card-info">${c.type==='monster'?`ATK/${Number(c.atk)} DEF/${Number(c.def)}`:'SAHOVERSE'}</div>
+    <div class="card-stars" aria-label="${c.type==='monster'?'レベル '+Number(c.level):categoryLabel}">${c.type==='monster'?'★'.repeat(Math.max(1,Math.min(Number(c.level)||1,12))):category}</div>
+    <div class="card-art">${art}<span class="sv-art-corner" aria-hidden="true"></span></div>
+    <div class="card-lore"><b>${esc(categoryLabel)}</b><span>${esc(detail)}</span></div>
+    <div class="card-info">${c.type==='monster'?`<span><span class="sv-stat-label">ATK</span><strong>${Number(c.atk)}</strong></span><span><span class="sv-stat-label">DEF</span><strong>${Number(c.def)}</strong></span>`:`<span>${category}</span><span>SAHOVERSE</span>`}</div>
   </div>`;
+  if(cacheable){const cache=cardMarkupCache.get(c)||{};cache[cacheKey]=markup;cardMarkupCache.set(c,cache);}
+  return markup;
 }
 
 /** Compact image preview: avoids building a full card DOM for every row. */
@@ -303,7 +315,7 @@ function showPendingDraw(room){
   const event=ui.pendingDrawEvent;
   if(event?.actor===ui.seat&&revealDrawnCard(room,event))ui.pendingDrawEvent=null;
 }
-function announceCue(event,room){
+function announceCue(event,room,previousRoom=null){
   if(!event||!document.getElementById('fx-overlay'))return;
   if(event.type==='draw'){
     ui.pendingDrawEvent=event;
@@ -312,11 +324,12 @@ function announceCue(event,room){
   }
   // Win/loss display is local to the viewer; no private information is written to Firebase.
   playCue({...event,winner:room?.winner,viewerSeat:ui.seat},CARD[event.cardId],ui.fxSettings);
+  playBoardCue(event,room,ui.seat,ui.fxSettings,previousRoom);
 }
-function handleRoomCue(room){
+function handleRoomCue(room,previousRoom=null){
   const ev=room?.lastEvent;
   if(ui.lastFxRevision===null){ui.lastFxRevision=ev?.id??room?.revision??0;if(ev?.type==='draw'&&ev.actor===ui.seat)announceCue(ev,room);return;}
-  if(ev&&ev.id>ui.lastFxRevision){ui.lastFxRevision=ev.id;ui.pendingDrawEvent=null;announceCue(ev,room);}
+  if(ev&&ev.id>ui.lastFxRevision){ui.lastFxRevision=ev.id;ui.pendingDrawEvent=null;announceCue(ev,room,previousRoom);}
 }
 function deckPool(){return ui.sealedOnly?ui.sealedSession?.pool||{}:ui.packs.collection;}
 function storeSealed(){if(ui.sealedSession)storage.setItem(SEALED_STORAGE_KEY,JSON.stringify(ui.sealedSession));else storage.removeItem(SEALED_STORAGE_KEY);}
@@ -396,14 +409,21 @@ function deckModal(){
   </div></div>`;
 }
 function deckCountType(counts,type){return Object.entries(counts).reduce((n,[id,count])=>n+(CARD[id]?.type===type?count:0),0);}
+function cardDetailContent(c){
+ const text=effectText(c)||c.desc||'効果なし';
+ const detailFacts=c.type==='monster'
+   ?`<div class="sv-detail-stats"><div><span>LEVEL</span><b>★ ${Number(c.level)||0}</b></div><div><span>ATK</span><b>${Number(c.atk)||0}</b></div><div><span>DEF</span><b>${Number(c.def)||0}</b></div></div>`
+   :`<div class="sv-detail-stats sv-detail-spell"><div><span>CATEGORY</span><b>${esc(cardTypeName(c))}</b></div><div><span>RARITY</span><b>${esc(c.rarity||'N')}</b></div></div>`;
+ return `<div class="sv-detail-layout"><div class="gallery-detail-card card-demo">${cardHtml(c.id)}</div>
+  <div class="sv-detail-information"><div class="sv-detail-overline">${esc(cardTypeName(c))} ・ ${esc(RARITIES[c.rarity]||'ノーマル')}</div>
+  <h3>${esc(c.name)}</h3>${detailFacts}<div class="sv-detail-copy"><div class="sv-detail-copy-label">${c.type==='monster'?'カードテキスト':'効果・説明'}</div><p>${esc(text)}</p></div>
+  <div class="sv-detail-foot">コスト ${cardCost(c)}　・　枚数制限 ${esc(LIMITS[c.limit||'unlimited']?.label||'無制限')}</div></div></div>`;
+}
 function galleryModal(){
   if(ui.gallerySelected){const c=CARD[ui.gallerySelected];if(!c)ui.gallerySelected=null;
-    else return `<div class="modal" role="dialog" aria-modal="true" aria-label="カードの詳細"><div class="modal-box gallery-dialog">
+    else return `<div class="modal sv-detail-modal" role="dialog" aria-modal="true" aria-label="${esc(c.name)} の詳細"><div class="modal-box gallery-dialog sv-detail-dialog">
     <div class="modal-title-line"><h2>カード詳細</h2>${btn('×','galleryBack','btn sm square')}</div>
-    <div class="gallery-detail-card card-demo">${cardHtml(c.id)}</div>
-    <h3>${esc(c.name)} <span class="rarity-label rarity-text-${esc(c.rarity||'N')}">${esc(c.rarity||'N')}・${esc(RARITIES[c.rarity]||'ノーマル')}</span></h3>
-    <p class="small">${esc(suffix(c))}</p><p class="small muted">${esc(effectText(c)||c.desc||'効果なし')}</p>
-    ${btn('一覧に戻る','galleryBack','btn primary wide')}</div></div>`;}
+    ${cardDetailContent(c)}${btn('一覧に戻る','galleryBack','btn primary wide sv-detail-close')}</div></div>`;}
   return `<div class="modal" role="dialog" aria-modal="true" aria-label="カード図鑑"><div class="modal-box gallery-dialog">
     <div class="modal-title-line"><h2>◈ カード図鑑 <span class="tiny muted">${CARDS.length}種類</span></h2>${btn('×','closeGallery','btn sm square')}</div>
     <div class="form-duo"><div><label for="galleryType" class="field-label">カード種類</label><select id="galleryType" class="input"><option value="all">すべて</option>${['monster','spell','trap'].map(t=>`<option value="${t}" ${ui.galleryFilterType===t?'selected':''}>${t==='monster'?'モンスター':t==='spell'?'魔法':'罠'}</option>`).join('')}</select></div>
@@ -430,9 +450,20 @@ function shareImportModal(){
 const selectOptions=(choices,selected)=>Object.entries(choices).map(([value,label])=>`<option value="${esc(value)}" ${value===selected?'selected':''}>${esc(label)}</option>`).join('');
 const MAGIC_EFFECTS={draw2:'カードを2枚ドロー',heal1000:'LPを1000回復',destroy:'相手モンスター1体を破壊',boost500:'自分モンスター1体のATK＋500',burn800:'相手に800ダメージ'};
 const TRAP_EFFECTS={negate:'攻撃を無効化',counterdestroy:'攻撃したモンスターを破壊',counterburn:'攻撃無効＋700ダメージ'};
-const availableOperations=when=>Object.fromEntries(Object.entries(OPERATIONS).filter(([op])=>
-  when==='continuous'?['boost','weaken','boostDef','weakenDef'].includes(op):
-  when==='attack'?op!=='negateEffect':when==='response'?op!=='negateAttack':!['negateAttack','negateEffect'].includes(op)));
+// All abilities are configured in the ordinary card editor. For normal spells,
+// show the graveyard-choice operation early without adding a separate creation path.
+const availableOperations=(when,card=null)=>{
+ const ordinarySpell=card?.type==='spell'&&spellKind(card)==='normal'&&when==='main';
+ const options=Object.entries(OPERATIONS).filter(([op])=>
+   op==='reviveSelected'&&!ordinarySpell?false:
+   when==='continuous'?['boost','weaken','boostDef','weakenDef'].includes(op):
+   when==='attack'?op!=='negateEffect':when==='response'?op!=='negateAttack':!['negateAttack','negateEffect'].includes(op));
+ if(ordinarySpell){
+   const index=options.findIndex(([op])=>op==='reviveSelected');
+   if(index>0)options.splice(1,0,...options.splice(index,1));
+ }
+ return Object.fromEntries(options);
+};
 function draftEffectFields(d){
  const isEffect=d.type!=='monster'||d.subtype==='effect';if(!isEffect)return '';
  const mode=d.ability?'builder':'preset';
@@ -441,7 +472,7 @@ function draftEffectFields(d){
    kind==='equip'?{continuous:TRIGGERS.continuous}:persistentSpell(d)?{main:TRIGGERS.main,continuous:TRIGGERS.continuous}:{main:TRIGGERS.main}):
    {main:TRIGGERS.main,summon:TRIGGERS.summon,continuous:TRIGGERS.continuous};
  const when=whenChoices[d.ability?.when]?d.ability.when:Object.keys(whenChoices)[0];
- const operations=availableOperations(when);
+ const operations=availableOperations(when,d);
  const op=operations[d.ability?.operation]?d.ability.operation:Object.keys(operations)[0];
  const targetsAllowed=abilityTargets(op,when,d.type,kind);
  const targets=Object.fromEntries(targetsAllowed.map(k=>[k,TARGETS[k]]));
@@ -458,7 +489,8 @@ function draftEffectFields(d){
  <div><label class="field-label" for="cardAbilityOperation">処理内容（便利な順）</label><select id="cardAbilityOperation" class="input">${selectOptions(operations,op)}</select></div></div>
  <div class="form-duo"><div><label class="field-label" for="cardAbilityTarget">効果を受ける対象</label><select id="cardAbilityTarget" class="input">${selectOptions(targets,target)}</select></div>
  <div><label class="field-label" for="cardAbilityAmount">${numeric?'数値・枚数（直接入力）':'数値（指定不要）'}</label><input id="cardAbilityAmount" class="input" type="number" inputmode="numeric" step="1" min="${numeric?meta.min:0}" max="${numeric?meta.max:0}" value="${amount}" ${numeric?'':'disabled'}></div></div>
- <p class="small muted mt8 sv-effect-preview">${esc(abilityText({when,operation:op,target,amount}))}</p>
+ <p class="small muted mt8 sv-effect-preview" aria-live="polite">${esc(abilityText({when,operation:op,target,amount}))}</p>
+ ${op==='reviveSelected'?'<div class="sv-operation-help">発動時に自分・相手の墓地からモンスターを1体選びます。自分のモンスターゾーンに空きが必要です。</div>':''}
  <p class="tiny muted">整数を直接入力。自分へのダメージ・相手の回復も可能です。通常の攻守変化はターン終了で戻り、永続効果は継続します。対象がいない効果は不発です。</p>`:
  `<div class="form-duo">${d.type==='monster'?`<div><label class="field-label" for="cardEffectKind">効果タイプ</label><select class="input" id="cardEffectKind">${selectOptions({continuous:'永続',ignition:'起動',trigger:'召喚時'},d.monsterEffect?.kind||'ignition')}</select></div>`:''}
  <div><label class="field-label" for="cardEffectCode">効果</label><select class="input" id="cardEffectCode">${selectOptions(d.type==='monster'?MONSTER_EFFECTS[d.monsterEffect?.kind||'ignition']:d.type==='spell'?MAGIC_EFFECTS:TRAP_EFFECTS,d.type==='monster'?d.monsterEffect?.code:d.effect)}</select></div></div>`}
@@ -502,9 +534,9 @@ function packModal(){const st=ui.packs;
  </div></div>`;
 }
 function detailOverlay(){const c=CARD[ui.previewCardId];if(!c)return '';
- return `<div class="modal modal-detail" role="dialog" aria-modal="true"><div class="modal-box gallery-dialog"><div class="modal-title-line"><h2>カード詳細</h2>${btn('×','closePreview','btn sm square')}</div>
- <div class="gallery-detail-card card-demo">${cardHtml(c.id)}</div><h3>${esc(c.name)} <span class="rarity-label">${esc(c.rarity||'N')}</span></h3>
- <p>${esc(suffix(c))} ・ コスト ${cardCost(c)}</p><p class="small muted">${esc(effectText(c)||c.desc||'効果なし')}</p><p class="small muted">枚数制限：${esc(LIMITS[c.limit||'unlimited'].label)}</p>${btn('閉じる','closePreview','btn primary wide')}</div></div>`;
+ return `<div class="modal modal-detail sv-detail-modal" role="dialog" aria-modal="true" aria-label="${esc(c.name)} の詳細"><div class="modal-box gallery-dialog sv-detail-dialog">
+ <div class="modal-title-line"><h2>カード詳細</h2>${btn('×','closePreview','btn sm square')}</div>
+ ${cardDetailContent(c)}${btn('閉じる','closePreview','btn primary wide sv-detail-close')}</div></div>`;
 }
 function appearanceApply(){const a=$('app');if(a){a.dataset.mat=ui.appearance.mat;a.dataset.back=ui.appearance.back;}}
 function persistAppearance(){storage.setItem('duel-appearance-v5',JSON.stringify(ui.appearance));appearanceApply();}
@@ -612,7 +644,7 @@ function readCardForm(){
   if(d.type==='spell'&&['ritual','fusion'].includes(spellKind(d))){delete d.ability;}
   else if((d.type!=='monster'||d.subtype==='effect')&&(mode==='builder'||d.type==='spell'&&spellKind(d)==='equip')){
     const when=value('cardAbilityWhen',d.ability?.when|| (d.type==='trap'?'attack':'main'));
-    const allowed=availableOperations(when);
+    const allowed=availableOperations(when,d);
     const previous=d.ability?.operation;
     const chosen=value('cardAbilityOperation',previous||'draw');
     const operation=Object.hasOwn(allowed,chosen)?chosen:Object.hasOwn(allowed,previous)?previous:Object.keys(allowed)[0];
@@ -623,6 +655,8 @@ function readCardForm(){
     // Preserve an invalid input until the user fixes it; validation rejects it at save time.
     d.ability={when,operation,target:choices.includes(target)?target:choices[0],amount:meta.min===undefined?0:val};
   }else delete d.ability;
+  // This special spell has no unrelated legacy draw effect.
+  if(d.type==='spell'&&d.ability?.operation==='reviveSelected')delete d.effect;
   saveCardDraft();
 }
 async function saveCardFromForm(){
@@ -672,6 +706,62 @@ async function compressCardImage(file){
   }finally{URL.revokeObjectURL(url);}
 }
 
+/** Candidate highlighting is presentation-only: the engine still validates every action. */
+function targetFlags(owner,zone,index,item){
+ const m=ui.targetMode;
+ if(!m||zone==='field'||zone==='hand')return {eligible:false,picked:false,empty:false};
+ const occupied=!!item;
+ if(m.type==='tribute'){
+   const eligible=owner==='mine'&&zone==='monsters'&&occupied;
+   return {eligible,picked:eligible&&m.indices.includes(index),empty:false};
+ }
+ if(m.type==='move'){
+   const eligible=owner==='mine'&&zone===m.zone&&!occupied;
+   return {eligible,picked:false,empty:eligible};
+ }
+ if(m.type==='attack')return {eligible:owner==='opponent'&&zone==='monsters'&&occupied,picked:false,empty:false};
+ if(['spell','quick','monsterEffect','chainTrap'].includes(m.type)){
+   const id=m.id||(m.type==='monsterEffect'?activePlayer()?.monsters[m.index]?.id:
+     m.type==='chainTrap'?activePlayer()?.backrow[m.index]?.id:null);
+   const spot=targetSpot(effectTarget(id));
+   return {eligible:owner===spot.owner&&zone===spot.zone&&occupied,picked:false,empty:false};
+ }
+ return {eligible:false,picked:false,empty:false};
+}
+function slotBaseLabel(owner,zone,index,occupied){
+ return `${owner==='mine'?'自分':'相手'}の${zone==='monsters'?'モンスター':'魔法・罠'}ゾーン${index+1}${occupied?' カードあり':' 空き'}`;
+}
+/** Target-mode UI refresh does not rebuild 22 board slots or the entire hand. */
+function refreshDuelTarget(){
+ const view=$('view');
+ if(!view?.classList.contains('duel-active')||!ui.game||!view.querySelector('.sv-target-banner')){render();return;}
+ view.classList.toggle('sv-is-targeting',!!ui.targetMode&&ui.targetMode.type!=='revive');
+ view.querySelector('.sv-target-banner').innerHTML=renderTargetHint();
+ for(const node of view.querySelectorAll('.battlefield .slot[data-select]')){
+   const owner=node.dataset.owner,zone=node.dataset.zone,index=Number(node.dataset.index);
+   const player=ui.game.players[owner==='mine'?ui.seat:1-ui.seat];
+   const item=zone==='field'?player?.field:player?.[zone]?.[index];
+   const f=targetFlags(owner,zone,index,item);
+   node.classList.toggle('sv-target-eligible',f.eligible&&!f.empty);
+   node.classList.toggle('sv-target-empty',f.empty);
+   node.classList.toggle('sv-target-picked',f.picked);
+   node.classList.remove('selected');node.setAttribute('aria-pressed','false');
+   if(!node.dataset.baseLabel)node.dataset.baseLabel=node.getAttribute('aria-label')||'';
+   node.setAttribute('aria-label',node.dataset.baseLabel+(f.picked?'、リリース対象に選択済み':f.eligible?'、対象として選択できます':''));
+ }
+ for(const node of view.querySelectorAll('.hand-slot.selected')){node.classList.remove('selected');node.setAttribute('aria-pressed','false');}
+ view.querySelector('.duel-card-actions')?.remove();
+}
+/** Bring the target guide into view on a phone; no game-state writes. */
+function startTargetMode(mode){
+ ui.targetMode=mode;ui.selected=null;
+ if(mode.type==='revive'){render();return;}
+ refreshDuelTarget();
+ requestAnimationFrame(()=>{
+   const banner=$('view')?.querySelector('.sv-target-banner .sv-target-choice');
+   if(banner&&ui.targetMode===mode)banner.scrollIntoView({block:'start',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+ });
+}
 function slotHtml(player,owner,zone,i){
   const item=player?.[zone]?.[i]||null;
   const hide=owner==='opponent'&&((zone==='backrow'&&item?.faceDown)||item?.pos==='set');
@@ -682,30 +772,26 @@ function slotHtml(player,owner,zone,i){
     const seat=owner==='mine'?ui.seat:1-ui.seat;const attack=effectiveAtk(item,ui.game,seat);const defense=effectiveDef(item,ui.game,seat);
     marker=`<span class="slot-tag">${item.pos==='atk'?'攻'+attack:item.pos==='set'?'裏守':'守'+defense}</span>`;
   }
-  const eligible=ui.targetMode?.type==='tribute'&&owner==='mine'&&zone==='monsters'&&occupied;
-  const picked=eligible&&ui.targetMode.indices.includes(i);
-  const emptyTarget=ui.targetMode?.type==='move'&&owner==='mine'&&zone===ui.targetMode.zone&&!occupied;
-  const targetId=ui.targetMode?.id|| (ui.targetMode?.type==='monsterEffect'?activePlayer()?.monsters[ui.targetMode.index]?.id:
-   ui.targetMode?.type==='chainTrap'?activePlayer()?.backrow[ui.targetMode.index]?.id:null);
-  const spot=targetSpot(effectTarget(targetId));
-  const effectEligible=ui.targetMode&&['spell','quick','monsterEffect','chainTrap'].includes(ui.targetMode.type)&&
-   owner===spot.owner&&zone===spot.zone&&occupied;
-  return `<button type="button" aria-label="${owner==='mine'?'自分':'相手'}の${zone==='monsters'?'モンスター':'魔法・罠'}ゾーン${i+1}${occupied?' カードあり':' 空き'}" class="slot ${occupied?'':'empty'} ${selected?'selected':''} ${eligible||effectEligible?'sv-target-eligible':''} ${picked?'sv-target-picked':''} ${emptyTarget?'sv-target-empty':''}" data-select="1" data-owner="${owner}" data-zone="${zone}" data-index="${i}">
+  const target=targetFlags(owner,zone,i,item);
+  const {eligible,picked,empty:emptyTarget}=target;
+  const baseLabel=slotBaseLabel(owner,zone,i,occupied);
+  const describedLabel=baseLabel+(picked?'、リリース対象に選択済み':eligible?'、対象として選択できます':'');
+  return `<button type="button" aria-label="${esc(describedLabel)}" class="slot ${occupied?'':'empty'} ${selected?'selected':''} ${eligible&&!emptyTarget?'sv-target-eligible':''} ${picked?'sv-target-picked':''} ${emptyTarget?'sv-target-empty':''}" data-select="1" data-owner="${owner}" data-zone="${zone}" data-index="${i}" aria-pressed="${!!selected}">
   ${occupied?cardHtml(item.id,{hidden:hide,def:item.pos==='def'}):''}${marker}</button>`;
 }
 function fieldSlotHtml(player,owner){
  const item=player?.field,hidden=owner==='opponent'&&item?.faceDown;
  const selected=ui.selected?.owner===owner&&ui.selected?.zone==='field';
- return `<button type="button" class="slot field-slot ${item?'':'empty'} ${selected?'selected':''}" data-select="1" data-owner="${owner}" data-zone="field" data-index="0" aria-label="${owner==='mine'?'自分':'相手'}のフィールド魔法">
- ${item?cardHtml(item.id,{hidden}):'<span class="small muted">フィールド<br>魔法</span>'}</button>`;
+ return `<button type="button" class="slot field-slot ${item?'':'empty'} ${selected?'selected':''}" data-select="1" data-owner="${owner}" data-zone="field" data-index="0" aria-pressed="${!!selected}" aria-label="${owner==='mine'?'自分':'相手'}のフィールド魔法">
+ ${item?cardHtml(item.id,{hidden}):'<span class="sv-empty-field" aria-hidden="true">✦</span>'}</button>`;
 }
 function playerStatus(p,side){
   const isCurrent=ui.game.turn===side;
   const lp=p?.lp??ui.game?.rules?.lp??8000;
-  return `<div class="seat ${side!==ui.seat?'right':''}">
+  return `<div class="seat ${side!==ui.seat?'right':''}" data-seat="${side}">
   <div class="avatar">${side===0?'🔥':'🌊'}</div><div><div class="seat-name">${esc(p?.name||'対戦相手')} ${isCurrent?'<span class="turn-chip">手番</span>':''}</div>
   <div class="lp ${lp<=2000?'danger':''}">${Number(lp).toLocaleString('ja-JP')} <span class="tiny">LP</span></div>
-  <div class="mini-stats">山札 ${p?.deck?.length??ui.rules.deckSize} / 手札 ${p?.hand?.length??0} / 墓地 ${p?.grave?.length??0} / 除外 ${p?.banished?.length??0}</div></div></div>`;
+  <div class="mini-stats">山札 ${p?.deck?.length??ui.rules.deckSize} / 手札 ${p?.hand?.length??0} / <span class="sv-grave-count">墓地 ${p?.grave?.length??0}</span> / 除外 ${p?.banished?.length??0}</div></div></div>`;
 }
 function quickChoices(){
  const s=ui.game,p=activePlayer();if(!s||!p)return [];
@@ -722,34 +808,47 @@ function renderPending(){
     const ch=s.pending,priority=ch.priority===ui.seat;
     const traps=activePlayer().backrow.map((v,i)=>({v,i})).filter(({v})=>v&&v.setTurn<s.turnNo&&CARD[v.id]?.type==='trap'&&
       (CARD[v.id]?.ability?.when==='response'||(ch.afterAttack&&(CARD[v.id]?.ability?.when==='attack'||!CARD[v.id]?.ability))));
-    return `<div class="respond"><strong>🔗 チェーン処理（${ch.stack.length}件）</strong>
-      <div class="small">${ch.stack.map((e,i)=>`${i+1}. ${esc(CARD[e.cardId]?.name||e.cardId)}`).join(' → ')}</div>
-      <p class="small muted">${priority?'あなたの応答順です。罠を追加するかパスしてください。':'相手の応答を待っています。'} 2回連続でパスすると逆順に解決します。</p>
-      ${priority?`<div class="row wrap">${traps.map(({v,i})=>btn(esc(CARD[v.id].name),'chainTrap','btn sm secondary',`data-index="${i}"`)).join('')}${quickChoiceButtons()}
+    // The chain entries have already been activated and are public. Never list a
+    // still-set card that has not entered the chain.
+    const links=ch.stack.map((e,i)=>`<span class="sv-chain-step"><span class="sv-chain-index">${i+1}</span><span>${esc(CARD[e.cardId]?.name||'発動したカード')}</span></span>`).join('');
+    return `<section class="respond sv-response sv-response--chain ${priority?'sv-response--ready':'sv-response--waiting'}" role="region" aria-label="チェーンへの応答">
+      <div class="sv-response-heading"><span class="sv-response-label">CHAIN ${ch.stack.length}</span><strong>${priority?'あなたの応答順です':'相手の応答待ち'}</strong></div>
+      <div class="sv-chain-track" aria-label="カードの発動順">${links}</div>
+      <p class="sv-response-help">${priority?'罠・速攻魔法を追加するか、パスしてください。':'相手がカードの追加またはパスを選択しています。'}<span> 効果は右端から解決します。</span></p>
+      ${priority?`<div class="sv-response-actions row wrap">${traps.map(({v,i})=>btn(esc(CARD[v.id].name),'chainTrap','btn sm secondary',`data-index="${i}"`)).join('')}${quickChoiceButtons()}
       ${btn('チェーンに追加せずパス','chainPass','btn primary sm')}</div>`:''}
-      ${ui.demo&&!priority?btn('操作側を交代','switchSeat','btn secondary wide mt8'):''}</div>`;
+      ${ui.demo&&!priority?btn('操作側を交代','switchSeat','btn secondary wide mt8'):''}</section>`;
   }
   const attacking=s.pending.by===ui.seat;
-  if(attacking)return `<div class="respond"><strong>⚔ 攻撃を宣言しました</strong>
-   <div class="small">相手が罠カードを発動するか選んでいます。</div>
-   ${ui.demo?btn('相手側に切り替える','switchSeat','btn secondary wide mt8'):''}</div>`;
+  if(attacking)return `<section class="respond sv-response sv-response--waiting" role="region" aria-label="攻撃への応答">
+   <div class="sv-response-heading"><span class="sv-response-label">BATTLE</span><strong>攻撃宣言済み・相手の応答待ち</strong></div>
+   <p class="sv-response-help">相手が罠・速攻魔法を使用するか選択しています。</p>
+   ${ui.demo?btn('相手側に切り替える','switchSeat','btn secondary wide mt8'):''}</section>`;
   const p=activePlayer();
   const traps=p.backrow.map((v,i)=>({v,i})).filter(({v})=>v&&CARD[v.id]?.type==='trap'&&v.setTurn<s.turnNo&&(CARD[v.id]?.ability?.when==='attack'||!CARD[v.id]?.ability));
-  return `<div class="respond"><strong>⚠ 相手の攻撃！ 罠を使いますか？</strong><div class="small">セット済みの罠・速攻魔法を発動できます。発動しなくてもOK。</div>
-  <div class="row wrap mt8">${traps.map(({v,i})=>btn(`${esc(CARD[v.id].emoji)} ${esc(CARD[v.id].name)}`,'trap','btn sm secondary',`data-index="${i}"`)).join('')}${quickChoiceButtons()||''}</div>
-  ${btn('何も発動せず攻撃を通す','passAttack','btn wide mt8')}</div>`;
+  return `<section class="respond sv-response sv-response--ready" role="region" aria-label="攻撃への応答">
+    <div class="sv-response-heading"><span class="sv-response-label">BATTLE</span><strong>相手が攻撃！ 応答を選択</strong></div>
+    <p class="sv-response-help">使用可能な罠・速攻魔法を発動するか、攻撃を通してください。</p>
+    <div class="sv-response-actions row wrap">${traps.map(({v,i})=>btn(`${esc(CARD[v.id].emoji)} ${esc(CARD[v.id].name)}`,'trap','btn sm secondary',`data-index="${i}"`)).join('')}${quickChoiceButtons()||''}
+    ${btn('何も発動せず攻撃を通す','passAttack','btn primary sm')}</div></section>`;
 }
 function renderTargetHint(){
  if(!ui.targetMode)return '';
  const m=ui.targetMode;
- if(m.type==='tribute')return `<div class="hintbox sv-target-choice"><strong>リリースするモンスターをタップ</strong><div class="small">${m.indices.length} / ${m.needed}体選択</div><div class="row wrap mt8">${btn('選択して召喚','confirmTributes','btn primary sm','',m.indices.length!==m.needed)}${btn('やめる','cancelTarget','btn sm ghost')}</div></div>`;
- if(m.type==='move')return `<div class="hintbox sv-target-choice"><strong>移動先の空いているゾーンをタップ</strong><div class="row mt8">${btn('やめる','cancelTarget','btn sm ghost')}</div></div>`;
- const id=m.id|| (m.type==='monsterEffect'?activePlayer()?.monsters[m.index]?.id:
-    m.type==='chainTrap'?activePlayer()?.backrow[m.index]?.id:null);
- const target=effectTarget(id);
- const text=m.type==='attack'?`⚔ 攻撃対象となる相手モンスターをタップしてください。`:
-   `✦ ${TARGETS[target]||'対象'}をタップしてください。`;
- return `<div class="hintbox">${esc(text)}<div class="row mt8">${m.type==='attack'&&!ui.game.players[1-ui.seat].monsters.some(Boolean)?btn('直接攻撃','directAttack','btn sm primary'):''}${btn('キャンセル','cancelTarget','btn sm ghost')}</div></div>`;
+ if(m.type==='revive')return '';
+ const cancel=btn('キャンセル','cancelTarget','btn sm ghost');
+ if(m.type==='tribute')return `<section class="hintbox sv-target-choice" role="status"><div class="sv-target-heading"><span class="sv-target-step">召喚準備</span><strong>リリースする自分のモンスターを選択</strong></div><p class="sv-target-sub">${m.indices.length} / ${m.needed}体選択中。選択済みをもう一度タップすると解除できます。</p><div class="row wrap mt8">${btn('選択して召喚','confirmTributes','btn primary sm','',m.indices.length!==m.needed)}${cancel}</div></section>`;
+ if(m.type==='move')return `<section class="hintbox sv-target-choice" role="status"><div class="sv-target-heading"><span class="sv-target-step">位置移動</span><strong>光る空きゾーンをタップ</strong></div><p class="sv-target-sub">移動先のゾーンを選んでください。</p><div class="row mt8">${cancel}</div></section>`;
+ const id=m.id||(m.type==='monsterEffect'?activePlayer()?.monsters[m.index]?.id:
+   m.type==='chainTrap'?activePlayer()?.backrow[m.index]?.id:null);
+ const target=effectTarget(id),attack=m.type==='attack';
+ const enemyMonsters=ui.game.players[1-ui.seat].monsters.filter(Boolean).length;
+ const spot=targetSpot(target),p=ui.game.players[spot.owner==='mine'?ui.seat:1-ui.seat];
+ const candidates=attack?enemyMonsters:p?.[spot.zone]?.filter(Boolean).length||0;
+ const title=attack?'⚔ 攻撃対象を選択':`✦ ${TARGETS[target]||'効果対象'}を選択`;
+ const explanation=attack?(enemyMonsters?'光っている相手モンスターをタップ':'相手モンスターがいないため直接攻撃できます'):
+  (candidates?'光っているカードをタップして効果を発動します':'対象となるカードがありません。キャンセルしてください');
+ return `<section class="hintbox sv-target-choice" role="status"><div class="sv-target-heading"><span class="sv-target-step">${attack?'バトル':'効果発動'}</span><strong>${esc(title)}</strong></div><p class="sv-target-sub">${esc(explanation)}</p><div class="row wrap mt8">${attack&&!enemyMonsters?btn('直接攻撃','directAttack','btn primary sm'):''}${cancel}</div></section>`;
 }
 function renderSelection(){
   const s=ui.game,sel=ui.selected;if(!sel||!isMine())return '';
@@ -796,7 +895,7 @@ function renderSelection(){
   if(sel.owner==='mine'&&sel.zone==='field'&&canMain&&item)options+=btn('フィールド魔法を墓地へ','destroySelected','btn sm ghost');
   return `<section class="card-detail duel-card-actions" role="region" aria-label="カード操作"><div class="row between duel-detail-heading"><div class="detail-title">${esc(c.name)}</div><span class="detail-badge">${cardTypeName(c)}</span>${btn('×','cancelSelection','btn sm square ghost')}</div>
    <div class="small muted mt8">${esc(suffix(c))}${item?.bonus?` / 強化+${item.bonus}`:''}</div><p class="detail-text">${esc(effectText(c)||c.desc)}</p>
-   <div class="actionbar">${btn('🔎 拡大・効果確認','viewCard','btn secondary sm')}${options}</div></section>`;
+   <div class="actionbar">${options||'<span class="sv-action-empty">現在実行できる操作はありません</span>'}${btn('🔎 詳細を見る','viewCard','btn secondary sm sv-inspect')}</div></section>`;
 }
 function renderGame(){
   const s=ui.game;if(!s)return renderHome();
@@ -811,7 +910,17 @@ function renderGame(){
   if(!me)return '<div class="notice">この対戦に参加していません。</div>';
   const ready=!!s.pending;
   const myStatus=playerStatus(me,ui.seat),enemyStatus=playerStatus(enemy,1-ui.seat);
-  const hand=me.hand.map((id,i)=>`<button type="button" class="hand-slot ${ui.selected?.zone==='hand'&&ui.selected?.index===i?'selected':''}" data-select="1" data-owner="mine" data-zone="hand" data-index="${i}">${cardHtml(id)}</button>`).join('');
+  const handNavThreshold=window.innerWidth>=700?7:window.innerWidth>=560?5:window.innerWidth>=370?4:3;
+  // A shallow, static fan: numeric CSS variables are cheap to render and do not
+  // change card indices, hit handlers, game data or online synchronization.
+  const fanMiddle=(me.hand.length-1)/2;
+  const fanStrength=Math.min(1,Math.max(0,(me.hand.length-1)/4));
+  const hand=me.hand.map((id,i)=>{
+    const arc=fanMiddle?(i-fanMiddle)/fanMiddle:0;
+    const tilt=(arc*8*fanStrength).toFixed(1);
+    const drop=Math.round(Math.pow(Math.abs(arc),1.6)*10*fanStrength);
+    return `<button type="button" class="hand-slot ${ui.selected?.zone==='hand'&&ui.selected?.index===i?'selected':''}" style="--sv-fan-angle:${tilt}deg;--sv-fan-drop:${drop}px;--sv-fan-layer:${i+1}" data-select="1" data-owner="mine" data-zone="hand" data-index="${i}" aria-label="手札${i+1} ${esc(CARD[id]?.name||'カード')}" aria-pressed="${!!(ui.selected?.zone==='hand'&&ui.selected?.index===i)}">${cardHtml(id)}</button>`;
+  }).join('');
   const phaseButton=!myTurn()||ready||s.status!=='playing'||s.phase==='end'?'':s.phase==='main2'?btn('ターン終了','endTurn','btn primary'):btn(s.phase==='draw'?'メインへ':s.phase==='main1'?(s.turnNo===1?'メイン2へ':'バトルへ'):'メイン2へ','nextPhase','btn primary');
   const endButton=myTurn()&&!ready&&s.status==='playing'&&!['main2','draw','end'].includes(s.phase)?btn('ターン終了','endTurn','btn ghost'):'';
   const handAdjustment=s.phase==='end'&&myTurn()&&me.hand.length>6;
@@ -821,7 +930,8 @@ function renderGame(){
   const duelHud=ui.duelCompact?`<div class="duel-hud" aria-label="ライフポイントとデッキ残数"><div class="duel-hud-seat"><span class="duel-hud-label">相手</span>${enemyStatus}</div><div class="duel-hud-seat"><span class="duel-hud-label">自分</span>${myStatus}</div></div>`:`<div class="statusbar">${enemyStatus}</div>`;
   return `${roombar}${commandBar}${duelHud}
    ${handAdjustment?`<div class="notice hand-adjust-banner">エンドフェイズ：あと${me.hand.length-6}枚捨ててください ${btn('手札を見る','scrollToHand','btn sm primary')}</div>`:''}
-   ${ui.targetMode&&['tribute','move'].includes(ui.targetMode.type)?renderTargetHint():''}
+   ${renderPending()}
+   <div class="sv-target-banner" aria-live="polite">${renderTargetHint()}</div>
    <div class="battlefield">
      <div class="field-zone-line"><span>相手のフィールド魔法</span>${fieldSlotHtml(enemy,'opponent')}</div><div class="zone-caption">相手の魔法・罠</div>
      <div class="slots">${Array.from({length:5},(_,i)=>slotHtml(enemy,'opponent','backrow',i)).join('')}</div>
@@ -835,10 +945,9 @@ function renderGame(){
    </div>
    ${!ui.duelCompact?`<div class="statusbar">${myStatus}<div class="row">${ui.demo?btn('操作側を交代','switchSeat','btn sm secondary'):''}</div></div>`:ui.demo?`<div class="duel-demo-switch">${btn('操作側を交代','switchSeat','btn sm secondary')}</div>`:''}
    ${winner}
-   ${renderPending()}
-   ${ui.targetMode&&['tribute','move'].includes(ui.targetMode.type)?'':renderTargetHint()}
-   <div class="hand-count">自分の手札 (${me.hand.length}枚)　${handAdjustment?'・捨てるカードをタップ':!myTurn()?'・相手のターン中':''}</div>
-   <div class="hand-scroll">${hand||'<div class="muted small">手札がありません</div>'}</div>
+   <div class="sv-hand-heading"><div class="hand-count">自分の手札 (${me.hand.length}枚)　${handAdjustment?'・捨てるカードをタップ':!myTurn()?'・相手のターン中':''}</div>
+   ${me.hand.length>handNavThreshold?`<div class="sv-hand-controls" role="group" aria-label="手札の送り操作"><span class="sv-hand-position" aria-hidden="true"></span>${btn('‹','handPrev','btn sm ghost sv-hand-nav','aria-label="手札を左へ" title="前のカード"')}${btn('›','handNext','btn sm ghost sv-hand-nav','aria-label="手札を右へ" title="次のカード"')}</div>`:''}</div>
+   <div class="hand-scroll ${me.hand.length<=(window.innerWidth<370?3:window.innerWidth<560?4:7)?'sv-hand-balanced':''}" role="region" aria-label="自分の手札。左右にスクロールできます" tabindex="0">${hand||'<div class="muted small">手札がありません</div>'}</div>
    ${renderSelection()}
    <details class="panel duel-tools" ${ui.duelToolsOpen?'open':''}><summary>その他の操作</summary><div class="row wrap battle-tools">
      ${btn('🎲 サイコロ','rollDice','btn sm secondary')}${btn('🪙 コイン','flipCoin','btn sm secondary')}
@@ -853,18 +962,88 @@ function renderGame(){
    </details>
    <details class="panel duel-log" ${ui.duelLogOpen?'open':''}><summary>対戦ログ (${s.log.length})</summary><div class="loglist">${s.log.map(x=>`<div>• ${esc(x)}</div>`).join('')}</div></details>
    <div class="footer-links">${s.status==='playing'?btn('降参する','surrender','btn ghost sm'):''}${btn('🔊 演出設定','openFx','btn ghost sm')}${btn('ホームへ','goHome','btn ghost sm')}</div>
-   ${ui.graveOpen?graveModal():''}${ui.fxOpen?fxModal():''}${ui.appearanceOpen?appearanceModal():''}${ui.previewCardId?detailOverlay():''}${ui.specialDraft?specialModal():''}`;
+   ${ui.graveOpen?graveModal():''}${ui.fxOpen?fxModal():''}${ui.appearanceOpen?appearanceModal():''}${ui.previewCardId?detailOverlay():''}${ui.specialDraft?specialModal():''}${ui.targetMode?.type==='revive'?graveReviveModal():''}`;
 }
+/** Move only the existing hand scroller. No board rebuild or game-state writes. */
+function scrollHandCards(direction){
+ const strip=$('view')?.querySelector('.hand-scroll');
+ const first=strip?.querySelector('.hand-slot');
+ if(!strip||!first)return;
+ // With overlapping cards, the advance is the *layout* distance, not
+ // the card's full bounding width (which includes its visual rotation).
+ const second=first.nextElementSibling;
+ const pitch=second?.classList.contains('hand-slot')?
+   Math.max(36,second.offsetLeft-first.offsetLeft):first.offsetWidth;
+ const perPage=Math.max(1,Math.floor((strip.clientWidth-28)/pitch)-1);
+ const distance=pitch*perPage*direction;
+ const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+ strip.scrollBy({left:distance,behavior:reduced?'auto':'smooth'});
+}
+/** Synchronize just two arrows and one tiny counter. No rerender, no game writes. */
+function syncHandNavigation(){
+ const view=$('view'),strip=view?.querySelector('.hand-scroll'),controls=view?.querySelector('.sv-hand-controls');
+ if(!strip||!controls)return;
+ const max=Math.max(0,strip.scrollWidth-strip.clientWidth),overflow=max>1;
+ controls.style.display=overflow?'':'none';
+ if(!overflow)return;
+ const prev=controls.querySelector('[data-action="handPrev"]');
+ const next=controls.querySelector('[data-action="handNext"]');
+ if(prev)prev.disabled=strip.scrollLeft<=2;
+ if(next)next.disabled=strip.scrollLeft>=max-2;
+ // offsetLeft is already the overlapping layout coordinate; no rotation measurements.
+ const items=strip.querySelectorAll('.hand-slot');
+ let start=-1,end=-1;
+ const left=strip.scrollLeft+12,right=strip.scrollLeft+strip.clientWidth-12;
+ for(let i=0;i<items.length;i++){
+   const el=items[i];
+   if(el.offsetLeft+el.offsetWidth>left&&el.offsetLeft<right){if(start<0)start=i;end=i;}
+ }
+ const label=controls.querySelector('.sv-hand-position');
+ if(label)label.textContent=start>=0?`${start+1}–${end+1} / ${items.length}`:`${items.length}枚`;
+}
+let handNavFrame=0;
+function scheduleHandNavigation(){
+ if(handNavFrame)return;
+ handNavFrame=requestAnimationFrame(()=>{handNavFrame=0;syncHandNavigation();});
+}
+window.addEventListener('resize',scheduleHandNavigation,{passive:true});
+// Scroll events do not bubble, so delegate in capture phase. At most one update per frame.
+$('view').addEventListener('scroll',event=>{
+ if(event.target?.classList?.contains('hand-scroll'))scheduleHandNavigation();
+},{capture:true,passive:true});
+/** Reveal only a clipped portion. Never scroll the page vertically. */
+function revealHandCard(index){
+ const strip=$('view')?.querySelector('.hand-scroll');
+ const el=strip?.querySelector(`.hand-slot[data-index="${index}"]`);
+ if(!el)return;
+ const margin=18,left=strip.scrollLeft+margin,right=strip.scrollLeft+strip.clientWidth-margin;
+ const start=el.offsetLeft,end=start+el.offsetWidth;
+ const correction=start<left?start-left:end>right?end-right:0;
+ if(Math.abs(correction)>1){strip.scrollLeft+=correction;scheduleHandNavigation();}
+}
+// Arrow keys focus adjacent fanned cards; Enter/Space still use normal card selection.
+$('view').addEventListener('keydown',event=>{
+ if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+ const current=event.target?.closest?.('.hand-scroll>.hand-slot');
+ if(!current)return;
+ const list=Array.from(current.parentElement.querySelectorAll('.hand-slot'));
+ const at=list.indexOf(current);if(at<0)return;
+ event.preventDefault();
+ const nextIndex=event.key==='Home'?0:event.key==='End'?list.length-1:
+   Math.min(list.length-1,Math.max(0,at+(event.key==='ArrowLeft'?-1:1)));
+ const next=list[nextIndex];if(!next)return;
+ next.focus({preventScroll:true});revealHandCard(nextIndex);
+});
 /** Update only the selected-card drawer; the field and hand are untouched. */
 function refreshDuelSelection(){
  const view=$('view');
  if(!view?.classList.contains('duel-active')||ui.targetMode||!ui.game||typeof document.createElement!=='function'){render();return;}
- for(const node of view.querySelectorAll('.slot.selected,.hand-slot.selected'))node.classList.remove('selected');
+ for(const node of view.querySelectorAll('.slot.selected,.hand-slot.selected')){node.classList.remove('selected');node.setAttribute('aria-pressed','false');}
  const selected=ui.selected;
  if(selected){
    const node=Array.from(view.querySelectorAll('[data-select]')).find(x=>
      x.dataset.owner===selected.owner&&x.dataset.zone===selected.zone&&Number(x.dataset.index)===selected.index);
-   node?.classList.add('selected');
+   if(node){node.classList.add('selected');node.setAttribute('aria-pressed','true');}
  }
  const old=view.querySelector('.duel-card-actions');
  const html=renderSelection();
@@ -874,6 +1053,7 @@ function refreshDuelSelection(){
  if(!next){old?.remove();return;}
  if(old)old.replaceWith(next);
  else {const hand=view.querySelector('.hand-scroll');if(hand)hand.after(next);else view.append(next);}
+ if(selected?.owner==='mine'&&selected.zone==='hand')revealHandCard(selected.index);
 }
 function graveModal(){const me=activePlayer(),enemy=ui.game.players[1-ui.seat];
  const view=(p,side)=>`<h3>${side}：墓地 (${p.grave.length})</h3><div class="grave-list">${p.grave.map((id,i)=>`<button class="grave-chip" data-action="graveDetail" data-id="${esc(id)}">${esc(CARD[id]?.name||id)}</button>`).join('')||'なし'}</div>
@@ -890,6 +1070,9 @@ function render(){
  const handX=wasGame?(view.querySelector('.hand-scroll')?.scrollLeft||0):0;
  const logY=wasGame?(view.querySelector('.loglist')?.scrollTop||0):0;
  const modalY=wasGame?(view.querySelector('.modal-box')?.scrollTop||0):0;
+ // Mobile form controls can trigger a full editor redraw. Keep the editing position;
+ // do not inherit the card-list scroll position when opening a *new* editor.
+ const editorY=ui.cardDraft&&view.querySelector('#cardName')?view.querySelector('.card-manager')?.scrollTop:null;
  if(wasGame){
    ui.duelToolsOpen=view.querySelector('.duel-tools')?.open??ui.duelToolsOpen;
    ui.duelLogOpen=view.querySelector('.duel-log')?.open??ui.duelLogOpen;
@@ -897,10 +1080,12 @@ function render(){
  ui.renderedMode=mode;
  view.classList.toggle('duel-active',!!ui.game&&ui.game.status!=='waiting');
  view.classList.toggle('duel-compact',!!ui.game&&ui.game.status!=='waiting'&&ui.duelCompact);
+ view.classList.toggle('sv-is-targeting',!!ui.game&&ui.game.status!=='waiting'&&!!ui.targetMode&&ui.targetMode.type!=='revive');
  view.innerHTML=ui.draftRoom?renderDraftRoom():ui.game?renderGame():ui.roomCode?`<section class="panel"><h2>部屋の情報を読み込み中</h2><p class="small muted">接続状態を確認しています。</p>${btn('ホームに戻る','goHome','btn secondary')}</section>`:renderHome();
  // Apply saved filters only when their list is present.
  if($('deckSearch'))updateCardRows('deck');
  if($('cardSearch'))updateManagedCards();
+ if(editorY!==null&&editorY!==undefined){const editor=view.querySelector('.card-manager');if(editor)editor.scrollTop=editorY;}
  appearanceApply();
  if(changed){try{window.scrollTo(0,0);}catch{}}
  else if(wasGame&&ui.game){
@@ -910,6 +1095,7 @@ function render(){
    const modal=view.querySelector('.modal-box');if(modal)modal.scrollTop=modalY;
    if(Math.abs(window.scrollY-oldY)>2)try{window.scrollTo(0,oldY);}catch{}
  }
+ if(ui.game)syncHandNavigation();
 }
 function readHomeValues(){
  const input=$('playerName');if(input){ui.nickname=(input.value.trim()||'プレイヤー').slice(0,12);storage.setItem('duel-name',ui.nickname);}
@@ -1158,6 +1344,7 @@ async function remoteJoin(){
  }finally{setBusy(false);}
 }
 async function openRoom(code,isDraft=false){
+ clearBoardCue();
  if(ui.unsub){ui.unsub();ui.unsub=null;}
  ui.demo=false;ui.demoDraft=false;ui.game=null;ui.draftRoom=null;ui.roomCode=code;ui.draftCode=code;ui.selected=null;ui.targetMode=null;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();
  history.replaceState({},'',`${location.pathname}?${isDraft?'draft':'room'}=${code}`);
@@ -1172,6 +1359,7 @@ async function openRoom(code,isDraft=false){
    lastRoomVersion=roomVersion;
    // A remote update may reorder hand/field indices: never keep a stale pick.
    ui.selected=null;ui.targetMode=null;
+   const previousRoom=ui.game;
    const draftActive=!!v.draft&&['waiting','drafting'].includes(v.status);
    ui.game=draftActive?null:normalizeRoom(v);
    ui.draftRoom=draftActive?normalizeDraftRoom(v):null;
@@ -1179,22 +1367,22 @@ async function openRoom(code,isDraft=false){
    ui.seat=people.findIndex(p=>p?.uid===ui.uid);
    if(ui.seat<0){ui.game=null;ui.draftRoom=null;toast('この部屋に参加していません');}
    if(ui.game?.completedDraft&&ui.seat>=0)saveCompletedDrafts(ui.game,code);
-   render();if(ui.game)handleRoomCue(ui.game);
+   render();if(ui.game)handleRoomCue(ui.game,previousRoom);
  },err=>{if(ui.roomCode===code){toast('同期エラー：'+err.message);setNetwork('同期エラー','off');}});
  render();
 }
 async function send(action){
  if(!ui.game||ui.busy)return;
  if(!ui.demo&&!onlineReady())return;
- const hadTarget=!!ui.targetMode;ui.targetMode=null;
- if(hadTarget)render();
+ const previousTargetType=ui.targetMode?.type;const hadTarget=!!ui.targetMode;ui.targetMode=null;
+ if(hadTarget&&!ui.demo){if(previousTargetType==='revive')render();else refreshDuelTarget();}
  if(ui.demo){
    if(action.type==='undoDemo'){
      if(!ui.game.undoSnapshot)return toast('取り消せる操作がありません');
      const restored=normalizeRoom(structuredClone(ui.game.undoSnapshot));for(const key of ['mode','completedDraft','createdAt'])if(!Object.hasOwn(restored,key)&&Object.hasOwn(ui.game,key))restored[key]=structuredClone(ui.game[key]);restored.revision=(ui.game.revision||0)+1;restored.undoSnapshot=null;restored.undoActor=null;restored.undoRequest=null;restored.log.unshift('直前の操作を取り消しました。');ui.game=restored;storeDemo();render();return;
    }
-   try {ui.game=applyAction(ui.game,ui.game.players[ui.seat].uid,action);ui.selected=null;storeDemo();render();handleRoomCue(ui.game);}
-   catch(e){toast(e.message);}return;
+   try {const previousRoom=ui.game;ui.game=applyAction(ui.game,ui.game.players[ui.seat].uid,action);ui.selected=null;storeDemo();render();handleRoomCue(ui.game,previousRoom);}
+   catch(e){if(hadTarget)render();toast(e.message);}return;
  }
  setBusy(true);let problem=null;
  const expectedRevision=ui.game.revision;
@@ -1223,7 +1411,7 @@ function attemptSummon(faceDown){
  const owned=activePlayer()?.monsters.map((m,i)=>m?i:null).filter(i=>i!==null)||[];
  if(owned.length<need)return toast(`召喚には${need}体のリリースが必要です`);
  if(!need)return send({type:'summon',hand,faceDown,tributes:[]});
- ui.targetMode={type:'tribute',hand,faceDown,needed:need,indices:[]};ui.selected=null;render();
+ startTargetMode({type:'tribute',hand,faceDown,needed:need,indices:[]});
 }
 function specialSpells(kind){
  const p=activePlayer();if(!p)return [];
@@ -1283,12 +1471,31 @@ function confirmSpecial(){
   {type:'fusionSummon',fusionId:d.targetKey,spellSource,spellIndex:Number(index),materials};
  ui.specialDraft=null;return send(action);
 }
+/** Choose a public graveyard card without leaking either player's hand/deck. */
+function graveReviveModal(){
+ const m=ui.targetMode,me=activePlayer();if(m?.type!=='revive'||!me)return '';
+ const empty=me.monsters.some(x=>x===null);
+ const sideList=[ui.seat,1-ui.seat].map(seat=>{
+   const p=ui.game.players[seat];
+   const items=p.grave.map((id,index)=>({id,index,card:CARD[id]})).filter(x=>x.card?.type==='monster');
+   return `<section class="sv-revive-group"><h3>${seat===ui.seat?'自分':'相手'}の墓地 <span>${items.length}体</span></h3>
+   ${items.length?`<div class="sv-revive-list">${items.map(x=>`<button type="button" class="sv-revive-choice" data-action="selectRevive" data-seat="${seat}" data-index="${x.index}" data-id="${esc(x.id)}" ${empty?'':'disabled'}>
+       ${cardThumb(x.card)}<span class="sv-revive-copy"><b>${esc(x.card.name)}</b><small>★${x.card.level}　ATK ${x.card.atk} / DEF ${x.card.def}</small></span><span aria-hidden="true">↗</span></button>`).join('')}</div>`:'<p class="small muted">選べるモンスターがありません</p>'}
+   </section>`;
+ }).join('');
+ return `<div class="modal sv-revive-modal" role="dialog" aria-modal="true" aria-label="墓地から特殊召喚するモンスターを選ぶ"><div class="modal-box sv-revive-dialog">
+   <div class="modal-title-line"><h2>✦ 墓地から特殊召喚</h2>${btn('×','cancelTarget','btn sm square')}</div>
+   <p class="small muted">自分・相手の墓地から1体を選び、自分の空きゾーンに攻撃表示で特殊召喚します。</p>
+   ${empty?'':'<div class="notice">自分のモンスターゾーンが満杯です。</div>'}
+   ${sideList}${btn('キャンセル','cancelTarget','btn ghost wide mt8')}</div></div>`;
+}
 function chooseSpell(source,index){
  const p=activePlayer(),id=source==='hand'?p.hand[index]:source==='field'?p.field?.id:p.backrow[index]?.id;
  if(!id)return;
  if(CARD[id]?.type==='spell'&&['ritual','fusion'].includes(spellKind(CARD[id])))return beginSpecial(spellKind(CARD[id]),{source,index});
+ if(isGraveRevive(id)){startTargetMode({type:'revive',source,index,id});return;}
  if(effectNeedsTarget(id)){
-   ui.targetMode={type:'spell',source,index,id};ui.selected=null;render();
+   startTargetMode({type:'spell',source,index,id});
    toast('効果を受けるカードをフィールドからタップしてください');
  }else send({type:source==='hand'?'spellFromHand':'spellFromField',[source==='hand'?'hand':'index']:index,field:source==='field'});
 }
@@ -1298,7 +1505,7 @@ function chooseSlot(owner,zone,index){
    const mode=ui.targetMode;
    if(mode.type==='tribute'){
      if(owner==='mine'&&zone==='monsters'&&activePlayer()?.monsters[index]){
-       mode.indices=mode.indices.includes(index)?mode.indices.filter(i=>i!==index):[...mode.indices,index].slice(0,mode.needed);render();return;
+       mode.indices=mode.indices.includes(index)?mode.indices.filter(i=>i!==index):[...mode.indices,index].slice(0,mode.needed);refreshDuelTarget();return;
      }return toast('自分のモンスターをタップしてください');
    }
    if(mode.type==='move'){
@@ -1324,11 +1531,11 @@ function chooseSlot(owner,zone,index){
  }
  if(zone==='hand'){
    if(owner!=='mine')return;
-   ui.selected={owner,zone,index};return refreshDuelSelection();
+   ui.selected=ui.selected?.owner===owner&&ui.selected?.zone===zone&&ui.selected?.index===index?null:{owner,zone,index};return refreshDuelSelection();
  }
  if(zone==='monsters'||zone==='backrow'||zone==='field'){
    if(!(zone==='field'?ui.game.players[owner==='mine'?ui.seat:1-ui.seat]?.field:ui.game.players[owner==='mine'?ui.seat:1-ui.seat]?.[zone]?.[index]))return;
-   ui.selected={owner,zone,index};return refreshDuelSelection();
+   ui.selected=ui.selected?.owner===owner&&ui.selected?.zone===zone&&ui.selected?.index===index?null:{owner,zone,index};return refreshDuelSelection();
  }
 }
 async function copyInvite(){
@@ -1336,7 +1543,7 @@ async function copyInvite(){
  try{await navigator.clipboard.writeText(link);toast('招待リンクをコピーしました');}
  catch{prompt('招待リンクをコピーしてください',link);}
 }
-function goHome(){if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.draftCode='';ui.draftOpen=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.specialDraft=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork(ui.networkConnected===true?'オンライン接続可能':ui.networkConnected===false?'再接続待ち':'接続確認中',ui.networkConnected===true?'ok':ui.networkConnected===false?'off':'');else setNetwork('お試し対戦可能');render();}
+function goHome(){clearBoardCue();if(ui.unsub){ui.unsub();ui.unsub=null;}ui.demo=false;ui.demoDraft=false;ui.draftRoom=null;ui.draftCode='';ui.draftOpen=false;ui.game=null;ui.roomCode='';ui.selected=null;ui.targetMode=null;ui.specialDraft=null;ui.graveOpen=false;ui.fxOpen=false;ui.settingsOpen=false;ui.duelOpen=false;ui.lastFxRevision=null;ui.pendingDrawEvent=null;closeDrawReveal();try{history.replaceState({},'',location.pathname);}catch{}if(configReady&&ui.db)setNetwork(ui.networkConnected===true?'オンライン接続可能':ui.networkConnected===false?'再接続待ち':'接続確認中',ui.networkConnected===true?'ok':ui.networkConnected===false?'off':'');else setNetwork('お試し対戦可能');render();}
 function preserveInputBeforeNetworkRefresh(){
  // Firebase connects asynchronously, possibly while a card or pack editor is open.
  // Keep the user's in-progress input intact when we actually need to rebuild the UI.
@@ -1471,9 +1678,9 @@ $('view').addEventListener('click',async e=>{
   ui.packs.packs=ui.packs.packs.filter(x=>x.id!==p.id);savePackStore(storage,ui.packs);render();return;
  }
  if(action==='packDetail'){ui.previewCardId=el.dataset.id;render();return;}
- if(action==='viewCard'){const x=ui.selected;let id=null;if(x&&ui.game){const p=ui.game.players[x.owner==='mine'?ui.seat:1-ui.seat];id=x.zone==='hand'?p.hand[x.index]:p[x.zone]?.[x.index]?.id;}if(id){ui.previewCardId=id;render();}return;}
+ if(action==='viewCard'){const x=ui.selected;let id=null;if(x&&ui.game){const p=ui.game.players[x.owner==='mine'?ui.seat:1-ui.seat];id=x.zone==='hand'?p.hand[x.index]:x.zone==='field'?p.field?.id:p[x.zone]?.[x.index]?.id;}if(id){ui.previewCardId=id;if($('view').classList.contains('duel-active'))$('view').insertAdjacentHTML('beforeend',detailOverlay());else render();}return;}
  if(action==='graveDetail'){ui.previewCardId=el.dataset.id;render();return;}
- if(action==='closePreview'){ui.previewCardId=null;render();return;}
+ if(action==='closePreview'){ui.previewCardId=null;const modal=$('view').querySelector('.modal-detail.sv-detail-modal');if(modal&&ui.game)modal.remove();else render();return;}
 
  if(action==='openFx'){ui.fxOpen=true;render();return;}
  if(action==='closeFx'){ui.fxOpen=false;render();return;}
@@ -1573,12 +1780,12 @@ $('view').addEventListener('click',async e=>{
    const source=el.dataset.source,index=Number(el.dataset.index),p=activePlayer();
    const id=source==='hand'?p.hand[index]:p.backrow[index]?.id;
    if(effectNeedsTarget(id)){
-     ui.targetMode={type:'quick',source,index,id};ui.selected=null;render();toast('効果の対象をタップしてください');return;
+     startTargetMode({type:'quick',source,index,id});toast('効果の対象をタップしてください');return;
    }
    return send({type:'quickResponse',source,index});
  }
  if(action==='chainTrap'){const i=Number(el.dataset.index),c=CARD[activePlayer()?.backrow[i]?.id];
-  if(c&&effectNeedsTarget(c.id)){ui.targetMode={type:'chainTrap',index:i,id:c.id};render();return;}
+  if(c&&effectNeedsTarget(c.id)){startTargetMode({type:'chainTrap',index:i,id:c.id});return;}
   return send({type:'chainTrap',index:i});}
  if(action==='manualDraw')return send({type:'manualDraw'});
  if(action==='shuffleDeck')return send({type:'shuffleDeck'});
@@ -1586,16 +1793,17 @@ $('view').addEventListener('click',async e=>{
  if(action==='flipCoin')return send({type:'random',kind:'coin'});
  if(action==='requestUndo'||action==='approveUndo'||action==='rejectUndo')return send({type:action});
  if(action==='undoDemo')return send({type:'undoDemo'});
- if(action==='moveSelected'){const x=ui.selected;if(!x||x.owner!=='mine')return;ui.targetMode={type:'move',zone:x.zone,from:x.index};ui.selected=null;render();return;}
+ if(action==='moveSelected'){const x=ui.selected;if(!x||x.owner!=='mine')return;startTargetMode({type:'move',zone:x.zone,from:x.index});return;}
  if(action==='destroySelected'||action==='banishSelected'){const x=ui.selected;if(x?.owner!=='mine')return;return send({type:action==='destroySelected'?'manualDestroy':'manualBanish',zone:x.zone,index:x.index});}
  if(action==='banishFromGrave'){const n=Number(prompt('除外する墓地のカード番号を指定\n'+(activePlayer()?.grave||[]).map((id,i)=>`${i+1}: ${CARD[id]?.name||id}`).join('\n')));if(Number.isInteger(n))return send({type:'banishGrave',index:n-1});return;}
+ if(action==='handPrev'||action==='handNext'){scrollHandCards(action==='handPrev'?-1:1);return;}
  if(action==='scrollToHand'){document.querySelector('.hand-count')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
  if(action==='endTurn')return send({type:'endTurn'});
  if(action==='passAttack')return send({type:'passAttack'});
  if(action==='trap'){
   const i=Number(el.dataset.index??ui.selected?.index),c=CARD[activePlayer()?.backrow[i]?.id];
   if(c&&effectNeedsTarget(c.id)){
-   ui.targetMode={type:'chainTrap',attack:true,index:i,id:c.id};render();return;
+   startTargetMode({type:'chainTrap',attack:true,index:i,id:c.id});return;
   }
   return send({type:'activateTrap',index:i});
  }
@@ -1612,13 +1820,19 @@ $('view').addEventListener('click',async e=>{
    const i=ui.selected?.index,m=activePlayer()?.monsters[i],c=CARD[m?.id];
    if(!c)return;
    if(effectNeedsTarget(c.id)){
-     ui.targetMode={type:'monsterEffect',index:i,id:c.id};ui.selected=null;render();return;
+     startTargetMode({type:'monsterEffect',index:i,id:c.id});return;
    }
    return send({type:'activateMonsterEffect',index:i});
  }
- if(action==='attackSelect'){ui.targetMode={type:'attack',index:ui.selected.index};ui.selected=null;render();return;}
+ if(action==='attackSelect'){startTargetMode({type:'attack',index:ui.selected.index});return;}
  if(action==='directAttack')return send({type:'attack',index:ui.targetMode.index,target:null});
- if(action==='cancelTarget'){ui.targetMode=null;render();return;}
+ if(action==='selectRevive'){
+   const m=ui.targetMode;if(m?.type!=='revive')return;
+   const seat=Number(el.dataset.seat),index=Number(el.dataset.index),cardId=el.dataset.id;
+   if(![0,1].includes(seat)||!Number.isInteger(index)||ui.game?.players[seat]?.grave[index]!==cardId||CARD[cardId]?.type!=='monster')return toast('墓地の対象が変わりました。もう一度選択してください');
+   return send({type:m.source==='hand'?'spellFromHand':'spellFromField',[m.source==='hand'?'hand':'index']:m.index,field:m.source==='field',target:{seat,index,cardId}});
+ }
+ if(action==='cancelTarget'){const modal=ui.targetMode?.type==='revive';ui.targetMode=null;if(modal)render();else refreshDuelTarget();return;}
  if(action==='surrender'&&confirm('本当に降参しますか？'))return send({type:'surrender'});
  if(action==='showGrave'){ui.graveOpen=true;render();return;}
  if(action==='closeGrave'){ui.graveOpen=false;render();return;}
@@ -1693,7 +1907,7 @@ $('view').addEventListener('change',async e=>{
    }
    if(e.target.id==='cardAbilityWhen'&&ui.cardDraft.ability){
      ui.cardDraft.ability.when=e.target.value;
-     const operations=availableOperations(e.target.value);
+     const operations=availableOperations(e.target.value,ui.cardDraft);
      if(!Object.hasOwn(operations,ui.cardDraft.ability.operation)){
        const op=e.target.value==='continuous'?'boost':e.target.value==='response'?'negateEffect':e.target.value==='attack'?'negateAttack':'draw';
        ui.cardDraft.ability.operation=op;ui.cardDraft.ability.amount=ABILITY_META[op].amount;
@@ -1721,6 +1935,14 @@ $('view').addEventListener('change',async e=>{
  if(e.target.id==='galleryType'||e.target.id==='galleryRarity'){
    ui[e.target.id==='galleryType'?'galleryFilterType':'galleryFilterRarity']=e.target.value;updateCardRows('gallery');return;
  }
+});
+document.addEventListener('keydown',event=>{
+ if(event.key!=='Escape')return;
+ if($('draw-reveal')?.classList.contains('visible')){closeDrawReveal();return;}
+ if(ui.targetMode){ui.targetMode=null;render();return;}
+ if(ui.previewCardId){ui.previewCardId=null;render();return;}
+ if(ui.gallerySelected){ui.gallerySelected=null;render();return;}
+ if(ui.selected&&ui.game&&!ui.targetMode){ui.selected=null;refreshDuelSelection();}
 });
 window.addEventListener('pagehide',()=>{try{flushDraft();}catch{}});
 // オンライン設定前は1台お試しのみ利用可能。

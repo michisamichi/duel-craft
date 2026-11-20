@@ -20,7 +20,7 @@ function selectedPreset(type,card){
   const fx=card?.fx||{};
   const title=String(card?.name||'')+String(card?.emoji||'');
   const inferred=type==='win'?'victory':type==='ritual'?'ritual':type==='fusion'?'fusion':
-    type==='trap'?'shadow':type==='impact'||type==='attack'?'slash':
+    type==='trap'?'shadow':type==='revive'?'star':type==='impact'||type==='attack'?'slash':
     /回復|泉|癒/.test(title)||card?.effect==='heal1000'?'heal':
     /雷|⚡/.test(title)?'lightning':/海|水|氷|蒼|しずく|潮|波|❄️|💧/.test(title)?'aqua':
     /炎|紅|火|焔|🔥|🌋/.test(title)?'flame':'star';
@@ -84,10 +84,20 @@ function svgMarkup(visual,color){
 let clearTimer=null;
 export function playCue(event,card,settings=readFxSettings()){
   if(!event)return;
+  // Routine face-down placements use the small slot cue only. A full-screen reveal
+  // would be distracting and could imply that a hidden card was identified.
+  if(event.type==='set'){
+    // A newer routine action must also clear a previous full-screen cue.
+    if(clearTimer){clearTimeout(clearTimer);clearTimer=null;}
+    const overlay=document.getElementById('fx-overlay');
+    if(overlay?.classList.contains('active')){overlay.className='fx-overlay';overlay.replaceChildren();}
+    if(settings.sound)playSynth('chime',settings.volume*.22);
+    return;
+  }
   const {visual,sound}=selectedPreset(event.type,card);
   if(settings.sound)playSynth(sound,settings.volume);
   const overlay=document.getElementById('fx-overlay');
-  if(!settings.visuals||!overlay||visual==='none')return;
+  if(!settings.visuals||!overlay||visual==='none'||window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
   const preset=palettes[visual]||palettes.star;
   if(clearTimer)clearTimeout(clearTimer);
   const token=++latestSequence;
@@ -97,11 +107,11 @@ export function playCue(event,card,settings=readFxSettings()){
   const halo=document.createElement('div');halo.className='fx-halo';
   const mark=document.createElement('div');mark.className='fx-mark';mark.innerHTML=svgMarkup(visual,preset.color);
   const title=document.createElement('strong');title.className='fx-title';
-  const typeName={summon:'召喚！',attack:'攻撃宣言！',impact:'攻撃！',trap:'罠カード発動！',spell:'魔法カード発動！',effect:'モンスター効果！',win:'デュエル決着！',set:'カードをセット',ritual:'儀式召喚！',fusion:'融合召喚！'};
+  const typeName={summon:'召喚！',attack:'攻撃宣言！',impact:'攻撃！',trap:'罠カード発動！',spell:'魔法カード発動！',effect:'モンスター効果！',win:'デュエル決着！',set:'カードをセット',ritual:'儀式召喚！',fusion:'融合召喚！',revive:'特殊召喚成功！'};
   title.textContent=event.type==='win'?(event.winner==='draw'?'DRAW':event.viewerSeat===event.winner?'VICTORY':'DEFEAT'):(typeName[event.type]||preset.title);
   const subtitle=document.createElement('span');subtitle.className='fx-subtitle';subtitle.textContent=card?.name||'';
   if(event.damage>0){subtitle.textContent+=(subtitle.textContent?'　':'')+`${event.damage} DAMAGE`;}
-  for(let i=0;i<(visual==='victory'?18:visual==='fusion'||visual==='ritual'?14:10);i++){const particle=document.createElement('span');particle.className='fx-particle';particle.style.setProperty('--tx',`${Math.round((Math.random()*2-1)*130)}px`);particle.style.setProperty('--ty',`${-30-Math.round(Math.random()*110)}px`);particle.style.setProperty('--delay',`${(Math.random()*.16).toFixed(2)}s`);particle.style.setProperty('--size',`${6+Math.random()*12}px`);burst.append(particle);}
+  for(let i=0;i<(visual==='victory'?12:visual==='fusion'||visual==='ritual'?10:7);i++){const particle=document.createElement('span');particle.className='fx-particle';particle.style.setProperty('--tx',`${Math.round((Math.random()*2-1)*130)}px`);particle.style.setProperty('--ty',`${-30-Math.round(Math.random()*110)}px`);particle.style.setProperty('--delay',`${(Math.random()*.16).toFixed(2)}s`);particle.style.setProperty('--size',`${6+Math.random()*12}px`);burst.append(particle);}
   burst.append(halo);
   if(['ritual','fusion','victory'].includes(visual)){const secondary=document.createElement('div');secondary.className='fx-halo fx-halo-secondary';burst.append(secondary);}
   burst.append(mark,title,subtitle);overlay.append(backdrop,burst);

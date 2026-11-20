@@ -11,7 +11,7 @@ export function cardCost(card){
 }
 export function deckCost(counts,cardIndex){return Object.entries(counts||{}).reduce((total,[id,count])=>total+cardCost(cardIndex[id])*Number(count||0),0);}
 export const TRIGGERS={main:'自分メインで発動',summon:'召喚したとき',continuous:'表側の間ずっと',attack:'相手の攻撃に対応',response:'相手の効果にチェーン'};
-export const TARGETS={none:'対象なし',self:'自分',opponent:'相手',ownMonster:'自分のモンスター1体',enemyMonster:'相手のモンスター1体',attacker:'攻撃しているモンスター',ownAllMonsters:'自分のモンスター全体',enemyAllMonsters:'相手のモンスター全体',bothMonsters:'お互いのモンスター全体',ownBackrow:'自分の魔法・罠1枚',enemyBackrow:'相手の魔法・罠1枚',ownAllBackrow:'自分の魔法・罠すべて',enemyAllBackrow:'相手の魔法・罠すべて'};
+export const TARGETS={none:'対象なし',self:'自分',opponent:'相手',ownMonster:'自分のモンスター1体',enemyMonster:'相手のモンスター1体',attacker:'攻撃しているモンスター',ownAllMonsters:'自分のモンスター全体',enemyAllMonsters:'相手のモンスター全体',bothMonsters:'お互いのモンスター全体',ownBackrow:'自分の魔法・罠1枚',enemyBackrow:'相手の魔法・罠1枚',ownAllBackrow:'自分の魔法・罠すべて',enemyAllBackrow:'相手の魔法・罠すべて',eitherGraveMonster:'自分・相手の墓地のモンスター1体'};
 // Display order is the priority order in the editor. Each operation has a working engine implementation.
 export const ABILITY_META={
  draw:{label:'カードをドロー',scope:'player',amount:1,min:1,max:10},
@@ -45,6 +45,7 @@ export const ABILITY_META={
  shuffleDeck:{label:'デッキをシャッフル',scope:'player',amount:0},
  graveRecover:{label:'墓地の一番新しいカードから手札へ',scope:'player',amount:1,min:1,max:5},
  graveRevive:{label:'墓地の新しいモンスターから蘇生',scope:'player',amount:1,min:1,max:5},
+ reviveSelected:{label:'自分・相手の墓地から選んで特殊召喚',scope:'grave',amount:0},
  graveBanish:{label:'墓地の新しいカードから除外',scope:'player',amount:1,min:1,max:10},
  graveRecycle:{label:'墓地の新しいカードからデッキへ',scope:'player',amount:1,min:1,max:10},
  banishedRecover:{label:'除外の新しいカードから手札へ',scope:'player',amount:1,min:1,max:5},
@@ -59,6 +60,7 @@ export const EFFECT_VALUES=Object.fromEntries(Object.entries(ABILITY_META).map((
 export function abilityTargets(operation,when='main',type='monster',spellKind='normal'){
  const meta=ABILITY_META[operation];if(!meta)return ['none'];
  if(meta.scope==='none')return ['none'];
+ if(meta.scope==='grave')return ['eitherGraveMonster'];
  if(meta.scope==='player')return ['self','opponent'];
  if(meta.scope==='backrow')return ['enemyBackrow','ownBackrow','enemyAllBackrow','ownAllBackrow'];
  if(when==='continuous'){
@@ -78,6 +80,8 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  if(type==='spell'&&a.when!=='main'&&!(a.when==='continuous'&&['continuous','equip','field'].includes(spellKind)))return false;
  if(type==='trap'&&!['attack','response'].includes(a.when))return false;
  if(a.when==='continuous'&&!['boost','weaken','boostDef','weakenDef'].includes(a.operation))return false;
+ // Graveyard choice is deliberately a normal-spell-only feature; avoid invalid trap/continuous triggers.
+ if(a.operation==='reviveSelected'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&a.target==='eitherGraveMonster'))return false;
  if(a.operation==='negateAttack'&&a.when!=='attack')return false;
  if(a.operation==='negateEffect'&&a.when!=='response')return false;
  if(!abilityTargets(a.operation,a.when,type,spellKind).includes(a.target)){
@@ -90,6 +94,7 @@ export function abilityText(a){if(!a)return '';
  const meta=ABILITY_META[a.operation];if(!meta)return '';
  const usesAmount=meta.min!==undefined;
  const label=meta.label;
+ if(a.operation==='reviveSelected')return '自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
  const detail=usesAmount?(/LP|ダメージ|攻撃力|守備力/.test(label)?`${label}（${a.amount}）`:`${label}（${a.amount}枚）`):label;
  return `${TRIGGERS[a.when]||'効果'}：${TARGETS[a.target]||''} に ${detail}。`;
 }

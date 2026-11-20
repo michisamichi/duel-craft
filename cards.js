@@ -1,4 +1,4 @@
-import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=196';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=1919';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},
