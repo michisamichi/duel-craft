@@ -1,0 +1,29 @@
+/* SAHOVERSE v1.9.37 — deck editor readability, without new runtime loops. */
+.deck-manager .sv-deck-progress {height:5px;border-radius:8px;overflow:hidden;background:#36485c;margin:8px 0 3px;}
+.deck-manager .sv-deck-progress-bar {display:block;height:100%;border-radius:inherit;background:#e4bd79;transition:width .12s ease;}
+.deck-manager .sv-deck-progress.is-ready .sv-deck-progress-bar {background:#7fd8ad;}
+.deck-manager .sv-deck-progress-note {min-height:16px;color:#d2c6aa;font-size:11px;text-align:right;font-variant-numeric:tabular-nums;}
+.deck-manager .sv-deck-progress.is-ready+.sv-deck-progress-note {color:#91e6bd;}
+.deck-manager .deck-cost-summary {margin-top:0;}
+.deck-manager .sv-filter-strip {margin-top:9px;}
+.deck-manager .sv-filter-strip .input {min-height:44px;}
+.deck-manager .sv-deck-tools {padding:7px 10px;margin:8px 0 3px;border:1px solid #556f865e;border-radius:10px;background:#152b41aa;}
+.deck-manager .sv-deck-tools>summary {cursor:pointer;min-height:28px;font-size:11px;color:#d8e4ec;font-weight:700;}
+.deck-manager .sv-deck-tools-active{color:#f7ce85;font-weight:750;}
+.deck-manager .sv-deck-tools[open] {padding-bottom:11px;}
+.deck-manager .sv-deck-results {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;color:#c3d5e3;font-size:11px;margin:2px 0;}
+.deck-manager .sv-deck-reset{min-height:31px;padding:5px 9px;font-size:11px;}
+.deck-manager .sv-deck-results [hidden],.deck-manager .sv-deck-empty[hidden]{display:none!important;}
+.deck-manager .sv-deck-empty {font-size:12px;text-align:center;padding:15px;border:1px dashed #758c9b;border-radius:10px;color:#cadbe5;background:#0f2539;margin-top:7px;}
+.deck-manager .deck-item.sv-deck-included{background:linear-gradient(95deg,#2943334a,#132c3c2b);border-left:3px solid #71bd9f;padding-left:3px;}
+.deck-manager .deck-item .count,.deck-manager .deck-item .ex-count{min-width:19px;}
+.deck-manager .deck-item .btn.square{height:42px;min-height:42px;width:40px;flex-basis:40px;touch-action:manipulation;}
+.deck-manager .deck-item .btn.square:focus-visible,.deck-manager .sv-deck-tools>summary:focus-visible,.deck-manager .sv-deck-reset:focus-visible{outline:2px solid #f3d28e;outline-offset:2px;}
+.deck-manager .deck-item .btn:disabled{opacity:.36;}
+@media(max-width:360px){
+ .deck-manager .deck-item{gap:4px;}
+ .deck-manager .deck-item .sv-mini-thumb{width:25px;flex-basis:25px;}
+ .deck-manager .deck-item .btn.square{height:40px;min-height:40px;width:36px;flex-basis:36px;}
+ .deck-manager .deck-item .count,.deck-manager .deck-item .ex-count{min-width:18px;font-size:12px;}
+}
+@media(prefers-reduced-motion:reduce){.deck-manager .sv-deck-progress-bar{transition:none;}}

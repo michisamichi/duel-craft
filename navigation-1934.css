@@ -1,0 +1,85 @@
+/* SAHOVERSE v1.9.34 – minimal bottom tabs, iOS safe-area layout.
+   No animation, observers, or added dependencies. */
+:root { --sv-nav-h: 67px; }
+/* In iOS standalone mode the translucent status bar overlaps web content.
+   Reserve the device's top inset inside the real sticky header. */
+.topbar {
+  height: calc(54px + env(safe-area-inset-top, 0px));
+  min-height: 54px;
+  padding: env(safe-area-inset-top, 0px) max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px));
+  top: 0;
+}
+.brand { font-size: clamp(13px, 3.7vw, 16px); letter-spacing:.055em; gap:8px; }
+.brand-logo {width:30px;height:30px;flex-shrink:0;}
+.network {font-size:10px;min-width:0;}
+#view.duel-active .duel-commandbar, .duel-compact .duel-commandbar,
+#view.duel-active .sv-target-choice {top: calc(54px + env(safe-area-inset-top, 0px));}
+body.sv-idle-mode #view {padding-bottom:calc(var(--sv-nav-h) + env(safe-area-inset-bottom, 0px) + 24px);}
+.sv-bottom-nav {
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+  width:min(100%,1160px); height:calc(var(--sv-nav-h) + env(safe-area-inset-bottom, 0px));
+  display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+  padding:5px max(10px,env(safe-area-inset-right,0px)) calc(5px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));
+  background:#091626f7; border-top:1px solid #7992a450;
+  box-shadow:0 -6px 26px #02071378; z-index:45;
+}
+.sv-bottom-nav[hidden] { display:none !important; }
+.sv-tab {
+  appearance:none;-webkit-appearance:none; display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:3px;min-width:0;min-height:49px;padding:4px 1px;
+  border:1px solid transparent;border-radius:11px;background:transparent;
+  color:#a6b6c8;font-size:11px;line-height:1.2;font-weight:700;white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+.sv-tab-icon {font-size:23px;line-height:1.08;font-weight:500;}
+.sv-tab.is-active {color:#ffe2a6;background:#29415a8d;border-color:#d5b87738;}
+.sv-tab.is-active .sv-tab-icon{color:#f4d18d;}
+.sv-tab:focus-visible {outline:2px solid #f5d793;outline-offset:-2px;}
+.sv-tab-page {max-width:840px;margin:0 auto;min-width:0;padding:10px 5px 22px;}
+.sv-page-heading {display:flex;align-items:center;justify-content:space-between;margin:4px 0 15px;padding:0 3px 12px;border-bottom:1px solid #4960777d;}
+.sv-page-heading h1,.sv-page-title {font-size:21px;line-height:1.35;letter-spacing:.035em;margin:0;color:#f4e3c7;}
+.sv-section-label {font-size:10px;letter-spacing:.18em;color:#8cbfd4;font-weight:750;}
+.sv-duel-home{padding-top:4px;}
+.sv-hero.sv-hero-compact {min-height:112px;justify-content:flex-start;padding:12px 18px;gap:15px;margin:4px 0 20px;}
+.sv-hero.sv-hero-compact .sv-crest {width:65px;height:65px;border-radius:14px;}
+.sv-hero.sv-hero-compact .sv-hero-title{font-size:clamp(19px,5vw,27px);}
+.sv-duel-home .sv-page-title{padding:0 3px 12px;}
+.sv-duel-home .sv-duel-button{min-height:95px;margin-top:12px;font-size:20px;gap:11px;}
+.sv-duel-home .sv-duel-icon{font-size:29px;}
+.sv-duel-menu {margin-top:13px;padding:12px;border:1px solid #4a627999;border-radius:15px;background:linear-gradient(140deg,#14243a,#0e1a2b);}
+.sv-duel-menu .sv-draft-modes {margin:0;}
+.sv-duel-menu .sv-resume-button{margin:0 0 10px;min-height:46px;}
+.sv-duel-menu .sv-rule-launch{width:100%;margin-top:10px;min-height:48px;}
+.sv-gallery-page .gallery-grid{margin-top:12px;}
+.sv-gallery-page .gallery-entry{min-width:0;}
+.sv-gallery-page .modal-title-line {margin:5px 2px 15px;}
+.sv-gallery-page .modal-title-line h2{font-size:21px;color:#f4e3c7;margin:0;}
+.sv-gallery-page .form-duo {min-width:0;}
+.sv-deck-page-content>.modal-title-line h2{font-size:21px;margin:3px 0 7px;color:#f4e3c7;}
+.sv-deck-page-content .saved-deck {min-width:0;}
+.sv-settings-page .sv-settings-options{max-width:600px;gap:11px;}
+.sv-settings-page .sv-settings-options>.btn {min-height:54px;justify-content:flex-start;text-align:left;padding-inline:18px;}
+.sv-settings-page .sv-settings-card{border-color:#ac94645e;background:linear-gradient(120deg,#263c54,#182a3f);color:#ffe5af;}
+.sv-settings-page .sv-backup-group {margin-top:10px;padding-top:17px;}
+.sv-settings-page .sv-import-label {display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.sv-idle-mode .toast {bottom:calc(var(--sv-nav-h) + env(safe-area-inset-bottom,0px) + 10px);}
+/* Keep existing modals below the sensor housing and above the home indicator. */
+.modal {padding-top:calc(12px + env(safe-area-inset-top,0px));padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));}
+.modal-box {max-height:calc(100dvh - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));}
+@media(min-width:700px){
+  .topbar {height:calc(68px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px);padding-inline:24px;}
+  #view.duel-active .duel-commandbar,.duel-compact .duel-commandbar,#view.duel-active .sv-target-choice{top:calc(68px + env(safe-area-inset-top,0px));}
+  .sv-tab-page{padding-top:18px;}
+  .sv-bottom-nav {width:min(100%,1160px);}
+  .sv-duel-home{max-width:840px;}
+  .sv-hero.sv-hero-compact{min-height:120px;}
+}
+@media(max-width:360px){
+  .sv-bottom-nav{padding-left:5px;padding-right:5px;}
+  .sv-tab{font-size:11px;}
+  .sv-tab-icon{font-size:21px;}
+  .sv-duel-home .sv-duel-button{font-size:18px;}
+  .sv-duel-menu{padding:10px;}
+  .sv-draft-modes .sv-draft-launch{font-size:12px;}
+}
+@media(prefers-reduced-motion:reduce){.sv-tab{transition:none;}}

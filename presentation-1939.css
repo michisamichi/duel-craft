@@ -1,0 +1,35 @@
+/* SAHOVERSE 1.9.39 — tablet duel workspace and quick hand navigation.
+   Layout only; the same card buttons, ids, zones and data-select handlers are used. */
+#view.duel-active .sv-duel-workspace{min-width:0}
+#view.duel-active .sv-board-stack,#view.duel-active .sv-hand-panel{min-width:0}
+#view.duel-active .sv-hand-panel{scroll-margin-top:calc(96px + env(safe-area-inset-top,0px))}
+#view.duel-active #svDuelBoard{scroll-margin-top:calc(96px + env(safe-area-inset-top,0px))}
+#view.duel-active .sv-hand-shortcut{min-height:36px;min-width:64px;color:#ffe2ad;border-color:#aa8c5970;background:#29384a}
+#view.duel-active .sv-board-shortcut{flex:none;min-height:38px;color:#b9dae8;padding-inline:9px}
+#view.duel-active .sv-hand-heading{gap:6px}
+#view.duel-active .sv-hand-panel .hand-scroll{width:100%;max-width:100%;margin-inline:0}
+@media(max-width:380px){
+ #view.duel-active .sv-hand-shortcut{min-width:49px;padding-inline:5px;font-size:10px}
+ #view.duel-active .sv-board-shortcut{padding-inline:6px;font-size:10px}
+ #view.duel-active .sv-hand-heading{flex-wrap:wrap}
+ #view.duel-active .sv-hand-heading .hand-count{flex:1 1 110px}
+}
+/* On a landscape iPad the hand is beside the field, not hidden after it. */
+@media(min-width:1024px) and (min-height:600px){
+ #view.duel-active .sv-duel-workspace{display:grid;grid-template-columns:minmax(0,1fr) 318px;gap:14px;align-items:start}
+ #view.duel-active .sv-board-stack .battlefield{padding:10px 9px;max-width:none;width:100%}
+ #view.duel-active .sv-board-stack .slots{gap:6px}
+ #view.duel-active .sv-board-stack .slot{height:112px}
+ #view.duel-active.duel-compact .sv-board-stack .slot{height:94px}
+ #view.duel-active .sv-hand-panel{position:sticky;top:calc(85px + env(safe-area-inset-top,0px));max-height:calc(100dvh - 100px - env(safe-area-inset-top,0px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
+  padding:10px;border:1px solid #648aa071;border-radius:13px;background:linear-gradient(145deg,#142a3d,#0c1c30);box-shadow:0 7px 21px #01091358}
+ #view.duel-active .sv-hand-panel .sv-hand-heading{flex-wrap:wrap}
+ #view.duel-active .sv-hand-panel .sv-hand-heading .hand-count{flex:1 1 125px}
+ #view.duel-active .sv-hand-panel .sv-hand-controls{width:100%;justify-content:flex-end}
+ #view.duel-active .sv-hand-panel .hand-scroll{padding:19px 5px 22px;--sv-fan-overlap:24px}
+ #view.duel-active .sv-hand-panel .hand-slot{flex-basis:98px;height:141px}
+ #view.duel-active .sv-hand-panel .duel-card-actions{position:static;bottom:auto;width:auto;max-height:none;margin-top:8px;padding:10px;overflow:visible;transform:none;backdrop-filter:none;box-shadow:0 4px 15px #0007}
+ #view.duel-active .sv-hand-panel .duel-card-actions .detail-text{max-height:6em}
+ #view.duel-active .sv-hand-shortcut,#view.duel-active .sv-board-shortcut{display:none}
+}
+@media(prefers-reduced-motion:reduce){#view.duel-active .sv-hand-shortcut{transition:none}}

@@ -64,6 +64,19 @@ function slotEl(side,index,viewerSeat,zone='monsters'){
  if(![0,1].includes(side)||!Number.isInteger(index)||index<0||index>4)return null;
  return document.querySelector(`#view .slot[data-owner="${side===viewerSeat?'mine':'opponent'}"][data-zone="${zone}"][data-index="${index}"]`);
 }
+/** Short-lived public activation cue. Text never includes a private card id or name. */
+function activationCue(event,viewerSeat){
+ const labels={spell:'魔法を発動',trap:'罠を発動',effect:'効果を発動',ritual:'儀式召喚',fusion:'融合召喚',summon:'モンスターを召喚',revive:'特殊召喚'};
+ const label=labels[event.type];
+ const board=document.getElementById('svDuelBoard');
+ if(!label||!board||![0,1].includes(event.actor))return;
+ const node=document.createElement('div');
+ node.className='sv-activation-cue sv-activation-cue--'+event.type+(event.actor===viewerSeat?' sv-cue-local':' sv-cue-opposing');
+ node.setAttribute('aria-hidden','true');
+ const who=document.createElement('span');who.className='sv-activation-who';who.textContent=event.actor===viewerSeat?'自分':'相手';
+ const text=document.createElement('strong');text.textContent=label;
+ node.append(who,text);board.append(node);activeNodes.push(node);
+}
 function spark(node,kind='normal'){
  if(!node)return;
  const family=['summon','spell','trap','effect','set'].includes(kind)?kind:'summon';
@@ -89,8 +102,23 @@ function burst(el){
  node.style.left=`${where.x}px`;node.style.top=`${where.y}px`;
  document.body.append(node);activeNodes.push(node);
 }
+/** Route the trace to the graveyard whose confirmed count actually increased.
+ * A monster revived from the opposing grave may return to its original owner;
+ * banished cards must not be animated toward any graveyard. */
+function confirmedGraveSeat(room,previousRoom,cardId,controllerSeat){
+ if(!cardId||!room?.players||!previousRoom?.players)return null;
+ const order=[controllerSeat,1-controllerSeat].filter(side=>side===0||side===1);
+ for(const side of order){
+   const before=previousRoom.players[side]?.grave||[];
+   const after=room.players[side]?.grave||[];
+   const oldCount=before.reduce((n,id)=>n+(id===cardId),0);
+   const newCount=after.reduce((n,id)=>n+(id===cardId),0);
+   if(newCount>oldCount)return side;
+ }
+ return null;
+}
 function graveTrace(from,side){
- const hud=document.querySelector(`#view .seat[data-seat="${side}"] .sv-grave-count`);
+ const hud=document.querySelector(`#view .sv-pile-row[data-seat="${side}"] .sv-pile--grave`)||document.querySelector(`#view .seat[data-seat="${side}"] .sv-grave-count`);
  if(!from||!hud)return;
  const a=point(from),b=point(hud),mark=document.createElement('span');
  mark.className='sv-grave-trace';mark.setAttribute('aria-hidden','true');
@@ -103,6 +131,7 @@ export function playBoardCue(event,room,viewerSeat,settings={},previousRoom=null
  if(!event||!room||!settings.visuals||document.visibilityState==='hidden'||
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
  lpCue(room,previousRoom,settings);
+ activationCue(event,viewerSeat);
  if(event.type==='set'){
    const target=setPosition(room,previousRoom,event.actor,viewerSeat);
    if(target)spark(target,'set'); // A subtle placement cue, never the hidden card identity.
@@ -125,9 +154,11 @@ export function playBoardCue(event,room,viewerSeat,settings={},previousRoom=null
      const pairs=[[event.actor,event.slot],[event.targetSeat,event.target]];
      for(const [side,i] of pairs){
        if(![0,1].includes(side)||!Number.isInteger(i))continue;
-       if(previousRoom.players[side]?.monsters[i]&&!room.players[side]?.monsters[i]){
+       const oldItem=previousRoom.players[side]?.monsters[i];
+       if(oldItem?.id&&!room.players[side]?.monsters[i]){
+         const destination=confirmedGraveSeat(room,previousRoom,oldItem.id,side);
          const from=slotEl(side,i,viewerSeat);
-         if(from)later(()=>graveTrace(from,side),380);
+         if(from&&destination!==null)later(()=>graveTrace(from,destination),380);
        }
      }
    }
@@ -137,7 +168,7 @@ export function playBoardCue(event,room,viewerSeat,settings={},previousRoom=null
      spark(source.el,['summon','ritual','fusion'].includes(event.type)?'summon':['spell','trap','effect'].includes(event.type)?event.type:'normal');
      if(event.type==='attack'&&room.pending?.kind==='attack'){
        const attack=room.pending;
-       const target=attack.target===null
+       const target=(attack.target===null||attack.target===-1)
          ?document.querySelector(`#view .seat[data-seat="${1-attack.by}"] .lp`)
          :slotEl(1-attack.by,attack.target,viewerSeat);
        if(target)streak(source.el,target);

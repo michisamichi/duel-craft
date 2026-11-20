@@ -248,6 +248,35 @@ body{
 .sv-settings{max-width:420px}
 .sv-settings-options{display:grid;gap:10px;margin-top:15px}
 
+.sv-appearance-modal{width:min(100%,760px);max-height:calc(100dvh - 24px);display:flex;flex-direction:column;overflow:hidden}
+.sv-appearance-scroller{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:4px 2px 8px}
+.sv-appearance-section{margin-top:14px}
+.sv-appearance-heading{align-items:center;gap:10px;margin-bottom:8px}
+.sv-appearance-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.sv-appearance-entry{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px;min-width:0;text-align:left}
+.sv-appearance-entry.is-selected{border-color:#e0bd70;box-shadow:0 0 0 1px #e0bd70,inset 0 0 0 1px #f6e2ad33;background:#17314c}
+.sv-appearance-thumb{aspect-ratio:4/3;border-radius:10px;border:1px solid #5e7b95;overflow:hidden;background:#0d1b2f;display:grid;place-items:center}
+.sv-appearance-entry-title{font-size:13px;font-weight:800;line-height:1.3;color:#f7e5c2}
+.sv-appearance-entry-copy{font-size:11px;line-height:1.45;color:#b9cbdb;min-height:2.9em}
+.sv-appearance-badge{position:absolute;top:10px;right:10px;padding:3px 7px;border-radius:999px;border:1px solid #efd59d;background:#213246;color:#fff1ce;font-size:10px;font-weight:800;box-shadow:0 4px 12px #0005}
+.sv-mat-preview{padding:10px;position:relative}
+.sv-mat-preview-zones{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;width:100%}
+.sv-mat-preview-zones span{height:18px;border-radius:5px;border:1px solid #ffffff30;background:linear-gradient(160deg,#ffffff20,#ffffff08);box-shadow:inset 0 1px 0 #ffffff25,0 2px 6px #00000026}
+.sv-mat-preview--nebula{background:radial-gradient(circle at 50% 28%,#374f8b,#152545 58%,#081124)}
+.sv-mat-preview--forest{background:radial-gradient(circle at 40% 30%,#29634c,#102c36 50%,#0f2923)}
+.sv-mat-preview--lava{background:radial-gradient(circle at 25% 60%,#71392e,#261c32 55%,#1b1224)}
+.sv-mat-preview--ocean{background:radial-gradient(circle at 48% 12%,#266886,#13294f 59%,#0a1835)}
+.sv-back-preview{padding:10px}
+.sv-cardback-thumb{width:min(100px,74%);aspect-ratio:59/86;position:relative;display:grid;place-items:center;border-radius:10px;border:1px solid #d6af6c;background:radial-gradient(circle at 50% 50%,#4c5484 0,#102440 28%,#0b182e 78%),repeating-conic-gradient(from 45deg,#112641 0 20deg,#223857 20deg 40deg);box-shadow:inset 0 0 0 1px #050b14,0 8px 16px #0000004d}
+.sv-cardback-inner{position:absolute;inset:8%;border-radius:7px;border:1px solid #ddb56c92;opacity:.72;background:linear-gradient(45deg,transparent 46%,#c6a16b36 49%,transparent 53%),linear-gradient(-45deg,transparent 46%,#c6a16b36 49%,transparent 53%)}
+.sv-cardback-emblem{position:relative;z-index:1;color:#e4c38d;font-size:22px;text-shadow:0 0 10px #e8b36e88}
+.sv-back-preview--crest .sv-cardback-thumb{background:radial-gradient(circle at 50% 50%,#4c5484 0,#102440 28%,#0b182e 78%),repeating-conic-gradient(from 45deg,#112641 0 20deg,#223857 20deg 40deg)}
+.sv-back-preview--flame .sv-cardback-thumb{background:repeating-conic-gradient(from 30deg,#723720 0deg 22deg,#28162b 22deg 45deg,#a14a26 45deg 62deg)}
+.sv-back-preview--ice .sv-cardback-thumb{background:repeating-conic-gradient(from 20deg,#227196 0deg 30deg,#163a60 30deg 60deg,#3db4ca 60deg 74deg)}
+.sv-back-preview--midnight .sv-cardback-thumb{background:repeating-conic-gradient(from 20deg,#040609 0deg 30deg,#1d1b2c 30deg 60deg,#222437 60deg 74deg)}
+@media(min-width:700px){.sv-appearance-grid{grid-template-columns:repeat(4,minmax(0,1fr));}}
+@media(max-width:390px){.sv-appearance-entry-copy{min-height:0}.sv-cardback-thumb{width:min(90px,72%)}}
+
 /* Cards: original celestial-metal framework, with no image-based text baked in. */
 .card{
   --edge:#d5a566;--frame-base:#412e39;--frame-glow:#d5a56670;--ink:#f7e5be;
@@ -740,3 +769,21 @@ body{
   #view.duel-compact .field-zone-line .field-slot { width:48px; min-width:48px; height:55px; }
   #view.duel-compact .hand-slot { flex-basis:94px; height:134px; }
 }
+
+/* v1.9.53: offline artwork previews and matched in-duel textures. */
+.sv-appearance-thumb{position:relative;isolation:isolate}
+.sv-appearance-asset{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.sv-mat-preview .sv-mat-preview-zones{position:relative;z-index:1}
+.sv-appearance-cardback-asset{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit;pointer-events:none}
+.sv-back-preview--astral .sv-cardback-inner,.sv-back-preview--obsidian .sv-cardback-inner,
+.sv-back-preview--astral .sv-cardback-emblem,.sv-back-preview--obsidian .sv-cardback-emblem{display:none}
+.sv-appearance-entry:focus-visible{outline:3px solid #d4e9f7;outline-offset:3px}
+.sv-appearance-entry{touch-action:manipulation}
+.sv-mat-preview--aurora{background:radial-gradient(circle at 40% 25%,#2a6381,#091629)}
+.sv-mat-preview--sanctum{background:radial-gradient(circle at 50% 40%,#243043,#0b1626)}
+#app[data-mat='aurora'] .battlefield{background:linear-gradient(#06132626,#06132626),url('./appearance-mat-aurora.webp') center / cover no-repeat #091527;border-color:#78aebd}
+#app[data-mat='sanctum'] .battlefield{background:linear-gradient(#03091633,#03091633),url('./appearance-mat-sanctum.svg') center / cover no-repeat #091527;border-color:#c5a675}
+#app[data-back='astral'] .card.back{background:url('./appearance-back-astral.svg') center / cover no-repeat #0a1827;border-color:#b5e1d9}
+#app[data-back='obsidian'] .card.back{background:url('./appearance-back-obsidian.svg') center / cover no-repeat #17101f;border-color:#d2ae8a}
+#app[data-back='astral'] .card.back:before,#app[data-back='obsidian'] .card.back:before,
+#app[data-back='astral'] .card.back .back-emblem,#app[data-back='obsidian'] .card.back .back-emblem{display:none}

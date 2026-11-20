@@ -54,6 +54,24 @@ export const ABILITY_META={
  negateAttack:{label:'攻撃を無効化',scope:'none',amount:0},
  negateEffect:{label:'直前のチェーン効果を無効化',scope:'none',amount:0}
 };
+// A is paid immediately at activation, before B enters the chain. Keep the
+// allowed vocabulary small and deterministic so RTDB and local games agree.
+export const BEFORE_META={
+ sendOwnMonsterGrave:{label:'自分のモンスターを墓地へ送る',zone:'monsters',amount:1,max:5},
+ banishOwnMonster:{label:'自分のモンスターを除外する',zone:'monsters',amount:1,max:5},
+ returnOwnMonsterHand:{label:'自分のモンスターを手札へ戻す',zone:'monsters',amount:1,max:5},
+ returnOwnMonsterDeck:{label:'自分のモンスターをデッキへ戻す',zone:'monsters',amount:1,max:5},
+ sendOwnBackrowGrave:{label:'自分の魔法・罠を墓地へ送る',zone:'backrow',amount:1,max:5},
+ banishOwnBackrow:{label:'自分の魔法・罠を除外する',zone:'backrow',amount:1,max:5},
+ discardOwnHand:{label:'自分の手札を捨てる',zone:'hand',amount:1,max:20},
+ returnOwnHandDeck:{label:'自分の手札をデッキへ戻す',zone:'hand',amount:1,max:20},
+ millOwnDeck:{label:'自分のデッキ上から墓地へ送る',zone:'deck',amount:1,max:60},
+ banishOwnDeck:{label:'自分のデッキ上から除外する',zone:'deck',amount:1,max:60},
+ banishOwnGrave:{label:'自分の墓地から除外する（新しい順）',zone:'grave',amount:1,max:60},
+ recycleOwnGrave:{label:'自分の墓地からデッキへ戻す（新しい順）',zone:'grave',amount:1,max:60},
+ payLP:{label:'自分のLPを支払う',zone:'lp',amount:500,max:99999}
+};
+export const beforeText=a=>{const m=BEFORE_META[a?.operation];return m?`${m.label}（${a.amount}${m.zone==='lp'?'LP':m.zone==='monsters'?'体':'枚'}）`:'';};
 export const OPERATIONS=Object.fromEntries(Object.entries(ABILITY_META).map(([k,v])=>[k,v.label]));
 // Legacy reference: the first member now means the recommended initial value, not the only allowed value.
 export const EFFECT_VALUES=Object.fromEntries(Object.entries(ABILITY_META).map(([k,v])=>[k,[v.amount]]));
@@ -80,6 +98,11 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  if(type==='spell'&&a.when!=='main'&&!(a.when==='continuous'&&['continuous','equip','field'].includes(spellKind)))return false;
  if(type==='trap'&&!['attack','response'].includes(a.when))return false;
  if(a.when==='continuous'&&!['boost','weaken','boostDef','weakenDef'].includes(a.operation))return false;
+ if(a.before!==undefined){
+  const cost=BEFORE_META[a.before?.operation];
+  if(!cost||!Number.isSafeInteger(a.before.amount)||a.before.amount<1||a.before.amount>cost.max)return false;
+  if(!['main','attack','response'].includes(a.when)||type==='spell'&&spellKind!=='normal'&&spellKind!=='quick')return false;
+ }
  // Graveyard choice is deliberately a normal-spell-only feature; avoid invalid trap/continuous triggers.
  if(a.operation==='reviveSelected'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&a.target==='eitherGraveMonster'))return false;
  if(a.operation==='negateAttack'&&a.when!=='attack')return false;
@@ -94,9 +117,10 @@ export function abilityText(a){if(!a)return '';
  const meta=ABILITY_META[a.operation];if(!meta)return '';
  const usesAmount=meta.min!==undefined;
  const label=meta.label;
- if(a.operation==='reviveSelected')return '自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
+ if(a.operation==='reviveSelected')return (a.before?`① ${beforeText(a.before)}。\n② `:'')+'自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
  const detail=usesAmount?(/LP|ダメージ|攻撃力|守備力/.test(label)?`${label}（${a.amount}）`:`${label}（${a.amount}枚）`):label;
- return `${TRIGGERS[a.when]||'効果'}：${TARGETS[a.target]||''} に ${detail}。`;
+ const result=`${TRIGGERS[a.when]||'効果'}：${TARGETS[a.target]||''} に ${detail}。`;
+ return a.before?`① ${beforeText(a.before)}。\n② ${result}`:result;
 }
 export function normalizeRuleSettings(input){const lp=Number(input?.lp),deckSize=Number(input?.deckSize),costLimit=Number(input?.costLimit);return {lp:Number.isInteger(lp)&&lp>=1000&&lp<=20000&&lp%500===0?lp:8000,deckSize:Number.isInteger(deckSize)&&deckSize>=20&&deckSize<=60?deckSize:40,costLimit:Number.isInteger(costLimit)&&costLimit>=20&&costLimit<=300?costLimit:0};}
 export function cardLimit(c){return LIMITS[c?.limit]?.max??3;}

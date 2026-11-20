@@ -417,3 +417,128 @@
  outline-offset:1px;z-index:66}
 @media(max-width:360px){#view.duel-active .sv-hand-position{min-width:44px;font-size:9px}
  #view.duel-active .sv-hand-heading{gap:3px}}
+
+
+/* v1.9.26 — compact field states. One legible number, never a stat label over the name. */
+#view.duel-active .slot.sv-stance-attack,#view.duel-active .slot.sv-stance-defense,
+#view.duel-active .slot.sv-stance-set{position:relative;isolation:isolate}
+#view.duel-active .slot.sv-stance-attack{--sv-stance-line:#f5c87b}
+#view.duel-active .slot.sv-stance-defense{--sv-stance-line:#9bd4f8}
+#view.duel-active .slot.sv-stance-set{--sv-stance-line:#bbc4e8}
+#view.duel-active .slot .sv-stance-badge{position:absolute;bottom:1px;left:2px;right:2px;
+ z-index:2;display:flex;align-items:center;justify-content:center;white-space:nowrap;
+ min-height:15px;padding:1px 2px;border-radius:3px;
+ background:linear-gradient(110deg,#081622f2,#15283beb);border:1px solid var(--sv-stance-line,#d9d2ad);
+ color:var(--sv-stance-line,#fff);font-weight:900;font-size:clamp(8px,2vw,10px);line-height:1.1;
+ font-variant-numeric:tabular-nums;letter-spacing:-.025em;pointer-events:none;
+ box-shadow:0 1px 3px #0009}
+#view.duel-active .slot.sv-stance-attack .sv-stance-badge{background:linear-gradient(120deg,#342515ed,#142334f2)}
+#view.duel-active .slot.sv-stance-defense .sv-stance-badge{background:linear-gradient(120deg,#18354bf2,#142034f2)}
+#view.duel-active .slot.sv-stance-set .sv-stance-badge{border-style:dashed}
+#view.duel-active .slot.sv-stance-attack .card-info,
+#view.duel-active .slot.sv-stance-defense .card-info,
+#view.duel-active .slot.sv-stance-set .card-info{visibility:hidden}
+/* Shallow edge tint differentiates the stance without rotating tiny text. */
+#view.duel-active .slot.sv-stance-attack:has(.card){box-shadow:inset 0 -2px 0 #f5c87b50}
+#view.duel-active .slot.sv-stance-defense:has(.card){box-shadow:inset 0 -2px 0 #9bd4f860}
+/* Only while targeting, de-emphasize unrelated slots. Reuses existing target flags. */
+#view.duel-active.sv-is-targeting .battlefield .slots .slot:not(.sv-target-eligible):not(.sv-target-empty):not(.sv-target-picked){
+ opacity:.60;filter:saturate(.72)}
+#view.duel-active.sv-is-targeting .battlefield .slot.sv-target-eligible,
+#view.duel-active.sv-is-targeting .battlefield .slot.sv-target-empty,
+#view.duel-active.sv-is-targeting .battlefield .slot.sv-target-picked{opacity:1;filter:none}
+#view.duel-active .battlefield .slot{ -webkit-tap-highlight-color:transparent }
+@media(max-width:390px){#view.duel-active .slot .sv-stance-badge{font-size:8px;min-height:13px;left:1px;right:1px;padding-inline:0}}
+@media(prefers-reduced-motion:reduce){#view.duel-active .battlefield .slot{transition:none!important}}
+
+/* v1.9.27 — Deck/grave zones are real, compact board UI elements. */
+.duel-active .sv-pile-row{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin:5px 1px 8px;min-height:43px}
+.duel-active .sv-pile-row--mine{justify-content:flex-start;margin-top:8px;margin-bottom:5px}
+.duel-active .sv-pile{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:43px;min-width:106px;padding:5px 9px;border-radius:8px;border:1px solid #6787a16d;background:linear-gradient(145deg,#1b3047,#101d31);color:#e6eff7;font-size:11px;font-weight:750;cursor:pointer;touch-action:manipulation}
+.duel-active .sv-pile strong{color:#ffe3a5;font-size:14px;font-variant-numeric:tabular-nums;margin-left:2px}
+.duel-active .sv-pile-icon{display:grid;place-items:center;width:24px;height:28px;border:1px solid #8f9bb084;border-radius:3px;background:repeating-linear-gradient(35deg,#3c4570,#3c4570 4px,#232d54 4px,#232d54 8px);color:#e8ce9a;font-size:18px;flex:none}
+.duel-active .sv-pile--grave .sv-pile-icon{background:radial-gradient(circle,#354764,#192335);color:#bcd9ed}
+.duel-active .sv-pile:focus-visible{outline:2px solid #f7d994;outline-offset:2px}
+@media (hover:hover){.duel-active .sv-pile:hover{border-color:#f1d191;background:#283c55}}
+@media(max-width:365px){.duel-active .sv-pile-row{gap:6px;margin-block:4px}.duel-active .sv-pile{min-width:94px;padding:5px 6px;font-size:10px}}
+@media(prefers-reduced-motion:reduce){.duel-active .sv-pile{transition:none}}
+
+/* v1.9.32 — card inspection: fixed actions, scrollable reading area and safe-area margins.
+   Presentation only: no game state, event handlers, timers or card identity changes. */
+.sv-detail-modal{
+ padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right))
+         max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));
+}
+.sv-detail-dialog{
+ display:flex;flex-direction:column;min-height:0;
+ width:min(100%,760px);max-height:calc(100dvh - 24px);
+ overflow:hidden;padding:clamp(12px,2.2vw,20px);
+ border-color:#b69a6a;
+ background:radial-gradient(ellipse at 60% -18%,#344664 0%,#1a2b43 37%,#0d192c 100%);
+ box-shadow:0 20px 55px #000b,inset 0 1px 0 #faf0d125;
+}
+.sv-detail-dialog>.modal-title-line{flex:0 0 auto;min-height:48px;
+ padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid #a9bcc02c}
+.sv-detail-dialog>.modal-title-line h2{font-size:18px;letter-spacing:.03em}
+.sv-detail-dialog>.modal-title-line .btn{min-width:44px;min-height:44px;
+ display:grid;place-items:center;font-size:20px;border-radius:11px}
+.sv-detail-dialog>.sv-detail-layout{
+ flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+ overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+ padding:12px 2px 14px;scrollbar-width:thin;scrollbar-color:#7389a1 transparent;
+}
+.sv-detail-dialog .gallery-detail-card{width:min(62vw,228px);margin:4px auto 9px;
+ filter:drop-shadow(0 12px 18px #0009)}
+.sv-detail-dialog .gallery-detail-card .card{box-shadow:inset 0 0 0 1px #fff7d170,
+ inset 0 0 0 3px #0812218f,0 10px 24px #0008}
+.sv-detail-dialog .sv-detail-information{padding:0 2px 2px}
+.sv-detail-dialog .sv-detail-overline{font-size:11px;color:#e8cca2}
+.sv-detail-dialog .sv-detail-information h3{margin:5px 0 10px;line-height:1.35}
+.sv-detail-dialog .sv-detail-stats{gap:7px}
+.sv-detail-dialog .sv-detail-stats>div{padding:10px 9px;
+ background:linear-gradient(150deg,#14263b,#0b192b);border-color:#9eb3b13f}
+.sv-detail-dialog .sv-detail-stats span{font-size:10px;color:#bdcbd9}
+.sv-detail-dialog .sv-detail-stats b{font-size:clamp(14px,3.5vw,18px)}
+.sv-detail-dialog .sv-detail-copy{padding:12px 13px;margin:12px 0;border-color:#88a8b451;
+ background:linear-gradient(125deg,#10253a,#0a1a2c)}
+.sv-detail-dialog .sv-detail-copy-label{font-size:11px;color:#c8e5ec}
+.sv-detail-dialog .sv-detail-copy p{font-size:clamp(14px,3.7vw,16px);line-height:1.75;
+ overflow-wrap:anywhere;word-break:normal}
+.sv-detail-dialog .sv-detail-foot{font-size:12px;line-height:1.5;color:#c2ceda}
+.sv-detail-dialog>.sv-detail-close{flex:0 0 auto;min-height:48px;margin-top:4px;
+ border-radius:11px;box-shadow:0 -5px 18px #07132270;touch-action:manipulation}
+@media(min-width:700px){
+ .sv-detail-dialog{max-height:calc(100dvh - 40px)}
+ .sv-detail-dialog>.sv-detail-layout{grid-template-columns:260px minmax(0,1fr);gap:22px;align-items:center}
+ .sv-detail-dialog .gallery-detail-card{width:250px;margin:4px auto}
+ .sv-detail-dialog .sv-detail-copy p{font-size:15px}
+}
+@media(max-width:365px){
+ .sv-detail-dialog{padding:10px}
+ .sv-detail-dialog>.sv-detail-layout{padding-top:8px;padding-bottom:9px}
+ .sv-detail-dialog .gallery-detail-card{width:min(59vw,188px);margin:2px auto 8px}
+ .sv-detail-dialog .gallery-detail-card .card{padding:7px;gap:3px}
+ .sv-detail-dialog .gallery-detail-card .card-art{min-height:75px}
+ .sv-detail-dialog .gallery-detail-card .card-lore{min-height:47px;max-height:64px;padding:5px}
+ .sv-detail-dialog .gallery-detail-card .card-name{font-size:14px}
+}
+@media(max-height:650px) and (max-width:699px){
+ .sv-detail-dialog{max-height:calc(100dvh - 16px)}
+ .sv-detail-dialog .gallery-detail-card{width:min(48vw,170px)}
+}
+@media(prefers-reduced-motion:reduce){
+ .sv-detail-dialog>.sv-detail-layout{scroll-behavior:auto}
+}
+
+/* v1.9.33 — A→B builder & selectable prerequisites (no continuous animation). */
+.sv-sequence-controls{margin-top:12px;padding:11px;border:1px solid #7e9ba780;border-radius:12px;background:#0d2031a8}
+.sv-sequence-controls>.field-label{margin-top:0;color:#d0e5ed;font-weight:750}
+.sv-sequence-stage{margin-top:9px;padding:10px;border-left:3px solid #d5b575;border-radius:8px;background:#172b40}
+.sv-sequence-stage>b{color:#f7ddaa;display:block;font-size:12px}
+.sv-sequence-stage .tiny{line-height:1.55}
+.sv-target-eligible.hand-slot{outline:2px solid #c6b476;outline-offset:-2px}
+.sv-target-picked.hand-slot{outline:3px solid #82e1c9;outline-offset:-3px;background:#164d57}
+.sv-target-choice .sv-target-step{white-space:nowrap}
+@media(max-width:375px){.sv-sequence-controls{padding:8px}.sv-sequence-stage{padding:8px}}
+/* Preserve clear A/B paragraph breaks without extra DOM or effects. */
+.sv-detail-copy p,.card-lore span{white-space:pre-line}

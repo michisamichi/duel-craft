@@ -1,0 +1,21 @@
+/* SAHOVERSE v1.9.41 — read-only phase navigation and compact LP bars.
+   No timers, motion, event listeners, state or networking are added. */
+#view.duel-active .sv-phase-track{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch;gap:4px;margin:-4px 0 8px;max-width:100%;min-width:0;}
+#view.duel-active .sv-phase-step{min-width:0;display:grid;place-items:center;border-radius:5px;background:#16253a;color:#a7bbcf;border:1px solid #54698270;min-height:26px;padding:3px 1px;font-size:10px;font-weight:750;line-height:1.2;white-space:nowrap;font-variant-numeric:tabular-nums;}
+#view.duel-active .sv-phase-step.is-current{background:#58442a;color:#ffebbf;border-color:#d5b373;box-shadow:inset 0 1px #ffeaad31;font-weight:900;}
+#view.duel-active .sv-phase-step.is-current:before{content:'';display:inline-block;width:4px;height:4px;background:#ffe3a1;border-radius:50%;position:absolute;top:3px;right:3px;}
+#view.duel-active .sv-phase-step{position:relative;}
+#view.duel-active .sv-lp-track{position:relative;display:block;width:min(156px,100%);max-width:100%;height:5px;overflow:hidden;border-radius:999px;background:#050d1e;border:1px solid #7891a552;margin:5px 0 6px;box-sizing:border-box;}
+#view.duel-active .sv-lp-fill{display:block;width:var(--sv-lp-fill,100%);height:100%;border-radius:999px;background:linear-gradient(90deg,#3baca7,#b9e4bb);}
+#view.duel-active .sv-lp-low .sv-lp-fill{background:linear-gradient(90deg,#c0655a,#f3a57c);}
+#view.duel-active .seat.right .sv-lp-track{margin-left:auto;}
+#view.duel-active .duel-hud-seat .sv-lp-track{width:100%;}
+@media(max-width:390px){
+ #view.duel-active .sv-phase-track{gap:3px;margin-top:-3px;margin-bottom:6px;}
+ #view.duel-active .sv-phase-step{font-size:9px;min-height:23px;}
+ #view.duel-active .duel-hud-seat .sv-lp-track{height:4px;margin-block:4px 5px;}
+}
+@media(min-width:1024px) and (min-height:600px){
+ #view.duel-active .sv-phase-track{gap:7px;}
+ #view.duel-active .sv-phase-step{min-height:30px;font-size:11px;}
+}
