@@ -1,0 +1,280 @@
+/* SAHOVERSE v1.9.54 — idle screens only.
+   Four-tab visual system. No timers, observers, network, continuous animation,
+   duel-field selectors or modifications to interaction mechanics. */
+
+body.sv-idle-mode {
+  background:
+    radial-gradient(ellipse 74% 27% at 88% 8%,#1c426033,transparent 82%),
+    radial-gradient(ellipse 72% 32% at 3% 67%,#27395733,transparent 85%),
+    linear-gradient(158deg,#08131f 0%,#0b1729 56%,#091323 100%);
+}
+body.sv-idle-mode .topbar{
+  background:linear-gradient(95deg,#0b1728ef,#10243bef 62%,#0b1728f4);
+  border-bottom:1px solid #c2a67938;
+  box-shadow:0 4px 22px #0208136b;
+}
+body.sv-idle-mode .brand {letter-spacing:.08em}
+body.sv-idle-mode .brand-logo{border-radius:9px;box-shadow:0 0 0 1px #e8c58f4f,0 2px 13px #67bfe22a}
+body.sv-idle-mode .sv-bottom-nav{
+  background:linear-gradient(180deg,#0b192cf5,#07111ffb);
+  border-top:1px solid #bb9d7059;
+  box-shadow:0 -9px 27px #0309148f;
+}
+body.sv-idle-mode .sv-tab{position:relative;border-radius:12px;color:#a9bccd}
+body.sv-idle-mode .sv-tab.is-active{
+  background:linear-gradient(155deg,#223952,#15293e);
+  border-color:#d9bb8263;
+  box-shadow:inset 0 1px 0 #ffffff16,0 0 19px #8cbddb12;
+  color:#f8deac;
+}
+body.sv-idle-mode .sv-tab.is-active:before{
+  content:'';height:2px;position:absolute;top:0;left:28%;right:28%;
+  background:linear-gradient(90deg,transparent,#f9d393,transparent);
+}
+body.sv-idle-mode .sv-tab-icon{font-weight:500}
+
+/* Shared page headers */
+body.sv-idle-mode .sv-tab-page{max-width:900px}
+.sv-idle-kicker{
+  color:#88bbce;font-size:10px;letter-spacing:.25em;font-weight:850;
+  margin:4px 3px 5px;text-transform:uppercase;
+}
+.sv-idle-kicker span{font-weight:600;letter-spacing:.12em;color:#a38d6a}
+.sv-gallery-page>.modal-title-line,.sv-deck-page-content>.modal-title-line{
+  margin:0 0 14px;padding:0 3px 12px;border-bottom:1px solid #5b72904a;
+}
+.sv-gallery-page>.modal-title-line h2,.sv-deck-page-content>.modal-title-line h2,
+.sv-settings-page .sv-page-heading h1,.sv-duel-home .sv-page-title{
+  color:#f7e8cd;font-size:clamp(22px,4vw,26px);
+  letter-spacing:.035em;text-shadow:0 2px 16px #d7bb6b1d;
+}
+.sv-gallery-page>.modal-title-line:after,.sv-deck-page-content>.modal-title-line:after{
+  content:'';height:2px;width:58px;position:absolute;bottom:-1px;left:3px;
+  background:linear-gradient(90deg,#ebc789,#edce7a10);
+}
+.sv-gallery-page>.modal-title-line,.sv-deck-page-content>.modal-title-line{position:relative}
+
+/* Home — elevated brand hero, primary action, and calm utility tiles */
+.sv-duel-home{padding-top:7px}
+.sv-duel-home .sv-hero.sv-hero-compact{
+  min-height:142px;padding:22px 21px;gap:17px;margin:3px 0 22px;
+  background:
+    radial-gradient(ellipse at 87% 12%,#367aa441,transparent 44%),
+    radial-gradient(ellipse at 7% 107%,#bc944225,transparent 53%),
+    linear-gradient(128deg,#1c344d 0%,#0b1d31 65%,#0b1a2b 100%);
+  border:1px solid #c9ad7658;border-radius:20px;
+  box-shadow:inset 0 1px 0 #e5f5ff1f,0 18px 37px #01060e42;
+}
+.sv-duel-home .sv-hero.sv-hero-compact:before{
+  width:330px;height:125px;left:78%;top:10px;
+  border:1px solid #a6bbd12b;border-radius:50%;transform:translateX(-50%) rotate(-25deg);
+}
+.sv-duel-home .sv-hero.sv-hero-compact:after{
+  width:380px;height:176px;left:79%;top:-16px;
+  border:1px solid #edce8166;border-radius:50%;transform:translateX(-50%) rotate(14deg);
+}
+.sv-duel-home .sv-hero.sv-hero-compact .sv-crest{
+  width:81px;height:81px;flex:0 0 auto;border-radius:17px;
+  border:1px solid #f4d29c7a;box-shadow:0 7px 24px #0008,0 0 28px #f5d48d28;
+}
+.sv-duel-home .sv-hero-title{font-size:clamp(22px,5.8vw,33px)!important;letter-spacing:.065em}
+.sv-duel-home .sv-hero-sub{color:#a0d7e9;font-size:11px;letter-spacing:.31em}
+.sv-duel-home .sv-page-title{padding:0 3px 10px;border-bottom:1px solid #a8a6a240}
+.sv-duel-home .sv-duel-button{
+  min-height:103px;margin-top:13px;border-radius:17px;
+  border:1px solid #f2cc81;background:
+    linear-gradient(120deg,#f2d99919,transparent 47%),
+    linear-gradient(122deg,#29425b,#1e354c 60%,#16293f);
+  box-shadow:inset 0 0 0 3px #091526,0 6px 0 #070f1a,0 15px 30px #0006;
+  color:#ffe9bb;font-weight:900;letter-spacing:.08em;
+}
+.sv-duel-home .sv-duel-button .sv-duel-icon{color:#ffe2a9;text-shadow:0 0 22px #edbb6899}
+.sv-duel-home .sv-duel-button:active{background:linear-gradient(125deg,#334f68,#172e46)}
+.sv-duel-home .sv-duel-menu{
+  margin-top:22px;padding:13px;border-radius:17px;border-color:#69839950;
+  background:linear-gradient(140deg,#152840ef,#101e32f5 75%,#0c1a2cec);
+  box-shadow:inset 0 1px 0 #ffffff0e;
+}
+.sv-duel-home .sv-draft-launch{
+  min-height:56px;border-radius:12px;border:1px solid #a08b695f;
+  background:linear-gradient(140deg,#29364c,#192940);color:#fae3b7;font-weight:800;
+}
+.sv-duel-home .sv-draft-open-launch{
+  border-color:#62b6c77c;background:linear-gradient(140deg,#1a4055,#11293f);color:#b3e8f1;
+}
+.sv-duel-home .sv-rule-launch{
+  min-height:51px;border-color:#547b9788;background:#142b44;color:#d3e3f1;
+}
+.sv-duel-home .sv-resume-button{border-color:#b0a17c73}
+
+/* Gallery — filter panel as a coherent control surface, richer browsing tiles */
+.sv-gallery-filter-panel{
+  border:1px solid #67869b66;border-radius:18px;
+  padding:15px 15px 10px;margin:0 0 16px;
+  background:linear-gradient(137deg,#182b40e8,#0c1d30ef);
+  box-shadow:inset 0 1px 0 #c7ebff18,0 10px 20px #00000026;
+}
+.sv-gallery-filter-panel .field-label{color:#c3d9e3;font-size:11px;letter-spacing:.035em}
+.sv-gallery-filter-panel .input{
+  border:1px solid #67889c90;background:#091a2c;
+  border-radius:11px;min-height:46px;color:#f0f3f9;
+}
+.sv-gallery-filter-panel .input:focus-visible{outline:2px solid #e2c78d;outline-offset:1px}
+.sv-gallery-filter-panel .sv-gallery-search{margin:10px 0 3px}
+.sv-gallery-filter-panel .sv-gallery-resultbar{border-top:1px solid #7089a04a;padding-top:6px}
+.sv-gallery-filter-panel .sv-gallery-sort-row{margin:1px 1px 3px}
+.sv-gallery-page .gallery-grid{gap:13px 10px;margin-top:12px}
+.sv-gallery-page .gallery-entry{
+  position:relative;gap:7px;padding:9px 7px 11px;
+  border:1px solid #687c8d7d;border-radius:14px;
+  background:linear-gradient(158deg,#1b2e46,#0d1c2f 85%);
+  box-shadow:inset 0 1px 0 #ffffff0c,0 7px 16px #02091348;
+}
+.sv-gallery-page .gallery-entry:before{
+  content:'';position:absolute;top:0;left:13px;right:13px;height:1px;
+  background:linear-gradient(90deg,transparent,#e5c79577,transparent);
+  pointer-events:none;
+}
+.sv-gallery-page .gallery-entry[data-cardtype="spell"]{border-color:#529e9b80}
+.sv-gallery-page .gallery-entry[data-cardtype="trap"]{border-color:#ac80b482}
+.sv-gallery-page .gallery-card {filter:drop-shadow(0 5px 7px #0007)}
+.sv-gallery-page .gallery-caption{
+  color:#f0e9dc;font-weight:850;line-height:1.4;min-height:2.6em;
+  overflow-wrap:anywhere;
+}
+.sv-gallery-page .sv-gallery-meta{margin-top:auto}
+.sv-gallery-page .gallery-entry:active{background:#203c54}
+
+/* Deck library — polished saved-deck cards, restrained counters */
+.sv-deck-page-content{padding:2px 2px 10px}
+.sv-deck-library-stat{
+  display:flex;align-items:baseline;gap:7px;margin:0 0 13px;
+  padding:11px 15px;border:1px solid #52768c69;border-radius:12px;
+  background:linear-gradient(90deg,#192d43,#0c1e31);
+  font-size:11px;color:#b5cedc;font-variant-numeric:tabular-nums;
+}
+.sv-deck-library-stat>span:first-child{letter-spacing:.14em;font-weight:800}
+.sv-deck-library-stat strong{color:#f2d59c;font-size:22px;line-height:1;font-weight:850}
+.sv-deck-library-stat-note{margin-left:auto;color:#9caec0;font-size:11px}
+.sv-deck-page-content>.row.wrap.mt8{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;
+  margin:0 0 18px;
+}
+.sv-deck-page-content>.row.wrap.mt8 .btn{
+  min-width:0;min-height:49px;padding:8px 4px;border-radius:12px;
+  font-size:clamp(11px,2.7vw,13px);font-weight:750;line-height:1.3;
+}
+.sv-deck-page-content .deck-saved-list{gap:12px;margin-top:12px}
+.sv-deck-page-content .saved-deck{
+  position:relative;overflow:hidden;padding:17px 15px 14px;
+  border:1px solid #63849b78;border-radius:16px;
+  background:radial-gradient(ellipse 58% 80% at 100% 0%,#3a617a22,transparent 98%),
+             linear-gradient(147deg,#1c3048,#0b1c30);
+  box-shadow:inset 0 1px 0 #ffffff13,0 9px 22px #01060d45;
+}
+.sv-deck-page-content .saved-deck:before{
+  content:'';position:absolute;left:0;top:16px;bottom:16px;width:3px;
+  border-radius:0 3px 3px 0;background:linear-gradient(#8ab4ca,#426b82);
+}
+.sv-deck-page-content .saved-deck.active{
+  border-color:#ebc883a8;
+  background:radial-gradient(ellipse at 100% 0%,#98754329,transparent 58%),
+    linear-gradient(145deg,#273747,#17263b 78%);
+  box-shadow:inset 0 1px 0 #ffeed524,0 9px 23px #01060d59;
+}
+.sv-deck-page-content .saved-deck.active:before{background:linear-gradient(#f9db99,#b48a4a)}
+.sv-deck-page-content .saved-deck .row.between{align-items:flex-start;gap:9px}
+.sv-deck-page-content .saved-deck b{color:#f7e6c4;font-size:16px;letter-spacing:.015em;line-height:1.4}
+.sv-deck-page-content .saved-deck>.small.muted{line-height:1.7;color:#b3c7d8;margin-top:5px}
+.sv-deck-page-content .saved-deck .pill{
+  flex:0 0 auto;font-variant-numeric:tabular-nums;white-space:nowrap;
+  border-color:#8298a567;background:#10243b;color:#d0ddea;
+}
+.sv-deck-page-content .deck-controls{gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid #71869a3e}
+.sv-deck-page-content .deck-controls .btn{min-height:41px;border-radius:9px;font-weight:750}
+.sv-deck-page-content .deck-controls .btn.primary:not(:disabled){background:linear-gradient(130deg,#e8c990,#cfa765);color:#1a2030}
+
+/* Settings — curated selection rows rather than identical generic buttons */
+.sv-settings-page .sv-page-heading{
+  margin:6px 0 6px;border-bottom:1px solid #71869a5a;padding-bottom:13px;
+}
+.sv-settings-page .sv-section-label{color:#9bc6d4;letter-spacing:.21em}
+.sv-settings-page .sv-settings-options{max-width:740px;gap:9px;margin-top:7px}
+.sv-settings-group-title{
+  margin:15px 2px 2px;color:#9cc4d2;font-size:11px;
+  font-weight:850;letter-spacing:.12em;
+}
+.sv-settings-page .sv-settings-options>.btn{
+  position:relative;min-height:66px;padding:13px 46px 13px 62px;
+  border-radius:14px;border:1px solid #64829b82;
+  background:linear-gradient(135deg,#1d354d,#102439);
+  color:#e7eef4;font-size:14px;font-weight:800;
+  box-shadow:inset 0 1px 0 #ffffff12,0 6px 17px #02091444;
+}
+.sv-settings-page .sv-settings-options>.btn:before{
+  content:'✧';position:absolute;left:13px;top:50%;transform:translateY(-50%);
+  width:36px;height:36px;display:grid;place-items:center;border-radius:11px;
+  background:linear-gradient(135deg,#4b5d69a8,#223d53);border:1px solid #83a0ae60;
+  color:#f3d59e;font-size:21px;font-weight:450;
+}
+.sv-settings-page .sv-settings-options>.btn:after{
+  content:'›';position:absolute;right:18px;top:50%;transform:translateY(-50%);
+  color:#e2ca9c;font-size:25px;font-weight:350;
+}
+.sv-settings-page .sv-settings-options>.sv-settings-card{
+  border-color:#b99c6b87;background:linear-gradient(135deg,#303d51,#172a40);color:#ffe6b7;
+}
+.sv-settings-page .sv-settings-options>.sv-settings-card:before{content:'▣';background:#483e33a3;border-color:#ad916f8c}
+.sv-settings-page .sv-settings-options>.btn:nth-of-type(2):before{content:'◈';color:#b9eff8}
+.sv-settings-page .sv-settings-options>.btn:nth-of-type(3):before{content:'♫';color:#b3d7ee}
+.sv-settings-page .sv-backup-group{
+  margin-top:10px;padding:0;border:0;gap:9px;
+}
+.sv-settings-page .sv-backup-group .sv-settings-group-title{margin:13px 2px 1px}
+.sv-settings-page .sv-backup-group>.btn,.sv-settings-page .sv-backup-group>.sv-import-label{
+  min-height:51px;border-radius:11px;background:#12283e;border:1px solid #476a8587;
+  color:#c7dce8;font-weight:750;
+}
+.sv-settings-page .sv-backup-group .tiny{padding:3px 2px;font-size:11px;line-height:1.55;color:#91a6b7}
+.sv-settings-page .sv-backup-group>.btn:before,.sv-settings-page .sv-backup-group>.sv-import-label:before{content:'↓';padding-right:10px;font-weight:900;color:#e0c38d}
+.sv-settings-page .sv-backup-group>.sv-import-label:before{content:'↑'}
+
+/* Compact mobile layout and broader landscape/tablet layouts */
+@media(max-width:390px){
+  .sv-duel-home .sv-hero.sv-hero-compact{min-height:127px;padding:15px 13px;gap:12px}
+  .sv-duel-home .sv-hero.sv-hero-compact .sv-crest{width:69px;height:69px}
+  .sv-duel-home .sv-duel-button{min-height:92px;font-size:18px}
+  .sv-gallery-filter-panel{padding:12px 10px 8px}
+  .sv-gallery-page .gallery-grid{gap:10px 8px}
+  .sv-gallery-page .gallery-entry{padding:7px 5px 9px}
+  .sv-deck-page-content .saved-deck{padding:14px 11px}
+  .sv-deck-page-content .saved-deck b{font-size:14px}
+  .sv-deck-page-content .saved-deck .pill{font-size:10px;padding:5px 7px}
+}
+@media(min-width:760px){
+  .sv-duel-home .sv-hero.sv-hero-compact{min-height:164px;padding:24px 30px}
+  .sv-duel-home .sv-hero.sv-hero-compact .sv-crest{width:100px;height:100px}
+  .sv-duel-home .sv-duel-menu{padding:19px}
+  .sv-deck-page-content .deck-saved-list{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+  .sv-deck-page-content .saved-deck{display:flex;flex-direction:column}
+  .sv-deck-page-content .saved-deck .deck-controls{margin-top:auto;padding-top:13px}
+  .sv-gallery-filter-panel{padding:17px 20px 13px}
+  .sv-settings-page .sv-settings-options{max-width:770px}
+}
+@media(prefers-reduced-motion:reduce){
+  body.sv-idle-mode .sv-tab,body.sv-idle-mode .gallery-entry,
+  body.sv-idle-mode .btn{transition:none!important;animation:none!important}
+}
+/* Maintain comfortable click targets and alignment for the full-width backup rows. */
+.sv-settings-page .sv-backup-group>.btn,
+.sv-settings-page .sv-backup-group>.sv-import-label{
+  justify-content:flex-start;text-align:left;padding:7px 16px;
+}
+.sv-settings-page .sv-backup-group>.btn:before,
+.sv-settings-page .sv-backup-group>.sv-import-label:before{
+  display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;
+  margin-right:13px;padding:0;border:1px solid #54738b91;border-radius:10px;
+  background:#263c53;color:#e0c38d;font-size:17px;
+}
+.sv-deck-page-content .deck-controls .btn{min-height:44px}
+.sv-deck-page-content .deck-controls .btn.primary{font-size:11px;padding-inline:2px;white-space:nowrap}
