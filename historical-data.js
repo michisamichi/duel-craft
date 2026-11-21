@@ -232,6 +232,27 @@ const SPECIAL={
 const RITUALS={'マジシャン・オブ・ブラックカオス':'カオス－黒魔術の儀式','サクリファイス':'イリュージョンの儀式'};
 const SPELLS={
  '強欲な壺':{effect:'draw2',status:'exact',note:'カードを2枚ドローする'},
+ '手札抹殺':{ability:{when:'main',operation:'replaceHands',target:'none',amount:0},status:'simplified',note:'お互いの手札を全て墓地へ送り同じ枚数ドロー。手札交換でデッキ不足となる場合は発動前に拒否（チェーン裁定は省略）'},
+ '六芒星の呪縛':{ability:{when:'attack',operation:'negateAndLockAttacker',target:'attacker',amount:0},status:'simplified',note:'攻撃宣言時にその攻撃を無効化し、同一モンスターの次のターンまでの攻撃を禁止（永続罠のリンク・破壊連動は省略）'},
+ '巨大化':{ability:{when:'continuous',operation:'lpRelativeEquip',target:'ownMonster',amount:0},status:'simplified',note:'装備したモンスターの元々の攻撃力を、自分のLPが少なければ2倍、多ければ半分にする。等しい場合は変化なし。特殊なATK上書き・多重装備の裁定は簡略化'},
+ '死のマジック・ボックス':{ability:{when:'main',operation:'destroyGiveOwn',target:'enemyMonster',amount:0},status:'simplified',note:'相手の選択したモンスターを破壊し、自分の左端モンスター1体のコントロールを相手に移す（自分側選択を自動化）'},
+ '早すぎた埋葬':{spellKind:'normal',ability:{when:'main',operation:'graveRevive',target:'self',amount:1,before:{operation:'payLP',amount:800}},status:'simplified',note:'800LPを支払い、自分の墓地の新しいモンスター1体を攻撃表示で特殊召喚する。装備魔法の継続処理・破壊連動は省略した1回きりの通常魔法扱い'},
+ '墓荒らし':{ability:{when:'response',operation:'borrowOpponentSpell',target:'self',amount:0},status:'simplified',note:'相手の墓地の新しい魔法カード1枚を自分の手札に加える。原作の使用時2000ダメージ・未使用時の返却は処理の複雑化を防ぐため省略'},
+ '鎖付きブーメラン':{ability:{when:'attack',operation:'setAttackerDefense',target:'attacker',amount:0},status:'simplified',note:'攻撃宣言に対応して攻撃モンスターを守備表示にし、その攻撃を中断する。装備カード化とATK＋500は省略'},
+ '催眠術':{ability:{when:'main',operation:'lockPositionNextTurn',target:'opponent',amount:0},status:'simplified',note:'次の相手ターンに相手が手動で反転召喚・表示形式変更できなくなる。効果による表示形式変更は制限しない'},
+ '右手に盾を左手に剣を':{ability:{when:'main',operation:'swapPrintedStats',target:'bothMonsters',amount:0},status:'simplified',note:'発動時の表側モンスターの元々のATKとDEFをターン終了まで入れ替える。重複適用・特殊な元々の数値の裁定は簡略化'},
+ '補充要員':{ability:{when:'response',operation:'recoverNormalAtk',target:'self',amount:3},status:'simplified',note:'墓地の元々のATK1500以下の通常モンスターを新しい順に最大3枚手札へ戻す（原作の墓地5体以上の発動条件・選択は簡略化）'},
+ '天使のサイコロ':{ability:{when:'main',operation:'boost',target:'ownAllMonsters',amount:300,then:{operation:'boostDef',target:'ownAllMonsters',amount:300}},status:'simplified',note:'サイコロは振らず固定3として、自分の表側モンスターのATK/DEFをターン終了まで各300アップ'},
+ '悪魔のサイコロ':{ability:{when:'attack',operation:'weaken',target:'enemyAllMonsters',amount:300,then:{operation:'weakenDef',target:'enemyAllMonsters',amount:300}},status:'simplified',note:'サイコロは振らず固定3として、相手の表側モンスターのATK/DEFをターン終了まで各300ダウン（発動条件は攻撃時に限定）'},
+ '攻撃の無力化':{ability:{when:'attack',operation:'negateEndBattle',target:'none',amount:0},status:'simplified',note:'攻撃を無効にし、バトルフェイズを終了する。チェーン・一部の攻撃無効裁定は簡略化'},
+ '破壊輪':{ability:{when:'attack',operation:'blastAttacker',target:'attacker',amount:0},status:'simplified',note:'攻撃モンスターを破壊し、元々のATK分を両者へ与える（原作の発動条件・ダメージ順序・勝敗裁定は簡略化）'},
+ 'メテオ・ストライク':{ability:{when:'continuous',operation:'pierce',target:'ownMonster',amount:0},status:'simplified',note:'装備モンスターが守備表示モンスターに攻撃した際、ATKがDEFを上回れば差分の貫通ダメージ。装備対象は自分モンスターに限定'},
+ '光の護封剣':{ability:{when:'main',operation:'lockAttack',target:'enemyAllMonsters',amount:0},status:'simplified',note:'発動時に場にいる相手モンスターの攻撃を次の相手ターンまで封じる（3ターン継続、後から出たモンスターの制限、裏側公開は省略）'},
+ 'リビングデッドの呼び声':{ability:{when:'response',operation:'graveRevive',target:'self',amount:1},status:'simplified',note:'相手の効果へのチェーン時、自分の墓地から新しいモンスター1体を攻撃表示で特殊召喚（蘇生先の選択、永続罠との破壊連動・通常時の発動は省略）'},
+ '浅すぎた墓穴':{ability:{when:'main',operation:'reviveBothSet',target:'none',amount:0},status:'simplified',note:'双方の墓地から通常召喚可能なモンスターを新しい順に1体ずつ裏側守備表示で特殊召喚。両者の墓地と空きゾーンが揃う場合のみ発動（選択・複雑な特殊召喚制限を省略）'},
+ 'ドラゴンを呼ぶ笛':{ability:{when:'main',operation:'summonRaceFromHand',target:'self',amount:2,match:'race',query:'ドラゴン',requiredFaceUpName:'ロード・オブ・ドラゴン－ドラゴンの支配者－'},status:'simplified',note:'フィールドに表側の「ロード・オブ・ドラゴン－ドラゴンの支配者－」が存在する場合のみ、手札の通常召喚可能なドラゴン族を先頭から最大2体特殊召喚。選択・特殊召喚後の複雑な裁定は省略'},
+ 'シャイン・キャッスル':{ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:700},status:'simplified',note:'自分の装備モンスターの攻撃力を700アップ（相手への装備指定は簡略化）'},
+
  '天使の施し':{ability:{when:'main',operation:'draw',target:'self',amount:3,then:{operation:'discardNewest',target:'self',amount:2}},status:'simplified',note:'3枚ドローした後、手札末尾の2枚を自動で捨てる（選択操作のみ省略）'},
  '融合賢者':{ability:{when:'main',operation:'searchNamed',target:'self',amount:1,match:'exact',query:'融合'},status:'simplified',note:'デッキから「融合」1枚を手札に加える（最初の候補を自動選択）'},
  'トゥーンのもくじ':{ability:{when:'main',operation:'searchNamed',target:'self',amount:1,match:'contains',query:'トゥーン'},status:'simplified',note:'名前に「トゥーン」を含むカード1枚をデッキから手札へ加える（カード名以外の記載・選択は省略）'},
@@ -250,24 +271,59 @@ const SPELLS={
  'カオス－黒魔術の儀式':{effect:'ritualSummon',spellKind:'ritual',status:'simplified'},
  'イリュージョンの儀式':{effect:'ritualSummon',spellKind:'ritual',status:'simplified'},
  'デーモンの斧':{ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:1000},status:'simplified',note:'墓地から回収する効果は省略'},
- 'ガイアパワー':{ability:{when:'continuous',operation:'boost',target:'ownAllMonsters',amount:500},status:'simplified',note:'属性限定・守備力低下は省略'},
+ 'ガイアパワー':{ability:{when:'continuous',operation:'earthAura',target:'bothMonsters',amount:500},status:'simplified',note:'双方の表側・地属性モンスターのATKを500アップ、DEFを400ダウン。補正値の特殊な上書き裁定は簡略化'},
  '砂塵の大竜巻':{ability:{when:'response',operation:'destroyBackrow',target:'enemyBackrow',amount:0},status:'simplified',note:'効果発動条件と追加セットは省略'},
  '強欲な瓶':{ability:{when:'response',operation:'draw',target:'self',amount:1},status:'simplified',note:'効果へのチェーン時に発動する代替'},
- '攻撃の無力化':{effect:'negate',status:'simplified',note:'バトルフェイズ終了は省略'},
  '聖なるバリア －ミラーフォース－':{ability:{when:'attack',operation:'destroy',target:'enemyAllMonsters',amount:0},status:'simplified',note:'攻撃表示に限定する処理は省略'},
  '落とし穴':{effect:'counterdestroy',status:'proxy',note:'召喚時でなく攻撃時に破壊する代替'},
- '魔法の筒':{effect:'negate',status:'proxy',note:'攻撃を無効化。反射ダメージは保留'},
+ '魔法の筒':{ability:{when:'attack',operation:'reflectAttack',target:'none',amount:0},status:'simplified',note:'相手の攻撃を無効にし、その攻撃モンスターの現在ATK分のダメージを攻撃側へ与える。チェーンで攻撃が先に無効になった場合や対象不在の場合は不発'},
  'マジックアーム・シールド':{effect:'negate',status:'proxy',note:'攻撃を無効化する代替'},
  '偽物のわな':{effect:'negate',status:'proxy',note:'攻撃を無効化する代替'},
- '鎖付きブーメラン':{effect:'negate',status:'proxy',note:'攻撃を無効化する代替'},
  '天使の手鏡':{effect:'negate',status:'proxy',note:'攻撃を無効化する代替'},
  'トゥーン・ディフェンス':{effect:'negate',status:'proxy',note:'攻撃を無効化する代替'},
- '破壊輪':{effect:'counterdestroy',status:'proxy',note:'攻撃モンスター破壊。両者へのダメージは保留'},
+ 'マジック・ジャマー':{ability:{when:'response',operation:'negateEffect',target:'none',amount:0,before:{operation:'discardOwnHand',amount:1}},responseGuard:'spell',status:'simplified',note:'魔法カードの発動に対し、手札1枚を選んで捨てて発動を無効にする（細部のチェーン裁定は簡略化）'},
+ 'フォースフィールド':{ability:{when:'response',operation:'negateEffect',target:'none',amount:0},responseGuard:'targetedSpell',status:'simplified',note:'モンスター1体を対象とする魔法の発動を無効にする。対象を取る魔法かどうかは効果定義から判定（チェーン裁定簡略化）'},
  'ホーリー・エルフの祝福':{ability:{when:'response',operation:'healPerFieldMonster',target:'self',amount:300},status:'simplified',note:'お互いのフィールドのモンスター数×300LP回復。発動可能な場面はチェーン応答時に簡略化'},
 };
 // Verified native passive effects. Keep the historical ids and base stats unchanged.
 // These codes are interpreted by the duel engine, not by the proxy spell system.
+const HISTORICAL_MONSTER_ABILITIES={
+ '心眼の女神':{ability:{when:'continuous',operation:'fusionMaterialSubstitute',target:'self',amount:0},status:'simplified',desc:'融合素材2体のうち1体の代わりとして使用できる（融合素材を2体使用する融合召喚のみ、代用は1体まで）。'},
+ '破壊神 ヴァサーゴ':{ability:{when:'continuous',operation:'fusionMaterialSubstitute',target:'self',amount:0},status:'simplified',desc:'融合素材2体のうち1体の代わりとして使用できる（融合素材を2体使用する融合召喚のみ、代用は1体まで）。'},
+ 'ドラゴンに乗るワイバーン':{ability:{when:'continuous',operation:'directEarthWaterFire',target:'self',amount:0},status:'simplified',desc:'相手フィールドに表側表示の地・水・炎属性モンスターしかいない場合に直接攻撃できる（表側が最低1体必要。対象が変化した場合は解決時に再判定）。'},
+ '暗黒の眠りを誘うルシファー':{
+  ability:{when:'summon',operation:'lockAttack',target:'enemyMonster',amount:0},
+  status:'simplified',desc:'通常召喚・反転召喚したとき、相手の左端のモンスター1体の攻撃を次のターンまで封じる（原作の自身が表側でいる間の継続、対象選択とチェーンは簡略化）。'
+ },
+ 'ヴァンパイア・ロード':{
+  ability:{when:'battleDamage',operation:'millFirstType',target:'opponent',amount:0,match:'monster'},
+  status:'simplified',desc:'相手に戦闘ダメージを与えたとき、相手デッキの最初のモンスター1枚を墓地へ送る（指定種類をモンスターで固定、相手によるカード選択を自動化。効果破壊された場合の次のスタンバイフェイズでの自己再生は保留）。'
+ },
+ // Toon-wide summon, attack and Toon World rules are intentionally NOT applied.
+ // Only standalone battle-damage triggers use the ordinary effect composer.
+ 'トゥーン・仮面魔道士':{
+  ability:{when:'battleDamage',operation:'draw',target:'self',amount:1},
+  status:'simplified',desc:'このモンスターが相手に戦闘ダメージを与えたとき、自分はカードを1枚ドローする（トゥーン共通ルール・別チェーンは適用しない）。'
+ },
+ 'トゥーン・ヂェミナイ・エルフ':{
+  ability:{when:'battleDamage',operation:'discardNewest',target:'opponent',amount:1},
+  status:'simplified',desc:'このモンスターが相手に戦闘ダメージを与えたとき、相手の手札を1枚捨てる（ランダム選択ではなく末尾から自動選択。トゥーン共通ルール・別チェーンは適用しない）。'
+ },
+ 'トゥーン・キャノン・ソルジャー':{
+  ability:{when:'main',operation:'damage',target:'opponent',amount:500,before:{operation:'sendOwnMonsterGrave',amount:1}},
+  status:'simplified',desc:'自分のモンスター1体を発動時に墓地へ送り、相手に500ダメージ（リリースを墓地送りとして代用、起動は1ターンに1度。トゥーン固有の直接攻撃・召喚ターン攻撃不可・トゥーン・ワールド破壊連動は保留）。'
+ },
+ 'マジック・ランプ':{
+  ability:{when:'main',operation:'summonNamedFromHand',target:'self',amount:0,match:'exact',query:'ランプの魔精・ラ・ジーン'},
+  status:'simplified',desc:'自分メインフェイズに、手札の「ランプの魔精・ラ・ジーン」1体を攻撃表示で特殊召喚（最初の候補を自動選択、1ターンに1度。裏側守備表示で攻撃された際の攻撃対象変更は保留）。'
+ },
+};
 const NATIVE_MONSTER_EFFECTS={
+ 'ロケット戦士':{kind:'continuous',code:'rocketAssault',status:'simplified',desc:'自分のバトルフェイズに攻撃する場合、このカードは戦闘破壊されず自分への戦闘ダメージは0。戦闘後、相手のモンスターが場に残っていればそのATKをターン終了まで500下げる（チェーン処理は簡略化）。'},
+ 'デビル・フランケン':{kind:'ignition',code:'fusionFromExtraPay5000',status:'simplified',desc:'自分メインフェイズに5000LPを支払い、EXデッキの先頭にある融合モンスター1体を攻撃表示で特殊召喚する（選択操作・細かな特殊召喚制限は簡略化。LPが5000以下の場合は安全のため発動不可）。'},
+ '疾風の暗黒騎士ガイア':{kind:'summonRule',code:'soloHandNoTribute',status:'simplified',desc:'手札がこのカード1枚だけならリリースなしで通常召喚・セットできる。簡易UIでは条件を満たしたとき、リリースなしを優先する。'},
+ 'カイザー・シーホース':{kind:'summonRule',code:'doubleLightTribute',status:'simplified',desc:'光属性・レベル7以上のモンスターをアドバンス召喚・セットするとき、1体で2体分のリリースに使用できる（1体で使う場合は自動で2体分扱い）。'},
+ '人造人間－サイコ・ショッカー':{kind:'continuous',code:'trapSuppression',status:'simplified',desc:'このカードが表側表示で存在する限り、お互いの罠カードを新たに発動できず、解決時に存在する罠カードの効果を無効化する（複雑な永続罠の再評価・特殊なチェーン裁定は省略）。'},
  '巨大ネズミ':{kind:'battle',code:'recruitOnBattleDestroy',params:{attribute:'地',threshold:1500},status:'simplified',desc:'戦闘で破壊され墓地へ送られたとき、デッキ内の地属性・元々のATK1500以下のモンスターを攻撃表示で1体特殊召喚（最初の候補を自動選択。チェーン省略）。'},
  'キラー・トマト':{kind:'battle',code:'recruitOnBattleDestroy',params:{attribute:'闇',threshold:1500},status:'simplified',desc:'戦闘で破壊され墓地へ送られたとき、デッキ内の闇属性・元々のATK1500以下のモンスターを攻撃表示で1体特殊召喚（最初の候補を自動選択。チェーン省略）。'},
  'ものマネ幻想師':{kind:'trigger',code:'copyOpponentPrintedStats',status:'simplified',desc:'召喚・反転召喚・特殊召喚時、相手の表側モンスター1体の元々の攻撃力・守備力をコピー（左端を自動選択。チェーン省略）。'},
@@ -339,8 +395,12 @@ function kindToCard(name,kind,rest){
  if(monster){
    const [attribute,race,level,atk,def]=rest;
    const custom={...base,type:'monster',subtype:'normal',attribute,race,level:Number(level),atk:Number(atk),def:Number(def),summonKind:kind==='F'?'fusion':kind==='R'?'ritual':'normal'};
+   const recipe=HISTORICAL_MONSTER_ABILITIES[name];
    const native=NATIVE_MONSTER_EFFECTS[name];
-   if(native){
+   if(recipe){
+     custom.subtype='effect';custom.ability=recipe.ability;custom.status=recipe.status;
+     custom.desc='簡易再現：'+recipe.desc;
+   }else if(native){
      custom.subtype='effect';
      custom.monsterEffect={kind:native.kind||'continuous',code:native.code,...(native.params||{})};
      custom.status=native.status||'exact';

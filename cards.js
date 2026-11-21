@@ -1,6 +1,6 @@
-import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=1984';
-import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=1984';
-export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=1984';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=1995';
+import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=1995';
+export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=1995';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},
@@ -78,8 +78,11 @@ export const MONSTER_EFFECTS = {
     postAttackDefenseLock:'攻撃後：バトル終了時に守備表示＋次の自分ターン終了まで表示形式変更不可',
     multiAttack:'1回のバトルフェイズで指定回数まで攻撃できる（カスタム）',
     destroyAttachedEquip:'このカードに装備された装備カードを破壊（チェーン応答は簡略化）',
+    trapSuppression:'表側表示の間、お互いの罠カードの発動・効果を無効化（簡易）',
+    rocketAssault:'自分のバトルフェイズに攻撃する場合、戦闘破壊と自身の戦闘ダメージを防ぎ、戦闘後に相手ATKを500下げる（簡易）',
   },
-  ignition: {doubleOriginalAtkEndDestroy:'自身の元々のATKをエンドフェイズまで2倍にし、そのエンドフェイズに自壊（簡易）',burn500:'相手に500ダメージ',heal500:'自分のLPを500回復',draw1:'1枚ドロー',destroy1:'相手のモンスター1体を破壊',atk500:'自分の攻撃力＋500（ターン終了まで）'},
+  summonRule: {soloHandNoTribute:'手札が自身1枚ならリリースなしで通常召喚できる',doubleLightTribute:'光属性のレベル7以上の召喚時、このカードは2体分のリリースになる'},
+  ignition: {fusionFromExtraPay5000:'5000LPを支払い、EXデッキ先頭の融合モンスター1体を特殊召喚（簡易）',doubleOriginalAtkEndDestroy:'自身の元々のATKをエンドフェイズまで2倍にし、そのエンドフェイズに自壊（簡易）',burn500:'相手に500ダメージ',heal500:'自分のLPを500回復',draw1:'1枚ドロー',destroy1:'相手のモンスター1体を破壊',atk500:'自分の攻撃力＋500（ターン終了まで）'},
   trigger: {copyOpponentPrintedStats:'召喚・反転召喚・特殊召喚時：相手の表側モンスターの元々のATK・DEFをコピー（左端自動選択）',searchDeckOnSummon:'召喚・反転召喚時：デッキから条件に合うカードを手札へ加える',draw1:'召喚成功時に1枚ドロー',heal500:'召喚成功時にLP500回復',burn500:'召喚成功時に相手に500ダメージ',atk500:'召喚成功時に攻撃力＋500（ターン終了まで）'},
   battle: {recruitOnBattleDestroy:'戦闘で破壊され墓地へ送られたとき：指定属性・指定ATK以下のモンスターをデッキから特殊召喚（簡易）'},
   grave: {searchStatOnGrave:'フィールドから墓地へ送られた時：指定ATK/DEF以下のモンスターをデッキから1体手札に加える（自動選択・簡易）'},
@@ -112,7 +115,9 @@ export function defaultPassiveConfig(code){
   if(code==='searchDeckOnSummon')return {kind:'trigger',code,filter:'ritualMonster'};
   if(code==='copyOpponentPrintedStats')return {kind:'trigger',code};
   if(code==='recruitOnBattleDestroy')return {kind:'battle',code,attribute:'地',threshold:1500};
-  if(code==='destroyAttachedEquip')return {kind:'continuous',code};
+  if(code==='destroyAttachedEquip'||code==='trapSuppression'||code==='rocketAssault')return {kind:'continuous',code};
+  if(code==='fusionFromExtraPay5000')return {kind:'ignition',code};
+  if(code==='soloHandNoTribute'||code==='doubleLightTribute')return {kind:'summonRule',code};
   if(code==='doubleOriginalAtkEndDestroy')return {kind:'ignition',code};
   if(code==='selfReturnHand')return {kind:'endPhase',code};
   if(code==='postAttackDefenseLock')return {kind:'continuous',code};
@@ -121,6 +126,7 @@ export function defaultPassiveConfig(code){
 }
 export function validMonsterEffect(e){
   if(!e||typeof e!=='object'||!MONSTER_EFFECTS[e.kind]?.[e.code])return false;
+  if(['soloHandNoTribute','doubleLightTribute'].includes(e.code))return e.kind==='summonRule'&&Object.keys(e).length===2;
   if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&Object.keys(e).length===2;
   if(e.kind==='battle')return e.code==='recruitOnBattleDestroy'&&Object.keys(e).length===4&&
     ATTRIBUTE_NAMES.includes(normalizeAttribute(e.attribute))&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000;
@@ -134,7 +140,7 @@ export function validMonsterEffect(e){
   if(e.kind==='flip')return (['destroyOpponentOnFlip','recoverOwnSpellOnFlip'].includes(e.code)&&Object.keys(e).length===2)|| (e.code==='returnOpponentOnFlip'&&Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2)|| (e.code==='millOpponentDeck'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=10)||
     (e.code==='scoutDrawDiscardSpells'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=5&&Object.keys(e).length===3);
   if(e.kind==='endPhase')return e.code==='selfReturnHand'&&Object.keys(e).length===2;
-  if(['destroyAttachedEquip','doubleOriginalAtkEndDestroy'].includes(e.code))return (e.code==='destroyAttachedEquip'?e.kind==='continuous':e.kind==='ignition')&&Object.keys(e).length===2;
+  if(['destroyAttachedEquip','doubleOriginalAtkEndDestroy','trapSuppression','rocketAssault','fusionFromExtraPay5000'].includes(e.code))return (['doubleOriginalAtkEndDestroy','fusionFromExtraPay5000'].includes(e.code)?e.kind==='ignition':e.kind==='continuous')&&Object.keys(e).length===2;
   if(e.code==='postAttackDefenseLock')return e.kind==='continuous'&&Object.keys(e).length===2;
   if(e.code==='multiAttack')return e.kind==='continuous'&&Object.keys(e).length===3&&Number.isInteger(e.count)&&e.count>=2&&e.count<=5;
   if(!PASSIVE_SCALE_CODES.includes(e.code))return true;
@@ -156,6 +162,8 @@ export function effectText(c){
   const e=c?.monsterEffect;
   if(!e&&!c?.ability)return '';
   if(c.ability)return abilityText(c.ability);
+  if(e?.kind==='summonRule'&&e.code==='soloHandNoTribute')return '手札がこのカード1枚だけの場合、リリースなしで通常召喚・セットできる（条件を満たした場合はリリースなしを優先）。';
+  if(e?.kind==='summonRule'&&e.code==='doubleLightTribute')return '光属性・レベル7以上のモンスターをアドバンス召喚・セットする場合、このカード1体を2体分のリリースにできる。';
   if(e?.kind==='trigger'&&e.code==='searchDeckOnSummon'){
     const target=e.filter==='ritualMonster'?'儀式モンスター':e.filter==='ritualSpell'?'儀式魔法':`「${e.name||''}」`;
     return `召喚・反転召喚したとき、自分のデッキから${target}1枚を手札に加える（自動で最初の候補を選ぶ簡易処理）`;
@@ -170,6 +178,9 @@ export function effectText(c){
   if(e?.kind==='flip'&&e.code==='millOpponentDeck')return `リバース時、相手のデッキの上から${e.amount}枚を墓地へ送る`;
   if(e?.kind==='flip'&&e.code==='scoutDrawDiscardSpells')return `リバース時、相手は${e.amount}枚ドローし、その中の魔法カードを墓地へ捨てる（公開演出・チェーンは簡略化）`;
   if(e?.kind==='continuous'&&e.code==='destroyAttachedEquip')return 'このカードに装備カードが装備されたとき、その装備カードを破壊する（チェーンは簡略化）';
+  if(e?.kind==='continuous'&&e.code==='rocketAssault')return '自分バトルフェイズにこのカードで攻撃する場合、戦闘破壊されず自分への戦闘ダメージは0。戦闘後、相手モンスターが残ればATKを500下げる（ターン終了まで・簡易処理）';
+  if(e?.kind==='ignition'&&e.code==='fusionFromExtraPay5000')return '5000LPを払って発動。EXデッキの先頭の融合モンスター1体を攻撃表示で特殊召喚（LPは5000より多い必要あり。簡易処理）';
+  if(e?.kind==='continuous'&&e.code==='trapSuppression')return '表側表示で存在する限り、お互いの罠カードを発動できず、罠のチェーン効果を解決時に無効化する（簡易処理）';
   if(e?.kind==='ignition'&&e.code==='doubleOriginalAtkEndDestroy')return '1ターンに1度、元々のATKの2倍にし、そのエンドフェイズに自身を破壊する（チェーンは簡略化）';
   if(e?.kind==='endPhase'&&e.code==='selfReturnHand')return '自分のエンドフェイズに、表側表示のこのカードを持ち主の手札に戻す（チェーン応答は簡略化）';
   if(e?.kind==='continuous'&&e.code==='postAttackDefenseLock')return '攻撃した場合、バトルフェイズ終了時に守備表示になり、次の自分ターン終了時まで手動で表示形式を変更できない（カード効果による変更は可能）';
