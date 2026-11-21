@@ -1,0 +1,10 @@
+/* Card editor only. No game-board layout or timers. */
+.sv-effect-template-manager {margin-top:12px;padding:12px;border:1px solid rgba(188,168,115,.30);border-radius:12px;background:rgba(13,23,41,.52)}
+.sv-effect-template-manager>summary {font-weight:700;cursor:pointer;color:#e8d8ad;padding:3px 0;min-height:30px}
+.sv-effect-template-manager>summary span {font-weight:400;margin-left:8px}
+.sv-effect-template-manager>.sv-template-save {margin-top:11px}
+.sv-effect-template-manager .row {align-items:stretch;gap:8px}
+.sv-effect-template-manager .row .input {min-width:0}
+.sv-effect-template-manager .row .btn {flex-shrink:0;min-height:38px}
+.sv-effect-template-manager .sv-template-actions {margin-top:9px}
+.sv-effect-template-manager p {line-height:1.55;margin-top:8px}

@@ -1,8 +1,25 @@
 // v0.4: browser-local saved decks. No deck data is uploaded to Firebase.
-import {copyPreset} from './cards.js?v=1933';
+import {copyPreset} from './cards.js?v=1984';
+import {HISTORICAL_PRESETS} from './historical-data.js?v=1984';
 
 export const DECK_STORE_KEY='duel-decks-v4';
 export const MAX_SAVED_DECKS=30;
+const HISTORIC_SEED_KEY='saho-historic-decks-v1';
+const HISTORIC_KEYS=['yu','jy','ka','pe'];
+const historicId=key=>'d_historic'+key+'20012002';
+function appendHistoricalDecks(store){
+  if(!store?.decks)return store;
+  for(const key of HISTORIC_KEYS){
+    if(store.decks.length>=MAX_SAVED_DECKS)break;
+    const p=HISTORICAL_PRESETS[key],did=historicId(key);
+    if(store.decks.some(d=>d.id===did))continue;
+    // The 3-material Blue-Eyes Ultimate Dragon cannot be correctly fused by v1.9.x.
+    const extraCounts=key==='ka'?{}:p.extraCounts;
+    store.decks.push({id:did,name:p.name,counts:{...p.counts},extraCounts:{...extraCounts},updatedAt:Date.now()});
+  }
+  return store;
+}
+
 const ID_RE=/^(?:[a-z][0-9]{2}|u_[0-9a-f]{16,32})$/;
 const cleanName=s=>String(s??'').trim().slice(0,28)||'名前のないデッキ';
 export const totalCards=counts=>Object.values(counts||{}).reduce((n,x)=>n+Number(x||0),0);
@@ -42,15 +59,19 @@ export function initialDeckStore(legacyCounts,legacyPreset){
     if(same)activeId=same.id;
     else{const older=newDeck('以前のマイデッキ',legacyCounts);decks.unshift(older);activeId=older.id;}
   }
-  return {version:4,decks,activeId};
+  return appendHistoricalDecks({version:4,decks,activeId});
 }
 export function readDeckStore(storage){
   try{
     const existing=storage.getItem(DECK_STORE_KEY);
-    if(existing){const valid=normalizeDeckStore(JSON.parse(existing));if(valid)return valid;}
+    if(existing){const valid=normalizeDeckStore(JSON.parse(existing));if(valid){
+      if(storage.getItem(HISTORIC_SEED_KEY)!=='1'){appendHistoricalDecks(valid);storage.setItem(DECK_STORE_KEY,JSON.stringify(valid));storage.setItem(HISTORIC_SEED_KEY,'1');}
+      return valid;
+    }}
     const old=storage.getItem('duel-deck');
     let parsed=null;try{parsed=old?JSON.parse(old):null;}catch{}
-    return initialDeckStore(parsed,storage.getItem('duel-preset'));
+    const initial=initialDeckStore(parsed,storage.getItem('duel-preset'));
+    storage.setItem(HISTORIC_SEED_KEY,'1');return initial;
   }catch{return initialDeckStore(null,null);}
 }
 export function writeDeckStore(storage,store){

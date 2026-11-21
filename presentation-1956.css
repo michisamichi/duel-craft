@@ -1,0 +1,9 @@
+/* v1.9.56: compact, accessible metadata for 2001–2002 deck collections. */
+.sv-history-spec{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0;font-size:12px;font-weight:650;letter-spacing:.02em}
+.sv-history-spec span{padding:5px 10px;background:rgba(165,189,223,.08);border:1px solid rgba(164,186,228,.15);border-radius:7px}
+.sv-history-status{font-size:12px;color:#e5c78d;line-height:1.6;margin:12px 0 0}
+.sv-history-library-note{font-size:12px;line-height:1.7;color:#a8b9d4;margin:9px 0 12px;display:flex;gap:8px 12px;flex-wrap:wrap;align-items:center}
+.sv-history-deck-info{margin:9px 0 4px;border-top:1px solid rgba(173,190,216,.1);padding-top:8px;font-size:12px;line-height:1.8;color:#aebfd6}
+.sv-history-deck-info summary{cursor:pointer;touch-action:manipulation;min-height:26px;color:#dcc18f}
+.sv-history-deck-info p{overflow-wrap:anywhere;margin:5px 0;line-height:1.7}
+@media(max-width:390px){.sv-history-library-note .btn{max-width:100%;white-space:normal}.sv-history-spec{gap:6px}}

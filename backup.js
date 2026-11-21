@@ -1,10 +1,11 @@
 /** SAHOVERSE local backup v1. Deliberately excludes room states, anonymous auth, and Firebase config. */
-import {normalizeDeckStore} from './decks.js?v=196';
-import {isSafeCustomCard} from './cards.js?v=1933';
+import {normalizeDeckStore} from './decks.js?v=1984';
+import {isSafeCustomCard} from './cards.js?v=1984';
+import {EFFECT_TEMPLATE_KEY,normalizeTemplates} from './effect-templates.js?v=1984';
 export const BACKUP_KEYS=[
  'duel-name','duel-compact','duel-deck','duel-decks-v4','duel-custom-cards',
  'duel-packs-v5','duel-rules-v5','duel-fx-settings','duel-appearance-v5',
- 'duel-sealed-v1','saho-card-draft-v1','saho-deck-draft-v1'
+ 'duel-sealed-v1','saho-card-draft-v1','saho-deck-draft-v1',EFFECT_TEMPLATE_KEY
 ];
 const MAX_BACKUP=8*1024*1024;
 const isRecord=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
@@ -29,6 +30,7 @@ export function parseBackup(raw){
          !/^(?:[a-z][0-9]{2}|u_[0-9a-f]{16,32})$/.test(id)||!isRecord(c)||c.id!==id||!isSafeCustomCard(c)))throw Error('カードデータが不正です');
      }
      if(key==='duel-packs-v5'&&(!isRecord(v)||!Array.isArray(v.packs)||v.packs.length>25||!isRecord(v.collection)))throw Error('パックデータが不正です');
+     if(key===EFFECT_TEMPLATE_KEY&&!normalizeTemplates(v))throw Error('効果テンプレートが不正です');
      if(key==='saho-card-draft-v1'&&(!isRecord(v)||typeof v.id!=='string'||typeof v.type!=='string'))throw Error('カード下書きが不正です');
      if(key==='saho-deck-draft-v1'&&(!isRecord(v)||!isRecord(v.counts)||Object.keys(v.counts).length>60))throw Error('デッキ下書きが不正です');
    }

@@ -11,17 +11,19 @@ export function cardCost(card){
 }
 export function deckCost(counts,cardIndex){return Object.entries(counts||{}).reduce((total,[id,count])=>total+cardCost(cardIndex[id])*Number(count||0),0);}
 export const TRIGGERS={main:'自分メインで発動',summon:'召喚したとき',continuous:'表側の間ずっと',attack:'相手の攻撃に対応',response:'相手の効果にチェーン'};
-export const TARGETS={none:'対象なし',self:'自分',opponent:'相手',ownMonster:'自分のモンスター1体',enemyMonster:'相手のモンスター1体',attacker:'攻撃しているモンスター',ownAllMonsters:'自分のモンスター全体',enemyAllMonsters:'相手のモンスター全体',bothMonsters:'お互いのモンスター全体',ownBackrow:'自分の魔法・罠1枚',enemyBackrow:'相手の魔法・罠1枚',ownAllBackrow:'自分の魔法・罠すべて',enemyAllBackrow:'相手の魔法・罠すべて',eitherGraveMonster:'自分・相手の墓地のモンスター1体'};
+export const TARGETS={none:'対象なし',self:'自分',opponent:'相手',ownMonster:'自分のモンスター1体',enemyMonster:'相手のモンスター1体',attacker:'攻撃しているモンスター',ownAllMonsters:'自分のモンスター全体',enemyAllMonsters:'相手のモンスター全体',enemyLowestAtk:'相手の表側モンスター（ATK最低・左端優先）',enemyFaceDownMonster:'相手の裏側守備モンスター（左端優先）',bothMonsters:'お互いのモンスター全体',ownBackrow:'自分の魔法・罠1枚',enemyBackrow:'相手の魔法・罠1枚',ownAllBackrow:'自分の魔法・罠すべて',enemyAllBackrow:'相手の魔法・罠すべて',bothAllBackrow:'お互いの魔法・罠すべて（フィールド魔法を含む）',eitherGraveMonster:'自分・相手の墓地のモンスター1体'};
 // Display order is the priority order in the editor. Each operation has a working engine implementation.
 export const ABILITY_META={
  draw:{label:'カードをドロー',scope:'player',amount:1,min:1,max:10},
  searchMonster:{label:'山札で最初のモンスターを手札へ加える',scope:'player',amount:1,min:1,max:5},
  searchSpell:{label:'山札で最初の魔法を手札へ加える',scope:'player',amount:1,min:1,max:5},
+ searchNamed:{label:'デッキから指定名のカードを手札へ加える',scope:'player',amount:1,min:1,max:3},
  searchTrap:{label:'山札で最初の罠を手札へ加える',scope:'player',amount:1,min:1,max:5},
  destroy:{label:'モンスターを破壊',scope:'monster',amount:0},
  banish:{label:'モンスターを除外',scope:'monster',amount:0},
  damage:{label:'LPにダメージ',scope:'player',amount:500,min:1,max:99999},
  heal:{label:'LPを回復',scope:'player',amount:500,min:1,max:99999},
+ healPerFieldMonster:{label:'場のモンスター数×指定値だけLPを回復',scope:'player',amount:300,min:1,max:5000},
  boost:{label:'攻撃力をアップ',scope:'monster',amount:500,min:1,max:10000},
  weaken:{label:'攻撃力をダウン',scope:'monster',amount:500,min:1,max:10000},
  boostDef:{label:'守備力をアップ',scope:'monster',amount:500,min:1,max:10000},
@@ -39,6 +41,7 @@ export const ABILITY_META={
  banishBackrow:{label:'魔法・罠を除外',scope:'backrow',amount:0},
  returnBackrow:{label:'魔法・罠を手札に戻す',scope:'backrow',amount:0},
  discardRandom:{label:'手札をランダムに捨てる',scope:'player',amount:1,min:1,max:10},
+ discardNewest:{label:'手札の末尾から指定枚数を捨てる（自動選択）',scope:'player',amount:1,min:1,max:10},
  returnRandomHandDeck:{label:'手札をランダムにデッキへ戻す',scope:'player',amount:1,min:1,max:10},
  mill:{label:'デッキ上から墓地へ送る',scope:'player',amount:2,min:1,max:10},
  banishDeck:{label:'デッキ上から除外する',scope:'player',amount:2,min:1,max:10},
@@ -56,6 +59,15 @@ export const ABILITY_META={
 };
 // A is paid immediately at activation, before B enters the chain. Keep the
 // allowed vocabulary small and deterministic so RTDB and local games agree.
+// A follow-up stage is only allowed when it does not require a second manual target picker.
+// Single-card targets may be reused only when the preceding stage selected that same side/zone.
+export function followUpTargets(operation,firstTarget,when='main',type='monster',spellKind='normal'){
+ const op=ABILITY_META[operation];
+ if(!op||['negateAttack','negateEffect','reviveSelected','steal','searchNamed'].includes(operation))return [];
+ const permitted=abilityTargets(operation,when,type,spellKind);
+ const automatic=new Set(['none','self','opponent','ownAllMonsters','enemyAllMonsters','bothMonsters','ownAllBackrow','enemyAllBackrow','bothAllBackrow','enemyLowestAtk','enemyFaceDownMonster']);
+ return permitted.filter(target=>automatic.has(target)||target===firstTarget&&['ownMonster','enemyMonster','ownBackrow','enemyBackrow','attacker'].includes(target));
+}
 export const BEFORE_META={
  sendOwnMonsterGrave:{label:'自分のモンスターを墓地へ送る',zone:'monsters',amount:1,max:5},
  banishOwnMonster:{label:'自分のモンスターを除外する',zone:'monsters',amount:1,max:5},
@@ -80,12 +92,14 @@ export function abilityTargets(operation,when='main',type='monster',spellKind='n
  if(meta.scope==='none')return ['none'];
  if(meta.scope==='grave')return ['eitherGraveMonster'];
  if(meta.scope==='player')return ['self','opponent'];
- if(meta.scope==='backrow')return ['enemyBackrow','ownBackrow','enemyAllBackrow','ownAllBackrow'];
+ if(meta.scope==='backrow')return ['enemyBackrow','ownBackrow','enemyAllBackrow','ownAllBackrow','bothAllBackrow'];
  if(when==='continuous'){
   if(type==='monster')return ['ownMonster'];
   if(spellKind==='field')return ['ownAllMonsters','enemyAllMonsters','bothMonsters'];
   if(spellKind==='equip')return ['ownMonster','enemyMonster'];
  }
+ if(operation==='destroy')return ['enemyMonster','ownMonster','enemyLowestAtk','enemyAllMonsters','ownAllMonsters','bothMonsters'];
+ if(operation==='banish')return ['enemyMonster','ownMonster','enemyFaceDownMonster','enemyAllMonsters','ownAllMonsters','bothMonsters'];
  const first=['boost','boostDef','setAtk','setDef'].includes(operation)?'ownMonster':'enemyMonster';
  const second=first==='ownMonster'?'enemyMonster':'ownMonster';
  return [...(when==='attack'?['attacker']:[]),first,second,'enemyAllMonsters','ownAllMonsters','bothMonsters'];
@@ -93,11 +107,24 @@ export function abilityTargets(operation,when='main',type='monster',spellKind='n
 export function isValidAbility(a,type='monster',spellKind='normal'){
  if(!a||typeof a!=='object'||!Object.hasOwn(TRIGGERS,a.when)||!Object.hasOwn(TARGETS,a.target)||!Object.hasOwn(ABILITY_META,a.operation))return false;
  const meta=ABILITY_META[a.operation];
+ if(a.operation==='searchNamed'&&Object.keys(a).some(k=>!['when','operation','target','amount','match','query','then','before'].includes(k)))return false;
+ if(a.operation==='searchNamed'&&!(a.target==='self'&&['exact','contains'].includes(a.match)&&
+  typeof a.query==='string'&&a.query.length>=1&&a.query.length<=32&&a.query===a.query.trim()))return false;
+ if(a.operation!=='searchNamed'&&(a.query!==undefined||a.match!==undefined))return false;
  if(!Number.isSafeInteger(a.amount)||(meta.min===undefined?a.amount!==0:a.amount<meta.min||a.amount>meta.max))return false;
  if(type==='monster'&&!['main','summon','continuous'].includes(a.when))return false;
  if(type==='spell'&&a.when!=='main'&&!(a.when==='continuous'&&['continuous','equip','field'].includes(spellKind)))return false;
  if(type==='trap'&&!['attack','response'].includes(a.when))return false;
  if(a.when==='continuous'&&!['boost','weaken','boostDef','weakenDef'].includes(a.operation))return false;
+ if(a.then!==undefined){
+  if(a.when==='continuous'||['negateAttack','negateEffect'].includes(a.operation)||
+     !a.then||typeof a.then!=='object'||Array.isArray(a.then)||
+     Object.keys(a.then).sort().join(',')!=='amount,operation,target')return false;
+  const next=ABILITY_META[a.then.operation];
+  if(!next||!Number.isSafeInteger(a.then.amount)||
+    (next.min===undefined?a.then.amount!==0:a.then.amount<next.min||a.then.amount>next.max)||
+    !followUpTargets(a.then.operation,a.target,a.when,type,spellKind).includes(a.then.target))return false;
+ }
  if(a.before!==undefined){
   const cost=BEFORE_META[a.before?.operation];
   if(!cost||!Number.isSafeInteger(a.before.amount)||a.before.amount<1||a.before.amount>cost.max)return false;
@@ -117,10 +144,14 @@ export function abilityText(a){if(!a)return '';
  const meta=ABILITY_META[a.operation];if(!meta)return '';
  const usesAmount=meta.min!==undefined;
  const label=meta.label;
- if(a.operation==='reviveSelected')return (a.before?`① ${beforeText(a.before)}。\n② `:'')+'自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
- const detail=usesAmount?(/LP|ダメージ|攻撃力|守備力/.test(label)?`${label}（${a.amount}）`:`${label}（${a.amount}枚）`):label;
+ if(a.operation==='reviveSelected'&&!a.then)return (a.before?`コスト：${beforeText(a.before)}。\n`:'')+'自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
+ const detail=a.operation==='searchNamed'
+  ?`自分のデッキから${a.match==='contains'?'名前に':'名前が'}「${a.query||''}」${a.match==='contains'?'を含む':'に一致する'}カードを${a.amount}枚手札に加える（デッキ先頭順・自動選択）`
+  :usesAmount?(/LP|ダメージ|攻撃力|守備力/.test(label)?`${label}（${a.amount}）`:`${label}（${a.amount}枚）`):label;
  const result=`${TRIGGERS[a.when]||'効果'}：${TARGETS[a.target]||''} に ${detail}。`;
- return a.before?`① ${beforeText(a.before)}。\n② ${result}`:result;
+ const then=a.then;
+ const follow=then?`${TARGETS[then.target]}に${ABILITY_META[then.operation].label}${ABILITY_META[then.operation].min===undefined?'':`（${then.amount}）`}する。`:'';
+ return `${a.before?`発動コスト：${beforeText(a.before)}。\n`:''}${result}${then?`\nこの効果が処理された場合、${follow}`:''}`;
 }
 export function normalizeRuleSettings(input){const lp=Number(input?.lp),deckSize=Number(input?.deckSize),costLimit=Number(input?.costLimit);return {lp:Number.isInteger(lp)&&lp>=1000&&lp<=20000&&lp%500===0?lp:8000,deckSize:Number.isInteger(deckSize)&&deckSize>=20&&deckSize<=60?deckSize:40,costLimit:Number.isInteger(costLimit)&&costLimit>=20&&costLimit<=300?costLimit:0};}
 export function cardLimit(c){return LIMITS[c?.limit]?.max??3;}

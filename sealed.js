@@ -1,8 +1,8 @@
 // SAHOVERSE sealed battle — local deck construction from a fresh, isolated pack pool.
 // No online rule changes: the saved deck enters the existing duel engine unchanged.
-import {CARD,summonKind} from './cards.js?v=1933';
-import {cardLimit} from './rules.js?v=1933';
-import {openPack} from './packs.js?v=1910';
+import {CARD,summonKind} from './cards.js?v=1984';
+import {cardLimit} from './rules.js?v=1984';
+import {openPack} from './packs.js?v=1984';
 
 export const SEALED_STORAGE_KEY='duel-sealed-v1';
 const MAX_PACKS=30;
