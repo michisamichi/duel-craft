@@ -1,5 +1,5 @@
-import {CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind, normalizeRace, normalizeAttribute} from './cards.js?v=1995';
-import {normalizeRuleSettings,BEFORE_META,fusionMaterialsMatch} from './rules.js?v=1995';
+import {SHEEP_TOKEN_ID,KURIBOH_TOKEN_ID,CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind, normalizeRace, normalizeAttribute} from './cards.js?v=2022';
+import {normalizeRuleSettings,BEFORE_META,fusionMaterialsMatch} from './rules.js?v=2022';
 
 export const PHASES = {draw:'ドロー',main1:'メイン1',battle:'バトル',main2:'メイン2',end:'エンド'};
 const blank5 = () => [null,null,null,null,null];
@@ -87,7 +87,7 @@ export function summonTributeNeed(card,handCount){
 }
 export function validSummonTributes(card,handCount,monsters,indices){
  if(!card||!Array.isArray(monsters)||!Array.isArray(indices)||new Set(indices).size!==indices.length||
-    !indices.every(i=>Number.isInteger(i)&&i>=0&&i<5&&!!monsters[i]))return false;
+    !indices.every(i=>Number.isInteger(i)&&i>=0&&i<5&&!!monsters[i]&&!CARD[monsters[i].id]?.isToken))return false;
  const ordinary=baseTributeNeed(card),need=summonTributeNeed(card,handCount);
  // Gaia's optional ordinary tribute is accepted for direct/legacy room actions;
  // the touch UI offers the simpler, zero-release summon while eligible.
@@ -97,6 +97,18 @@ export function validSummonTributes(card,handCount,monsters,indices){
 export function hasDoubleLightTribute(card,monsters){
  return baseTributeNeed(card)===2&&normalizeAttribute(card.attribute)==='光'&&
    monsters.some((_,i)=>!!doubleLightRelease(card,monsters,i));
+}
+export function specialHandTributeSlots(s,seat,card){
+ const e=card?.monsterEffect;
+ if(e?.kind!=='hand'||e.code!=='specialByThreeNames'||!Array.isArray(e.names)||e.names.length!==3)return [];
+ const p=s?.players?.[seat],selected=[];
+ if(!p)return [];
+ for(const name of e.names){
+  const at=p.monsters.findIndex((m,i)=>m&&m.pos!=='set'&&!selected.includes(i)&&CARD[m.id]?.name===name);
+  if(at<0)return [];
+  selected.push(at);
+ }
+ return selected;
 }
 export function remainingAttacks(monster){
  if(!monster||monster.pos!=='atk')return 0;
@@ -111,6 +123,80 @@ export function remainingAttacks(monster){
 function resolveFlipEffect(s,seat,item){
  const c=CARD[item?.id],e=c?.monsterEffect;
  if(c?.subtype!=='effect'||e?.kind!=='flip')return;
+ if(e.code==='cyberJarRevealFive'){
+   // Resolve a fixed snapshot, not newly summoned replacements from grave triggers.
+   // Card selection is automatic; no new chain, timer or network synchronization.
+   const original=[];
+   for(let side=0;side<2;side++)for(let slot=0;slot<5;slot++){
+     const monster=s.players[side].monsters[slot];
+     if(monster)original.push({side,slot,key:monster.key,id:monster.id});
+   }
+   for(const {side,slot,key,id} of original){
+     const mon=s.players[side].monsters[slot];
+     if(mon&&mon.key===key&&mon.id===id)sendToGrave(s.players[side],'monsters',slot,s,true);
+   }
+   // Revealed cards are neither drawn nor milled: a short deck simply exposes
+   // fewer cards and never triggers deck-out. Preserve physical card counts.
+   const summoned=[];
+   for(let side=0;side<2;side++){
+     const p=s.players[side],shown=p.deck.splice(0,Math.min(5,p.deck.length));
+     let deployed=0;
+     for(const id of shown){
+       const card=CARD[id],slot=p.monsters.indexOf(null);
+       if(card?.type==='monster'&&summonKind(card)==='normal'&&Number.isInteger(card.level)&&card.level<=4&&card.level>=1&&slot>=0){
+         const instance={key:++s.nextKey,id,ownerSeat:side,pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+         p.monsters[slot]=instance;summoned.push({side,instance});deployed++;
+       }else p.hand.push(id);
+     }
+     log(s,`「${c.name}」：${p.name}が${shown.length}枚公開し、${deployed}体を特殊召喚しました。`);
+   }
+   // Special-summon-only triggers run after both sides' boards are established.
+   for(const {side,instance} of summoned){
+     if(s.players[side].monsters.some(m=>m?.key===instance.key)&&
+       CARD[instance.id]?.monsterEffect?.code==='copyOpponentPrintedStats')
+       activateMonsterAbility(s,side,instance,'trigger');
+   }
+   return;
+ }
+ if(e.code==='morphingJarTwo'){
+   // Bounded, synchronous processing: no pickers, new chain, timers or RTDB fields.
+   // Snapshot ownership before leaving the field. Cards cannot trigger grave effects.
+   const returned=[0,0];
+   for(let side=0;side<2;side++)for(let slot=0;slot<5;slot++){
+     const p=s.players[side],mon=p.monsters[slot];
+     if(!mon)continue;
+     p.monsters[slot]=null;
+     const card=CARD[mon.id];
+     if(!card||card.isToken)continue; // Tokens disappear without entering any zone.
+     const owner=originalOwner(s,mon,p),ownerSeat=s.players.indexOf(owner);
+     if(summonKind(card)==='fusion')owner.extraDeck.push(mon.id);
+     else {owner.deck.push(mon.id);returned[ownerSeat]++;}
+   }
+   // Equipped cards must detach before new instances occupy old slots.
+   sweepOrphanEquips(s);
+   for(let side=0;side<2;side++){
+     const p=s.players[side],need=returned[side];
+     if(!need)continue;
+     p.deck=shuffle(p.deck); // Shuffle once per player, not once per monster.
+     const revealed=[];let found=0;
+     // Each iteration removes a card; even an all-spell deck terminates.
+     while(p.deck.length&&found<need){
+       const id=p.deck.shift();revealed.push(id);
+       if(CARD[id]?.type==='monster')found++;
+     }
+     let placed=0;
+     for(const id of revealed){
+       const card=CARD[id],slot=p.monsters.indexOf(null);
+       if(card?.type==='monster'&&summonKind(card)==='normal'&&card.level>=1&&card.level<=4&&slot>=0){
+         p.monsters[slot]={key:++s.nextKey,id,ownerSeat:side,pos:'set',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+         placed++;
+       }else p.deck.push(id); // Not drawn; all remaining revealed cards return to deck.
+     }
+     p.deck=shuffle(p.deck);
+     log(s,`「${c.name}」：${p.name}が${need}体分をデッキへ戻し、${revealed.length}枚公開・${placed}体を裏側守備表示で特殊召喚しました。`);
+   }
+   return;
+ }
  if(e.code==='returnOpponentOnFlip'){
    const foe=s.players[1-seat];let moved=0;
    // A fixed, bounded loop; no choice, extra chain window, or remote round trip.
@@ -129,7 +215,7 @@ function resolveFlipEffect(s,seat,item){
    const target=foe.monsters.findIndex(Boolean);
    if(target<0){log(s,`「${c.name}」：相手フィールドに対象がありません。`);return;}
    const targetName=CARD[foe.monsters[target].id]?.name||'モンスター';
-   sendToGrave(foe,'monsters',target,s);
+   sendToGrave(foe,'monsters',target,s,true);
    log(s,`「${c.name}」のリバース効果：${targetName}を破壊しました（自動選択）。`);
    return;
  }
@@ -169,6 +255,12 @@ function protectedFromBattle(victim,state,victimSeat,opposing){
   return victim?.pos!=='set'&&e?.kind==='continuous'&&
     e.code==='battleImmuneAtkThreshold'&&Number.isInteger(e.threshold)&&
     combatAtk(opposing,state,1-victimSeat,victim)>=e.threshold;
+}
+// A linked equip prevents only the linked monster from declaring a new attack.
+// Derive permission directly from active cards; no extra turn flags needed.
+export function isAttackSealedByEquip(s,seat,item){
+ if(!item||item.key===undefined)return false;
+ return s.players.some(p=>p?.backrow.some(eq=>eq&&!eq.faceDown&&eq.linkKey===item.key&&eq.linkOwner===seat&&CARD[eq.id]?.ability?.operation==='preventEquipAttack'));
 }
 // The attacker may bypass monsters only while this printed continuous effect holds.
 // Do not persist or cache the permission: it is checked both at declaration and resolution.
@@ -231,7 +323,12 @@ function continuousStatBonus(item,state,seat,stat){
      continue;
    }
    let applies=false;
-   if(kind==='field'||!slot.linkKey){
+   // An equip without a valid monster link must NEVER behave like a field aura.
+   // Old/imported rooms can contain incomplete link metadata.
+   if(kind==='equip'){
+     applies=Number.isInteger(slot.linkKey)&&Number.isInteger(item.key)&&
+       slot.linkKey===item.key&&(slot.linkOwner??ownerSeat)===seat;
+   }else if(kind==='field'||!slot.linkKey){
     applies=ab.target==='bothMonsters'||
       (['ownMonster','ownAllMonsters'].includes(ab.target)&&seat===ownerSeat)||
       (['enemyMonster','enemyAllMonsters'].includes(ab.target)&&seat!==ownerSeat);
@@ -290,7 +387,7 @@ function activateMonsterAbility(s,seat,item,kind){
     case 'atk500':item.bonus=(item.bonus||0)+500;break;
     case 'destroy1':
       assert(kind==='ignition'&&Number.isInteger(target)&&!!getMonster(s,1-seat,target),'破壊する相手モンスターを選択してください');
-      sendToGrave(enemy,'monsters',target,s);break;
+      sendToGrave(enemy,'monsters',target,s,true);break;
     default:fail('このモンスター効果には未対応です');
   }
   log(s,`「${c.name}」の効果を発動！`);
@@ -392,22 +489,41 @@ function originalOwner(s,item,controller){
   return Number.isInteger(seat)&&s?.players?.[seat] ? s.players[seat] : controller;
 }
 function returnMonsterToOwner(s,item,controller,zone){
+  if(CARD[item.id]?.isToken)return; // Tokens vanish when leaving the field.
   const owner=originalOwner(s,item,controller);
   if(summonKind(CARD[item.id])==='fusion')owner.extraDeck.push(item.id);
   else if(zone==='hand')owner.hand.push(item.id);
   else {owner.deck.push(item.id);owner.deck=shuffle(owner.deck);}
 }
-function sendToGrave(p,zone,index,s=null) {
+function sendToGrave(p,zone,index,s=null,destroyed=false) {
   const item=p[zone][index];
   if(!item)return;
   const owner=originalOwner(s,item,p);
-  owner.grave.push(item.id);p[zone][index]=null;
+  if(!CARD[item.id]?.isToken)owner.grave.push(item.id);p[zone][index]=null;
   if(zone==='monsters'&&item.key!==undefined)removeOrphanEquips(p);
   // Field-to-grave search resolves synchronously. Never create a pending
   // choice/chain or access the network; empty decks are a harmless no-op.
   if(zone!=='monsters'||!s||s.status!=='playing')return;
   const e=CARD[item.id]?.monsterEffect;
-  if(e?.kind!=='grave'||e.code!=='searchStatOnGrave')return;
+  if(e?.kind!=='grave')return;
+  if(e.code==='weakenOpponentOnGrave'){
+    const enemy=s.players[1-s.players.indexOf(owner)];
+    const target=enemy?.monsters?.find(m=>m&&m.pos!=='set');
+    if(target){target.bonus=(target.bonus||0)-500;log(s,`「${CARD[item.id].name}」：相手モンスターのATKをターン終了まで500下げました。`);}
+    return;
+  }
+  if(e.code==='reviveMaterialOnDestroy'){
+    if(!destroyed)return;
+    const slot=owner.monsters.indexOf(null);
+    if(slot<0)return;
+    const at=owner.grave.findIndex(id=>e.names.includes(CARD[id]?.name)&&summonKind(CARD[id])==='normal');
+    if(at<0)return;
+    const id=owner.grave.splice(at,1)[0];
+    owner.monsters[slot]={key:++s.nextKey,id,ownerSeat:s.players.indexOf(owner),pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+    log(s,`「${CARD[item.id].name}」：墓地の「${CARD[id].name}」を特殊召喚しました。`);
+    return;
+  }
+  if(e.code!=='searchStatOnGrave')return;
   const at=owner.deck.findIndex(id=>{
     const c=CARD[id];return c?.type==='monster'&&summonKind(c)!=='fusion'&&c[e.stat]<=e.threshold;
   });
@@ -451,7 +567,9 @@ function sweepOrphanEquips(s){
   for(let i=0;i<p.backrow.length;i++){
    const item=p.backrow[i];if(item?.linkKey===undefined)continue;
    const targetSeat=item.linkOwner??seat;
-   if(!s.players[targetSeat]?.monsters.some(m=>m?.key===item.linkKey)){
+   // Equipment is destroyed if its linked monster is gone OR turns face-down.
+   // Do not allow the same instance to regain an old equip when flipped up.
+   if(!s.players[targetSeat]?.monsters.some(m=>m?.key===item.linkKey&&m.pos!=='set')){
     p.grave.push(item.id);p.backrow[i]=null;
    }
   }
@@ -492,9 +610,10 @@ function recruitDestroyedByBattle(s,fallen){
 // Only linked, active equip spells grant piercing; no stored monster flags.
 function hasPiercingEquip(s,item,seat){
  if(!item||!Number.isInteger(item.key))return false;
- for(const p of s.players)for(const equip of p.backrow){
-  if(equip&&!equip.faceDown&&equip.linkKey===item.key&&equip.linkOwner===seat&&
-     CARD[equip.id]?.ability?.operation==='pierce')return true;
+ for(let ownerSeat=0;ownerSeat<2;ownerSeat++)for(const equip of s.players[ownerSeat].backrow){
+  const card=CARD[equip?.id];
+  if(equip&&!equip.faceDown&&equip.linkKey===item.key&&(equip.linkOwner??ownerSeat)===seat&&
+     card?.type==='spell'&&spellKind(card)==='equip'&&card.ability?.operation==='pierce')return true;
  }
  return false;
 }
@@ -514,6 +633,64 @@ function resolveBattleDamageEffect(s,seat,item,damage){
  const changed=Math.abs(count()-before);
  const result=ab.operation==='draw'?'ドロー':ab.operation==='millFirstType'?'デッキから墓地へ送った':'手札から墓地へ送った';
  log(s,`「${c.name}」：戦闘ダメージ時の効果で${changed?`${changed}枚${result}`:'該当カードなし・処理なし'}。`);
+}
+// Pure eligibility check reused at activation and resolution. Does not store new state.
+// A redirect is legal only for an attack against a monster that still exists,
+// and only when a distinct legal defender remains. A direct attack is excluded.
+// Automatically resolve one previously set summon trap. There is no waiting
+// phase or newly persisted pending value; this preserves two-device progress.
+function resolveSummonTrap(s,summonerSeat,slot,expectedKey){
+ if(s.status!=='playing'||trapsSuppressed(s))return;
+ const summoned=s.players[summonerSeat]?.monsters?.[slot];
+ if(!summoned||summoned.pos==='set'||(expectedKey!==undefined&&summoned.key!==expectedKey))return;
+ const defender=s.players[1-summonerSeat];
+ for(let i=0;i<5;i++){
+  const set=defender.backrow[i],c=set&&CARD[set.id],ab=actionAbility(c);
+  if(!set||c?.type!=='trap'||ab?.when!=='summon'||ab.operation!=='destroyOnEnemySummon'||
+     set.setTurn>=s.turnNo||effectiveAtk(summoned,s,summonerSeat)<ab.amount)continue;
+  // Existing slot identity is checked once. No card can be replaced during
+  // this synchronous action; all costs and triggers run in the usual pipeline.
+  defender.backrow[i]=null;defender.grave.push(set.id);
+  const name=CARD[summoned.id]?.name||'モンスター';
+  sendToGrave(s.players[summonerSeat],'monsters',slot,s,true);
+  log(s,`「${c.name}」を自動発動：${name}を破壊しました（召喚時のチェーンは省略）。`);
+  break;
+ }
+}
+export function redirectedAttackSlot(s,attack){
+ if(!attack||!Number.isInteger(attack.target)||attack.target<0||attack.target>=5||![0,1].includes(attack.by))return -1;
+ const defenders=s.players?.[1-attack.by]?.monsters;
+ const current=defenders?.[attack.target];
+ if(!current||(attack.targetKey!==undefined&&current.key!==attack.targetKey)||!isAttackTargetLegal(s,attack.by,attack.target))return -1;
+ return defenders.findIndex((m,i)=>i!==attack.target&&m&&isAttackTargetLegal(s,attack.by,i));
+}
+// Magic Arm Shield: battle a different face-up monster on the attacker's side.
+// A temporary change of controller is represented only in damage calculation;
+// no card moves between persistent zones, and there is no extra UI prompt.
+export function attackerAllySlot(s,seat,attack){
+ if(!s||![0,1].includes(seat)||!attack||attack.by!==1-seat||
+    !Number.isInteger(attack.attacker)||attack.attacker<0||attack.attacker>=5||
+    !Number.isInteger(attack.target)||attack.target<0||attack.target>=5)return -1;
+ const attacker=s.players[attack.by]?.monsters?.[attack.attacker];
+ const original=s.players[seat]?.monsters?.[attack.target];
+ if(!attacker||attacker.pos!=='atk'||
+   (attack.attackerKey!==undefined&&attacker.key!==attack.attackerKey)||
+   !original||(attack.targetKey!==undefined&&original.key!==attack.targetKey)||
+   !isAttackTargetLegal(s,attack.by,attack.target))return -1;
+ return s.players[attack.by].monsters.findIndex((m,i)=>i!==attack.attacker&&m&&m.pos!=='set'&&Number.isInteger(m.key));
+}
+// Magical Hats (simplified): the currently declared defender must be
+// the same face-up card when activated / resolved. No extra summoned tokens.
+export function concealDefenderSlot(s,seat,attack){
+ if(![0,1].includes(seat)||!attack||attack.by!==1-seat||
+    !Number.isInteger(attack.attacker)||attack.attacker<0||attack.attacker>=5||
+    !Number.isInteger(attack.target)||attack.target<0||attack.target>=5)return -1;
+ const attacker=s?.players?.[attack.by]?.monsters?.[attack.attacker];
+ const defender=s?.players?.[seat]?.monsters?.[attack.target];
+ if(!attacker||attacker.pos!=='atk'||(attack.attackerKey!==undefined&&attacker.key!==attack.attackerKey)||
+    !defender||defender.pos==='set'||(attack.targetKey!==undefined&&defender.key!==attack.targetKey)||
+    !isAttackTargetLegal(s,attack.by,attack.target))return -1;
+ return attack.target;
 }
 function resolveAttack(s) {
   const a=s.pending;
@@ -535,11 +712,40 @@ function resolveAttack(s) {
     const item=player.monsters[index];
     if(!item)return;
     fallen.push({item,controller:s.players.indexOf(player)});
-    sendToGrave(player,'monsters',index,s);
+    sendToGrave(player,'monsters',index,s,true);
   };
-  if(a.target===-1 || a.target===null) {
+  if(a.redirectAlly){
+    const {slot,key}=a.redirectAlly;
+    const ally=Number.isInteger(slot)&&slot>=0&&slot<5?atkP.monsters[slot]:null;
+    if(!ally||slot===a.attacker||ally.pos==='set'||ally.key!==key||
+       !defP.monsters[a.target]||(a.targetKey!==undefined&&defP.monsters[a.target].key!==a.targetKey)){
+      log(s,'新しい攻撃対象がいなくなったため攻撃を終了しました。');s.pending=null;return;
+    }
+    const name=CARD[ally.id]?.name||'モンスター';
+    const attackerAtk=combatAtk(attacker,s,a.by,ally);
+    const allyInAttack=ally.pos==='atk';
+    const allyPower=allyInAttack?combatAtk(ally,s,a.by,attacker):effectiveDef(ally,s,a.by);
+    if(attackerAtk>allyPower){
+      if(!protectedFromBattle(ally,s,a.by,attacker))destroyedInBattle(atkP,slot);
+      if(allyInAttack||hasPiercingEquip(s,attacker,a.by)){
+       dealtDamage=a.preventBattleDamageSeat===1-a.by?0:attackerAtk-allyPower;
+       defP.lp=Math.max(0,defP.lp-dealtDamage);
+      }
+    }else if(attackerAtk<allyPower){
+      if(allyInAttack&&!rocketAssault&&!protectedFromBattle(attacker,s,a.by,ally))destroyedInBattle(atkP,a.attacker);
+      if(!rocketAssault){
+       dealtDamage=a.preventBattleDamageSeat===a.by?0:allyPower-attackerAtk;
+       atkP.lp=Math.max(0,atkP.lp-dealtDamage);
+       damageSourceSeat=1-a.by;damageSource=ally;
+      }
+    }else if(allyInAttack&&attackerAtk>0){
+      if(!rocketAssault&&!protectedFromBattle(attacker,s,a.by,ally))destroyedInBattle(atkP,a.attacker);
+      if(!protectedFromBattle(ally,s,a.by,attacker))destroyedInBattle(atkP,slot);
+    }
+    log(s,`マジックアーム・シールド：攻撃対象を${name}へ変更して戦闘処理しました（コントロール移動は省略）。`);
+  }else if(a.target===-1 || a.target===null) {
     if(!canDirectAttackWithMonsters(s,a.by,attacker)) {log(s,'相手のモンスターがいるため直接攻撃できません。');}
-    else{dealtDamage=directAtk;defP.lp=Math.max(0,defP.lp-directAtk);log(s,`${atkP.name} の直接攻撃！ ${defP.name} に${directAtk}ダメージ。`);}
+    else{dealtDamage=a.preventBattleDamageSeat===1-a.by?0:directAtk;defP.lp=Math.max(0,defP.lp-dealtDamage);log(s,`${atkP.name} の直接攻撃！ ${defP.name} に${dealtDamage}ダメージ。`);}
   } else {
     const defender=defP.monsters[a.target];
     if(!defender || (a.targetKey!==undefined && defender.key!==a.targetKey)) {
@@ -558,11 +764,11 @@ function resolveAttack(s) {
       const survives=protectedFromBattle(defender,s,1-a.by,attacker);
       if(!survives)destroyedInBattle(defP,a.target);
       if(isAtk||hasPiercingEquip(s,attacker,a.by)){
-        dealtDamage=atk-power;defP.lp=Math.max(0,defP.lp-(atk-power));
-        if(!isAtk)log(s,`貫通ダメージ ${atk-power} を与えました。`);
+        dealtDamage=a.preventBattleDamageSeat===1-a.by?0:atk-power;defP.lp=Math.max(0,defP.lp-dealtDamage);
+        if(!isAtk)log(s,`貫通ダメージ ${dealtDamage} を与えました。`);
       }
-      log(s,survives?`${dc.name} は戦闘では破壊されません。${isAtk?` ${atk-power}ダメージ。`:''}`:
-        `${mustCard(attacker.id).name} が ${dc.name} を破壊！${isAtk?` ${atk-power}ダメージ。`:''}`);
+      log(s,survives?`${dc.name} は戦闘では破壊されません。${isAtk?` ${dealtDamage}ダメージ。`:''}`:
+        `${mustCard(attacker.id).name} が ${dc.name} を破壊！${isAtk?` ${dealtDamage}ダメージ。`:''}`);
     } else if(atk<power) {
       const survives=isAtk&&(rocketAssault||protectedFromBattle(attacker,s,a.by,defender));
       if(isAtk&&!survives)destroyedInBattle(atkP,a.attacker);
@@ -663,6 +869,11 @@ function payBefore(s,seat,ab,indices,source=null,target=undefined){
  // check a later chained summon at the same slot could be hit incorrectly.
  if((zone==='monsters'&&ab.target==='ownMonster'||zone==='backrow'&&ab.target==='ownBackrow')&&indices.includes(target))
    fail('AでBの対象を取り除くことはできません');
+ if(ab.operation==='crushVirus'){
+  const sacrifice=p.monsters[indices[0]];
+  assert(sacrifice&&sacrifice.pos!=='set'&&normalizeAttribute(CARD[sacrifice.id]?.attribute)==='闇'&&
+    effectiveAtk(sacrifice,s,seat)<=1000,'闇属性・ATK1000以下の表側モンスター1体を選んでください');
+ }
  const sorted=[...indices].sort((a,b)=>b-a);
  const shifted=source?.zone==='hand'?indices.filter(i=>i<source.index).length:0;
  for(const i of sorted){
@@ -670,7 +881,7 @@ function payBefore(s,seat,ab,indices,source=null,target=undefined){
    const item=p.monsters[i];
    if(before.operation==='sendOwnMonsterGrave')sendToGrave(p,'monsters',i,s);
    else if(before.operation==='banishOwnMonster'){
-    originalOwner(s,item,p).banished.push(item.id);p.monsters[i]=null;
+    if(!CARD[item.id]?.isToken)originalOwner(s,item,p).banished.push(item.id);p.monsters[i]=null;
    }else{
     returnMonsterToOwner(s,item,p,before.operation==='returnOwnMonsterHand'?'hand':'deck');
     p.monsters[i]=null;
@@ -695,6 +906,16 @@ function summonTriggerTarget(s,seat,target,ownSlot){
  if(target==='enemyBackrow')return s.players[1-seat].backrow.findIndex(Boolean);
  return null; // Group and player effects do not need a slot selection.
 }
+// If the opposing controller has a face-up Dragon Lord, the effect cannot
+// select a Dragon on either side of the board. This checks the current state,
+// so summoning/removing the Lord takes effect without counters or timers.
+export function isDragonEffectTargetBlocked(s,casterSeat,targetSeat,index){
+ if(![0,1].includes(casterSeat)||![0,1].includes(targetSeat)||!Number.isInteger(index)||index<0||index>=5)return false;
+ const victim=s?.players?.[targetSeat]?.monsters?.[index];
+ if(!victim||normalizeRace(CARD[victim.id]?.race)!=='ドラゴン')return false;
+ return !!s.players[1-casterSeat]?.monsters?.some(m=>m&&m.pos!=='set'&&
+   CARD[m.id]?.monsterEffect?.kind==='continuous'&&CARD[m.id].monsterEffect.code==='dragonTargetGuard');
+}
 function abilityTargetCheck(s,seat,ab,target,sourceIndex){
  if(!ab)fail('効果の定義がありません');
  const choices={ownMonster:seat,enemyMonster:1-seat,ownBackrow:seat,enemyBackrow:1-seat};
@@ -703,6 +924,18 @@ function abilityTargetCheck(s,seat,ab,target,sourceIndex){
   const side=choices[ab.target],zone=ab.target.endsWith('Backrow')?'backrow':'monsters';
   assert(Number.isInteger(target)&&target>=0&&target<5&&s.players[side][zone][target],
     zone==='monsters'?'対象モンスターを選んでください':'対象の魔法・罠を選んでください');
+  if(zone==='monsters')assert(!isDragonEffectTargetBlocked(s,seat,side,target),'ドラゴン族を効果の対象にできません');
+  // Magic Removal may inspect a set Spell/Trap, but cannot target a face-up Trap.
+  if(ab.operation==='removeSpellBackrow'){
+   const item=s.players[side].backrow[target];
+   assert(item.faceDown||CARD[item.id]?.type==='spell','表側の罠カードは対象にできません');
+  }
+  if(ab.operation==='banishSetBackrow'){
+   assert(s.players[side].backrow[target].faceDown===true,'セットされた魔法・罠だけを対象にできます');
+  }
+ }
+ if(ab.target==='enemyFaceDownMonster'){
+  assert(s.players[1-seat].monsters.some(m=>m?.pos==='set'),'相手に裏側守備表示のモンスターがありません');
  }
  if(ab.target==='eitherGraveMonster'){
   assert(s.players[seat].monsters.some(m=>m===null),'自分のモンスターゾーンに空きがありません');
@@ -712,7 +945,11 @@ function abilityTargetCheck(s,seat,ab,target,sourceIndex){
   const targetId=s.players[target.seat].grave[target.index];
   assert(typeof target.cardId==='string'&&targetId===target.cardId&&CARD[targetId]?.type==='monster','墓地の対象を確認してください');
  }
- if(ab.target==='attacker')assert(s.pending?.kind==='attack'||s.pending?.afterAttack,'攻撃中のみ選べます');
+ if(ab.target==='attacker'){
+  const attack=s.pending?.kind==='attack'?s.pending:s.pending?.afterAttack;
+  assert(attack,'攻撃中のみ選べます');
+  assert(!isDragonEffectTargetBlocked(s,seat,attack.by,attack.attacker),'ドラゴン族を効果の対象にできません');
+ }
 }
 function abilityMonsterRefs(s,seat,target,index,chain,targetMonsterKey){
  const one=(side,at)=>{
@@ -730,30 +967,68 @@ function abilityMonsterRefs(s,seat,target,index,chain,targetMonsterKey){
  }
  if(target==='enemyFaceDownMonster'){
   const i=s.players[1-seat].monsters.findIndex(m=>m?.pos==='set');
-  return i===-1?[]:one(1-seat,i);
+  return i===-1?[]:one(1-seat,i); // one() also verifies the activation-time card identity.
  }
- if(target==='ownMonster')return one(seat,index);
- if(target==='enemyMonster')return one(1-seat,index);
+ if(target==='ownMonster')return isDragonEffectTargetBlocked(s,seat,seat,index)?[]:one(seat,index);
+ if(target==='enemyMonster')return isDragonEffectTargetBlocked(s,seat,1-seat,index)?[]:one(1-seat,index);
  if(target==='attacker'){
   const a=chain?.afterAttack||(s.pending?.kind==='attack'?s.pending:null);
-  return a?one(a.by,a.attacker):[];
+  return a&&!isDragonEffectTargetBlocked(s,seat,a.by,a.attacker)?one(a.by,a.attacker):[];
  }
- const sides=target==='ownAllMonsters'?[seat]:target==='enemyAllMonsters'?[1-seat]:target==='bothMonsters'?[seat,1-seat]:[];
- return sides.flatMap(side=>s.players[side].monsters.flatMap((m,i)=>m?[{side,index:i}]:[]));
+ const sides=target==='ownAllMonsters'?[seat]:['enemyAllMonsters','enemyAttackMonsters'].includes(target)?[1-seat]:target==='bothMonsters'?[seat,1-seat]:[];
+ return sides.flatMap(side=>s.players[side].monsters.flatMap((m,i)=>{
+  if(!m||(target==='enemyAttackMonsters'&&m.pos!=='atk'))return [];
+  if(!Number.isInteger(m.key))m.key=++s.nextKey; // Snapshot instance identity for multi-card effects.
+  return [{side,index:i,key:m.key}];
+ }));
 }
-function abilityBackrowRefs(s,seat,target,index){
- const one=(side,at)=>Number.isInteger(at)&&at>=0&&at<5&&s.players[side].backrow[at]?[{side,index:at}]:[];
+function abilityBackrowRefs(s,seat,target,index,identityKey){
+ const one=(side,at)=>{
+  const item=Number.isInteger(at)&&at>=0&&at<5?s.players[side].backrow[at]:null;
+  return item&&(identityKey===undefined||item.key===identityKey)?[{side,index:at,key:item.key}]:[];
+ };
  if(target==='ownBackrow')return one(seat,index);
  if(target==='enemyBackrow')return one(1-seat,index);
  const sides=target==='ownAllBackrow'?[seat]:target==='enemyAllBackrow'?[1-seat]:target==='bothAllBackrow'?[seat,1-seat]:[];
- return sides.flatMap(side=>[...s.players[side].backrow.flatMap((m,i)=>m?[{side,index:i}]:[]),
-  ...(target==='bothAllBackrow'&&s.players[side].field?[{side,index:-1}]:[])]);
+ // A bulk spell snapshots the instances present at the start of resolution.
+ // Keys are assigned only to legacy keyless entries.  If another effect ever
+ // replaces a slot during this loop, that replacement must not be touched.
+ const ref=(side,index,item)=>{
+  if(!Number.isInteger(item.key))item.key=++s.nextKey;
+  return {side,index,key:item.key};
+ };
+ return sides.flatMap(side=>[...s.players[side].backrow.flatMap((item,i)=>item?[ref(side,i,item)]:[]),
+  ...(target==='bothAllBackrow'&&s.players[side].field?[ref(side,-1,s.players[side].field)]:[])]);
+}
+function summonDefenseTokens(s,seat,tokenId,count){
+ const p=s.players[seat];
+ const spaces=p.monsters.filter(m=>m===null).length;
+ const quantity=Math.min(count,spaces);
+ for(let n=0;n<quantity;n++){
+  const at=p.monsters.indexOf(null);
+  p.monsters[at]={key:++s.nextKey,id:tokenId,ownerSeat:seat,pos:'def',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+ }
+ return quantity;
+}
+// No new random state: the outcome is a pure function of the current, already
+// synchronized duel state and the source card. Two clients/replays agree exactly.
+export function deterministicDice(s,seat,cardId){
+ let hash=2166136261;for(const ch of String(cardId||'')){hash=Math.imul(hash^ch.codePointAt(0),16777619)>>>0;}
+ let n=(hash^Math.imul(s.turnNo||1,0x9e3779b1)^Math.imul((s.revision||0)+1,0x85ebca6b)^Math.imul(seat+1,0xc2b2ae35))>>>0;
+ n^=n>>>16;n=Math.imul(n,0x7feb352d)>>>0;n^=n>>>15;n=Math.imul(n,0x846ca68b)>>>0;n^=n>>>16;
+ return 1+((n>>>0)%6);
 }
 function executeAbility(s,entry,chain,stageOverride=null){
  const seat=entry.seat,p=s.players[seat],card=mustCard(entry.cardId);
  const ab=stageOverride||actionAbility(card);if(!ab)return;
- // Only composite effects pay this (small) snapshot cost; all ordinary cards stay on the fast path.
- const beforeStage=ab.then?JSON.stringify(s.players):null;
+ // For draw-and-follow-up, a successful draw is identified by its hand-size
+ // delta. Avoid serializing both players' entire state before and after each
+ // activation (especially large decks). Other custom composite recipes retain
+ // the existing generic compatibility path.
+ const drawThenSeat=ab.then&&ab.operation==='draw'&&['self','opponent'].includes(ab.target)
+   ?(ab.target==='opponent'?1-seat:seat):null;
+ const handBeforeDraw=drawThenSeat===null?null:s.players[drawThenSeat].hand.length;
+ const beforeStage=ab.then&&drawThenSeat===null?JSON.stringify(s.players):null;
  if(card.type==='monster'&&ab.operation==='fusionFromExtraPay5000'){
    // No new target picker: the first still-available fusion card is deterministic.
    const at=p.extraDeck.findIndex(id=>CARD[id]?.type==='monster'&&summonKind(CARD[id])==='fusion');
@@ -766,6 +1041,30 @@ function executeAbility(s,entry,chain,stageOverride=null){
    if(CARD[id]?.monsterEffect?.kind==='trigger'&&CARD[id].monsterEffect.code==='copyOpponentPrintedStats')activateMonsterAbility(s,seat,summoned,'trigger');
    return;
  }
+ if(card.type==='monster'&&ab.operation==='timeWizardCoin'){
+   // Recheck the same monster instance when the chain resolves. The parity is
+   // fully deterministic for local demo/replay and online transaction retries.
+   const mon=p.monsters[entry.target];
+   if(!mon||mon.pos==='set'||mon.id!==card.id||(entry.targetMonsterKey!==undefined&&entry.targetMonsterKey!==mon.key))return;
+   const success=((s.turnNo+(mon.key||0))&1)===0;
+   const affectedSeat=success?1-seat:seat,affected=s.players[affectedSeat];
+   // Snapshot only the five original monster instances. Destruction may cause
+   // field-to-grave effects; never destroy a newly summoned replacement.
+   // A failed coin counts current ATK of face-up monsters actually destroyed,
+   // not the printed ATK and not the ATK of face-down monsters.
+   const victims=affected.monsters.map((victim,index)=>victim?{
+    index,victim,atk:!success&&victim.pos!=='set'?effectiveAtk(victim,s,affectedSeat):0
+   }:null).filter(Boolean);
+   let failedDamage=0;
+   for(const {index,victim,atk} of victims){
+    if(affected.monsters[index]!==victim)continue;
+    sendToGrave(affected,'monsters',index,s,true);
+    if(!success)failedDamage+=atk;
+   }
+   if(!success)p.lp=Math.max(0,p.lp-Math.floor(failedDamage/2));
+   log(s,`「${card.name}」：${success?'表':'裏'}。${success?'相手':'自分'}のモンスターを破壊しました${success?'':`（${Math.floor(failedDamage/2)}ダメージ）`}。`);
+   return;
+ }
  if(card.type==='monster'&&ab.operation==='doubleOriginalAtkEndDestroy'){
    const m=p.monsters[entry.target];
    if(m&&m.pos!=='set'&&(entry.targetMonsterKey===undefined||m.key===entry.targetMonsterKey)&&m.id===card.id){
@@ -773,6 +1072,55 @@ function executeAbility(s,entry,chain,stageOverride=null){
      log(s,`「${card.name}」：攻撃力がエンドフェイズまで元々の2倍になりました。`);
    }
    return;
+ }
+ if(ab.operation==='crushVirus'){
+  // One-shot, bounded resolution. Capture opposing hand and field once, so
+  // cards searched by on-destruction effects are not accidentally destroyed.
+  const rival=s.players[1-seat];let handSent=0,fieldSent=0;
+  const survivors=[];
+  for(const id of rival.hand){
+   if(CARD[id]?.type==='monster'&&(CARD[id].atk||0)>=1500){rival.grave.push(id);handSent++;}
+   else survivors.push(id);
+  }
+  rival.hand=survivors;
+  const victims=rival.monsters.map((m,i)=>m&&
+    (m.pos==='set'?(CARD[m.id]?.atk||0):effectiveAtk(m,s,1-seat))>=1500?{i,key:m.key,id:m.id}:null).filter(Boolean);
+  for(const {i,key,id} of victims){
+   const current=rival.monsters[i];
+   if(current&&current.key===key&&current.id===id){sendToGrave(rival,'monsters',i,s,true);fieldSent++;}
+  }
+  log(s,`「${card.name}」：相手の手札${handSent}枚・フィールド${fieldSent}体を破壊しました（継続効果省略）。`);
+  return;
+ }
+ if(ab.operation==='revealSetMonsters'){
+  // Reveal first, then process matching live instances only. Flip effects may
+  // remove other monsters, so stale slots must never trigger twice.
+  const reveals=[];
+  for(let side=0;side<2;side++)for(let i=0;i<5;i++){
+   const m=s.players[side].monsters[i];if(!m||m.pos!=='set')continue;
+   m.pos='def';m.changedTurn=s.turnNo;reveals.push({side,i,key:m.key,id:m.id});
+  }
+  for(const {side,i,key,id} of reveals){
+   const m=s.players[side].monsters[i];
+   if(m&&m.key===key&&m.id===id&&m.pos==='def')resolveFlipEffect(s,side,m);
+  }
+  log(s,`「${card.name}」：裏側守備モンスター${reveals.length}体を表側守備にしました（永続制限省略）。`);
+  return;
+ }
+ if(ab.operation==='diceStats'){
+  // All visible monsters at resolution; never open a target picker or affect set cards.
+  const roll=deterministicDice(s,seat,entry.cardId);
+  const targetSeat=ab.target==='ownAllMonsters'?seat:1-seat;
+  const delta=(ab.target==='ownAllMonsters'?1:-1)*roll*100;
+  let count=0;
+  for(const monster of s.players[targetSeat].monsters){
+   if(!monster||monster.pos==='set')continue;
+   monster.bonus=(monster.bonus||0)+delta;
+   monster.defBonus=(monster.defBonus||0)+delta;
+   count++;
+  }
+  log(s,`「${card.name}」：サイコロ${roll}。表側モンスター${count}体のATK/DEFを${Math.abs(delta)}${delta>0?'上昇':'低下'}。`);
+  return;
  }
  // A continuous spell's stat changes are already included in effectiveAtk/Def.
  // Resolving it must not add a second, temporary stat bonus.
@@ -783,26 +1131,29 @@ function executeAbility(s,entry,chain,stageOverride=null){
  const player=s.players[recipient],qty=ab.amount;
  // All mutations are bounded by the 5-slot field and a maximum of 10 cards.
  const monsters=abilityMonsterRefs(s,seat,ab.target,entry.target,chain,entry.targetMonsterKey);
- const backrow=abilityBackrowRefs(s,seat,ab.target,entry.target);
- const monsterOps=new Set(['destroy','banish','sendGrave','returnHand','returnDeck','changePosition','setAttackerDefense','negateAndLockAttacker','setAtk','setDef','boost','weaken','boostDef','weakenDef','lockAttack','lockEffect','steal','destroyGiveOwn','swapPrintedStats','blastAttacker']);
+ const backrow=abilityBackrowRefs(s,seat,ab.target,entry.target,entry.targetBackrowKey);
+ const monsterOps=new Set(['destroy','banish','sendGrave','returnHand','returnDeck','changePosition','setAttackerDefense','negateAndLockAttacker','negateWeakenAttacker','setAtk','setDef','boost','weaken','boostDef','weakenDef','lockAttack','lockEffect','steal','destroyGiveOwn','swapPrintedStats','blastAttacker']);
  if(monsterOps.has(ab.operation)){
-  for(const {side,index} of monsters){
-   const owner=s.players[side],item=owner.monsters[index];if(!item)continue;
+  for(const {side,index,key} of monsters){
+   const owner=s.players[side],item=owner.monsters[index];
+   if(!item||(key!==undefined&&item.key!==key))continue; // No newly summoned replacement may inherit an old target.
    if(item.pos==='set'&&['boost','weaken','boostDef','weakenDef'].includes(ab.operation)&&['ownAllMonsters','enemyAllMonsters','bothMonsters'].includes(ab.target))continue;
    switch(ab.operation){
-    case 'destroy':case 'sendGrave':sendToGrave(owner,'monsters',index,s);break;
+    case 'destroy':case 'sendGrave':sendToGrave(owner,'monsters',index,s,ab.operation==='destroy');break;
     case 'swapPrintedStats':if(item.pos!=='set')item.swappedOriginalStatsTurn=s.turnNo;break;
     case 'blastAttacker':{
-      const printed=Math.max(0,CARD[item.id]?.atk||0);
-      if(item.pos==='set')break;
-      sendToGrave(owner,'monsters',index,s);
-      s.players[seat].lp=Math.max(0,s.players[seat].lp-printed);
-      s.players[1-seat].lp=Math.max(0,s.players[1-seat].lp-printed);
+      if(item.pos!=='atk')break;
+      // Early Structure Deck wording used the monster's ATK at resolution.
+      // Resolve once before destruction removes equipment and field bonuses.
+      const points=effectiveAtk(item,s,side);
+      sendToGrave(owner,'monsters',index,s,true);
+      s.players[seat].lp=Math.max(0,s.players[seat].lp-points);
+      s.players[1-seat].lp=Math.max(0,s.players[1-seat].lp-points);
       if(chain?.afterAttack)chain.attackNegated=true;
-      log(s,`攻撃モンスターを破壊し、お互いに${printed}ダメージ。`);
+      log(s,`攻撃モンスターを破壊し、お互いに${points}ダメージ。`);
       break;
     }
-    case 'banish':originalOwner(s,item,owner).banished.push(item.id);owner.monsters[index]=null;removeOrphanEquips(owner);break;
+    case 'banish':if(!CARD[item.id]?.isToken)originalOwner(s,item,owner).banished.push(item.id);owner.monsters[index]=null;removeOrphanEquips(owner);break;
     case 'returnHand':returnMonsterToOwner(s,item,owner,'hand');owner.monsters[index]=null;break;
     case 'returnDeck':returnMonsterToOwner(s,item,owner,'deck');owner.monsters[index]=null;break;
     case 'changePosition':
@@ -811,6 +1162,11 @@ function executeAbility(s,entry,chain,stageOverride=null){
       // A changed attack position always interrupts the declared attack,
       // even if a subsequent chain link changes it back.
       if(chain?.afterAttack?.by===side&&chain.afterAttack.attacker===index)chain.attackInterrupted=true;
+      break;
+    case 'negateWeakenAttacker':
+      if(chain?.afterAttack?.by===side&&chain.afterAttack.attacker===index&&!chain.attackNegated){
+       chain.attackNegated=true;item.attackLockedUntil=Math.max(item.attackLockedUntil||0,s.turnNo+2);item.bonus=(item.bonus||0)-qty;
+      }
       break;
     case 'negateAndLockAttacker':
       // No persistence/re-targeting; the current attack is cancelled synchronously.
@@ -840,7 +1196,7 @@ function executeAbility(s,entry,chain,stageOverride=null){
      const mine=s.players[seat],ownAt=mine.monsters.findIndex(Boolean);
      if(ownAt<0){log(s,`「${card.name}」：渡せる自分のモンスターがないため不発。`);break;}
      const gift=mine.monsters[ownAt];
-     sendToGrave(owner,'monsters',index,s);
+     sendToGrave(owner,'monsters',index,s,true);
      // Preserve consistency if a field-to-grave effect fills the freed zone.
      const receiverSlot=owner.monsters[index]===null?index:owner.monsters.indexOf(null);
      if(receiverSlot>=0){mine.monsters[ownAt]=null;owner.monsters[receiverSlot]={...gift,ownerSeat:gift.ownerSeat??seat,attacked:true,changedTurn:s.turnNo,bornTurn:s.turnNo};
@@ -861,16 +1217,47 @@ function executeAbility(s,entry,chain,stageOverride=null){
     }
    }
   }
- }else if(['destroyBackrow','banishBackrow','returnBackrow'].includes(ab.operation)){
-  for(const {side,index} of backrow){
-   const owner=s.players[side],item=index===-1?owner.field:owner.backrow[index];if(!item)continue;
+ }else if(['destroyBackrow','banishBackrow','banishSetBackrow','returnBackrow','removeSpellBackrow','destroyThenSetBackrow'].includes(ab.operation)){
+  for(const {side,index,key} of backrow){
+   const owner=s.players[side],item=index===-1?owner.field:owner.backrow[index];
+   if(!item||(key!==undefined&&item.key!==key))continue;
+   // A set-only target must remain set throughout resolution.
+   if(ab.operation==='banishSetBackrow'&&item.faceDown!==true)continue;
+   if(ab.operation==='removeSpellBackrow'&&CARD[item.id]?.type!=='spell'){
+    log(s,`「${card.name}」：セットされた罠を確認しました。破壊しません。`);
+    continue;
+   }
    if(index===-1)owner.field=null;else owner.backrow[index]=null;
    const destination=originalOwner(s,item,owner);
-   if(ab.operation==='destroyBackrow')destination.grave.push(item.id);
-   else if(ab.operation==='banishBackrow')destination.banished.push(item.id);
+   if(['destroyBackrow','removeSpellBackrow','destroyThenSetBackrow'].includes(ab.operation))destination.grave.push(item.id);
+   else if(['banishBackrow','banishSetBackrow'].includes(ab.operation))destination.banished.push(item.id);
    else destination.hand.push(item.id);
+   if(ab.operation==='destroyThenSetBackrow'){
+    // Optional secondary step: only after destruction succeeded. Never opens a picker.
+    const free=p.backrow.indexOf(null);
+    const handIndex=p.hand.findIndex(id=>CARD[id]?.type==='trap'||
+      CARD[id]?.type==='spell'&&spellKind(CARD[id])!=='field');
+    if(free>=0&&handIndex>=0){
+     const id=p.hand.splice(handIndex,1)[0];
+     p.backrow[free]={id,faceDown:true,setTurn:s.turnNo};
+     log(s,`「${card.name}」：手札から魔法・罠1枚をセットしました（自動選択）。`);
+    }
+   }
   }
  }else switch(ab.operation){
+  case 'summonSheepTokens':{
+   // Four exact slots, all-or-nothing. Recheck after earlier chain links.
+   if(p.monsters.filter(m=>m===null).length<4){log(s,`「${card.name}」：空きが4枠未満のため不発。`);break;}
+   summonDefenseTokens(s,seat,SHEEP_TOKEN_ID,4);
+   log(s,`「${card.name}」：羊トークン4体を守備表示で特殊召喚しました。`);
+   break;
+  }
+  case 'summonKuribohTokens':{
+   // The cost was paid at activation. Resolve with the currently free slots only.
+   const total=summonDefenseTokens(s,seat,KURIBOH_TOKEN_ID,5);
+   log(s,`「${card.name}」：クリボートークン${total}体を守備表示で特殊召喚しました。`);
+   break;
+  }
   case 'draw':draw(player,qty,s);break;
   case 'replaceHands':{
    // A deterministic, bounded exchange. Activation checks both deck sizes,
@@ -999,7 +1386,7 @@ function executeAbility(s,entry,chain,stageOverride=null){
      log(s,`「${card.name}」の蘇生対象が移動したか、モンスターゾーンが満杯のため不発になりました。`);break;
    }
    const [id]=grave.splice(target.index,1);
-   p.monsters[slot]={key:++s.nextKey,id,ownerSeat:target.seat,pos:'atk',bornTurn:s.turnNo,attacked:true,changedTurn:s.turnNo,bonus:0};
+   p.monsters[slot]={key:++s.nextKey,id,ownerSeat:target.seat,pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
    log(s,`${p.name} は「${CARD[id].name}」を墓地から特殊召喚しました。`);
    if(CARD[id]?.monsterEffect?.code==='copyOpponentPrintedStats')activateMonsterAbility(s,seat,p.monsters[slot],'trigger');
    break;
@@ -1011,7 +1398,7 @@ function executeAbility(s,entry,chain,stageOverride=null){
     const at=target.grave.findLastIndex(id=>CARD[id]?.type==='monster'&&summonKind(CARD[id])==='normal');
     const slot=target.monsters.indexOf(null);
     const id=target.grave.splice(at,1)[0];
-    target.monsters[slot]={key:++s.nextKey,id,pos:'set',bornTurn:s.turnNo,attacked:true,changedTurn:s.turnNo,bonus:0};
+    target.monsters[slot]={key:++s.nextKey,id,ownerSeat:s.players.indexOf(target),pos:'set',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
    }
    log(s,`「${card.name}」：双方がモンスターを裏側守備で1体ずつ蘇生しました。`);
    break;
@@ -1027,7 +1414,7 @@ function executeAbility(s,entry,chain,stageOverride=null){
     const at=player.hand.findIndex(id=>CARD[id]?.type==='monster'&&summonKind(CARD[id])==='normal'&&normalizeRace(CARD[id].race)===normalizeRace(ab.query));
     if(at<0)break;
     const id=player.hand.splice(at,1)[0];
-    const item={key:++s.nextKey,id,pos:'atk',bornTurn:s.turnNo,attacked:true,changedTurn:s.turnNo,bonus:0};
+    const item={key:++s.nextKey,id,ownerSeat:recipient,pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
     player.monsters[slot]=item;summoned++;
     if(CARD[id]?.monsterEffect?.kind==='trigger'&&CARD[id].monsterEffect.code==='copyOpponentPrintedStats')activateMonsterAbility(s,recipient,item,'trigger');
    }
@@ -1040,7 +1427,9 @@ function executeAbility(s,entry,chain,stageOverride=null){
     const graveIndex=player.grave.findLastIndex(id=>CARD[id]?.type==='monster');
     if(slot<0||graveIndex<0)break;
     const id=player.grave.splice(graveIndex,1)[0];
-    player.monsters[slot]={key:++s.nextKey,id,pos:'atk',bornTurn:s.turnNo,attacked:true,changedTurn:s.turnNo,bonus:0};
+    // Special summons do not consume the summoned monster's attack for this turn.
+    // This also applies to recipes reused through the card creator.
+    player.monsters[slot]={key:++s.nextKey,id,ownerSeat:recipient,pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
     if(CARD[id]?.monsterEffect?.code==='copyOpponentPrintedStats')activateMonsterAbility(s,recipient,player.monsters[slot],'trigger');
    }
    break;
@@ -1059,17 +1448,57 @@ function executeAbility(s,entry,chain,stageOverride=null){
    log(s,`攻撃を無効にし、${points}ダメージを反射しました。`);
    break;
   }
+  case 'redirectToAttackerAlly':{
+   const attack=chain?.afterAttack;
+   if(!attack||chain.attackNegated||chain.attackInterrupted||attack.redirectAlly)break;
+   const slot=attackerAllySlot(s,seat,attack);
+   if(slot<0){log(s,'攻撃者側に別の適切なモンスターがないため不発。');break;}
+   attack.redirectAlly={slot,key:s.players[attack.by].monsters[slot].key};
+   log(s,`「${card.name}」：攻撃者側の別のモンスターへ攻撃対象を変更します。`);
+   break;
+  }
+  case 'concealDefender':{
+   const attack=chain?.afterAttack;
+   if(!attack||chain.attackNegated||chain.attackInterrupted)break;
+   const slot=concealDefenderSlot(s,seat,attack);
+   if(slot<0){log(s,'攻撃対象が変わったため裏側守備への変更は不発になりました。');break;}
+   const defender=s.players[seat].monsters[slot];
+   defender.pos='set';defender.changedTurn=s.turnNo;
+   chain.attackNegated=true;
+   log(s,`「${CARD[defender.id]?.name||'モンスター'}」を裏側守備表示にし、攻撃を無効にしました。`);
+   break;
+  }
+  case 'redirectAttack':{
+   const attack=chain?.afterAttack;
+   if(!attack||chain.attackNegated||chain.attackInterrupted)break;
+   const attacker=s.players[attack.by]?.monsters?.[attack.attacker];
+   if(!attacker||attacker.pos!=='atk'||(attack.attackerKey!==undefined&&attacker.key!==attack.attackerKey))break;
+   const slot=redirectedAttackSlot(s,attack);
+   if(slot<0){log(s,'攻撃対象を変更できるモンスターがないため不発になりました。');break;}
+   attack.target=slot;
+   const nextKey=s.players[1-attack.by].monsters[slot].key;
+   if(Number.isInteger(nextKey))attack.targetKey=nextKey;
+   else delete attack.targetKey; // Avoid undefined in Firebase transaction payloads.
+   log(s,`攻撃対象を「${CARD[s.players[1-attack.by].monsters[slot].id]?.name||'別のモンスター'}」へ変更しました。`);
+   break;
+  }
   case 'negateAttack':if(chain)chain.attackNegated=true;break;
   case 'negateEndBattle':{
    if(chain?.afterAttack&&!chain.attackNegated&&!chain.attackInterrupted){chain.attackNegated=true;chain.endBattle=true;}
    break;
   }
   // negateEffect is handled during chain resolution, so it can counter its predecessor.
-  case 'negateEffect':break;
+  case 'negateEffect':case 'protectOwnTraps':case 'redirectSpellTarget':break;
  }
  if(card.type==='trap'&&!card.ability&&chain?.afterAttack&&['counterburn','negate'].includes(card.effect))chain.attackNegated=true;
  log(s,`${p.name}：「${card.name}」の効果を解決しました。`);
- const applied=beforeStage!==null&&JSON.stringify(s.players)!==beforeStage;
+ // A failed mandatory draw ends the duel. Do not discard cards or execute
+ // any other follow-up after a deck-out (or a different terminal effect).
+ // For draw composites, only a full draw counts as a successful first step.
+ const applied=!!ab.then&&s.status==='playing'&&(
+  drawThenSeat!==null
+   ?s.players[drawThenSeat].hand.length===handBeforeDraw+ab.amount
+   :beforeStage!==null&&JSON.stringify(s.players)!==beforeStage);
  if(ab.then&&applied){
   // A follow-up is part of this same effect, not a new activation or chain link.
   // Only automatic or reused targets are permitted by isValidAbility.
@@ -1091,15 +1520,28 @@ const chainEntry=(seat,cardId,target,discardOnResolve=false)=>{
 function bindMonsterTarget(s,entry){
  const ab=actionAbility(CARD[entry.cardId]);
  let side=null,at=entry.target;
- if(ab?.target==='ownMonster'||ab?.target==='self'&&ab.operation==='doubleOriginalAtkEndDestroy')side=entry.seat;
+ if(ab?.target==='ownMonster'||ab?.target==='self'&&['doubleOriginalAtkEndDestroy','timeWizardCoin'].includes(ab.operation))side=entry.seat;
  else if(ab?.target==='enemyMonster')side=1-entry.seat;
+ else if(ab?.target==='enemyFaceDownMonster'){
+  side=1-entry.seat;at=s.players[side]?.monsters?.findIndex(m=>m?.pos==='set');
+ }
  else if(ab?.target==='attacker'){
   const attack=s.pending?.kind==='attack'?s.pending:s.pending?.afterAttack;
   if(attack){side=attack.by;at=attack.attacker;}
  }
  if(side!==null&&Number.isInteger(at)&&at>=0&&at<5){
-  const key=s.players[side]?.monsters?.[at]?.key;
-  if(Number.isInteger(key))entry.targetMonsterKey=key;
+  const victim=s.players[side]?.monsters?.[at];
+  if(victim&&!Number.isInteger(victim.key))victim.key=++s.nextKey;
+  if(Number.isInteger(victim?.key))entry.targetMonsterKey=victim.key;
+ }
+ // Assign an identity only to the two new targeted backrow effects. A new
+ // card in the same zone must not be destroyed by an older chain link.
+ if(['destroyBackrow','removeSpellBackrow','destroyThenSetBackrow','banishSetBackrow','banishBackrow','returnBackrow'].includes(ab?.operation)&&ab?.target==='enemyBackrow'&&Number.isInteger(at)&&at>=0&&at<5){
+  const item=s.players[1-entry.seat]?.backrow?.[at];
+  if(item){
+   if(!Number.isInteger(item.key))item.key=++s.nextKey;
+   entry.targetBackrowKey=item.key;
+  }
  }
  return entry;
 }
@@ -1134,6 +1576,11 @@ function castSpell(s,seat,source,index,target,costIndices){
   const ab=actionAbility(c);assert(ab,'この魔法の効果は未対応です');
   // A two-player hand replacement must never enter the chain when either
   // player cannot complete its mandatory draws. Avoid partial mutation/deck-out.
+  if(ab.operation==='summonSheepTokens')assert(p.monsters.filter(m=>m===null).length>=4,'羊トークン4体のために空きゾーンが4枠必要です');
+  // Only a face-up physical Kuriboh can pay the activation cost. Its release
+  // guarantees at least one free slot; opposing chain links may later fill it.
+  const kuribohCost=ab.operation==='summonKuribohTokens'?p.monsters.findIndex(m=>m&&m.pos!=='set'&&!CARD[m.id]?.isToken&&CARD[m.id]?.name==='クリボー'):-1;
+  if(ab.operation==='summonKuribohTokens')assert(kuribohCost>=0,'表側表示の「クリボー」が必要です');
   if(ab.operation==='summonRaceFromHand')assert(canSummonRaceFromHand(s,seat,ab),'発動条件のモンスター・手札の指定種族・ゾーンの空きを確認してください');
   if(ab.operation==='reviveBothSet')assert(canReviveBothSet(s),'双方の墓地に通常召喚可能なモンスターと空きゾーンが必要です');
   if(ab.operation==='summonNamedFromHand')
@@ -1158,6 +1605,7 @@ function castSpell(s,seat,source,index,target,costIndices){
     if(monster.key===undefined)monster.key=++s.nextKey;
   }
   const movedBefore=payBefore(s,seat,ab,costIndices,fromHand?{zone:'hand',index}:source==='backrow'?{zone:'backrow',index}:null,target);
+  if(kuribohCost>=0)sendToGrave(p,'monsters',kuribohCost,s); // Cost is paid now, even if resolution is negated.
   if(fromHand)index-=movedBefore;
   const ongoing=persistentSpell(c);
   let slotItem={id,faceDown:false,setTurn:s.turnNo};
@@ -1242,7 +1690,7 @@ function doSpecialSummon(s,seat,a){
   const items=materialEntries(s,seat,a.materials,excluded.concat(a.spellSource==='hand'?[a.spellIndex]:[]));
   if(isRitual)assert(items.reduce((sum,m)=>sum+m.level,0)>=card.level,'リリースする素材のレベル合計が足りません');
   else{
-    assert(items.length===2,'融合素材を2体選んでください');
+    assert([2,3].includes(items.length)&&items.length===card.fusionMaterials?.length,'融合素材の数が正しくありません');
     assert(fusionMaterialsMatch(card.fusionMaterials,items.map(m=>m.id),id=>CARD[id]?.ability?.operation==='fusionMaterialSubstitute'),'融合素材が一致しません');
   }
   assert(p.monsters.some((m,i)=>!m||items.some(x=>x.zone==='monsters'&&x.index===i)),'モンスターゾーンが満杯です');
@@ -1259,7 +1707,7 @@ function doSpecialSummon(s,seat,a){
     p.hand.splice(spellAt,1);p.grave.push(spellId);
   }
   const slot=p.monsters.indexOf(null);assert(slot>=0,'モンスターゾーンが満杯です');
-  const summoned={key:++s.nextKey,id,pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+  const summoned={key:++s.nextKey,id,ownerSeat:seat,pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
   p.monsters[slot]=summoned;
   log(s,`${p.name} は「${spell.name}」で「${card.name}」を${isRitual?'儀式':'融合'}召喚しました。`);
   if(card.subtype==='effect'){
@@ -1276,15 +1724,53 @@ function doSpecialSummon(s,seat,a){
 }
 // The lock is derived from face-up monsters, not a persisted/timed flag.
 // Applying it to both seats also avoids a second-state-sync path.
+export function canExtraNormalSummon(s,seat){
+ const p=s?.players?.[seat];
+ return !!p&&p.lp>500&&!trapsSuppressed(s)&&p.backrow.some(item=>item&&!item.faceDown&&
+  CARD[item.id]?.type==='trap'&&CARD[item.id]?.ability?.when==='continuous'&&
+  CARD[item.id].ability.operation==='extraNormalSummon'&&CARD[item.id].ability.amount===500);
+}
 export function trapsSuppressed(s){
  return !!s?.players?.some(p=>p?.monsters?.some(m=>m&&m.pos!=='set'&&
    CARD[m.id]?.monsterEffect?.kind==='continuous'&&CARD[m.id].monsterEffect.code==='trapSuppression'));
+}
+export function canProtectOwnTraps(s,seat,previous,excludeIndex=-1){
+ if(![0,1].includes(seat)||!previous||previous.seat!==1-seat)return false;
+ const ab=actionAbility(CARD[previous.cardId]);
+ if(!['destroyBackrow','destroyThenSetBackrow'].includes(ab?.operation))return false;
+ const own=s?.players?.[seat]?.backrow;
+ if(!Array.isArray(own))return false;
+ const active=(v,i)=>i!==excludeIndex&&v&&CARD[v.id]?.type==='trap';
+ if(['enemyAllBackrow','bothAllBackrow'].includes(ab.target))return own.some(active);
+ if(ab.target==='enemyBackrow'&&Number.isInteger(previous.target))
+  return previous.target!==excludeIndex&&!!active(own[previous.target],previous.target);
+ return false;
+}
+export function redirectedSpellTargetSlot(s,seat,previous){
+ if(![0,1].includes(seat)||previous?.seat!==1-seat)return -1;
+ const spell=CARD[previous.cardId],ab=actionAbility(spell);
+ // Persistent equips/fields already bind a link at activation; never retarget those.
+ if(spell?.type!=='spell'||!['normal','quick'].includes(spellKind(spell))||!['ownMonster','enemyMonster'].includes(ab?.target))return -1;
+ const side=ab.target==='ownMonster'?previous.seat:1-previous.seat;
+ const at=previous.target;
+ if(!Number.isInteger(at)||at<0||at>=5)return -1;
+ const monsters=s?.players?.[side]?.monsters;
+ const original=monsters?.[at];
+ if(!original||(previous.targetMonsterKey!==undefined&&original.key!==previous.targetMonsterKey))return -1;
+ for(let i=0;i<5;i++){
+  if(i===at||!monsters[i]||isDragonEffectTargetBlocked(s,previous.seat,side,i))continue;
+  return i;
+ }
+ return -1;
 }
 function addChainTrap(s,seat,index,target,costIndices){
  const ch=s.pending;assert(ch?.kind==='chain'&&ch.priority===seat,'チェーンの応答順ではありません');
  assert(!trapsSuppressed(s),'サイコ・ショッカーの効果で罠カードを発動できません');
  assert(ch.stack.length<8,'チェーンは最大8つまでです');
  const item=s.players[seat].backrow[index];assert(item&&mustCard(item.id).type==='trap','罠カードがありません');
+ // Only an armed set trap may become a chain link. Face-up legacy/imported
+ // entries must not be fired a second time by the same response action.
+ assert(item.faceDown===true,'セット状態の罠カードだけ発動できます');
  assert(item.setTurn<s.turnNo,'セットしたターンに罠は使えません');
  const c=mustCard(item.id),ab=actionAbility(c);assert(ab&&(ab.when==='response'||(ab.when==='attack'&&ch.afterAttack)),'今はこの罠を発動できません');
  // Historical counter traps can use the same generic negateEffect operation,
@@ -1294,7 +1780,17 @@ function addChainTrap(s,seat,index,target,costIndices){
   assert(spell?.type==='spell','魔法カードの発動にしか対応できません');
   if(c.responseGuard==='targetedSpell')assert(['ownMonster','enemyMonster'].includes(actionAbility(spell)?.target),'モンスター1体を対象とする魔法にしか対応できません');
  }
+ if(ab.operation==='redirectSpellTarget')assert(redirectedSpellTargetSlot(s,seat,ch.stack[ch.stack.length-1])>=0,'対象を変更できる相手の魔法がありません');
+ if(ab.operation==='protectOwnTraps')assert(canProtectOwnTraps(s,seat,ch.stack[ch.stack.length-1],index),'自分の罠を破壊する直前の効果にのみ発動できます');
  if(ab.operation==='borrowOpponentSpell')assert(s.players[1-seat].grave.some(id=>CARD[id]?.type==='spell'),'相手の墓地に魔法カードがありません');
+ if(ab.operation==='recoverNormalAtk'){
+  const grave=s.players[seat].grave;
+  assert(grave.filter(id=>CARD[id]?.type==='monster').length>=5,'墓地にモンスターが5体以上必要です');
+  assert(grave.some(id=>CARD[id]?.type==='monster'&&CARD[id].subtype!=='effect'&&(CARD[id].atk||0)<=1500&&summonKind(CARD[id])==='normal'),'回収できる通常モンスターがいません');
+ }
+ if(ab.operation==='redirectAttack')assert(redirectedAttackSlot(s,ch.afterAttack)>=0,'攻撃対象を変更できる別のモンスターがありません');
+ if(ab.operation==='redirectToAttackerAlly')assert(attackerAllySlot(s,seat,ch.afterAttack)>=0,'攻撃者側に別の表側モンスターがありません');
+ if(ab.operation==='concealDefender')assert(!ch.attackNegated&&!ch.attackInterrupted&&concealDefenderSlot(s,seat,ch.afterAttack)>=0,'裏側守備にできる攻撃対象がありません');
  abilityTargetCheck(s,seat,ab,target);
  payBefore(s,seat,ab,costIndices,{zone:'backrow',index},target);
  s.players[seat].backrow[index]=null;
@@ -1328,9 +1824,23 @@ function finishChain(s){
      }
      cancelPrevious=false;continue;
    }
-   if(actionAbility(mustCard(entry.cardId))?.operation==='negateEffect'){
+   if(['negateEffect','protectOwnTraps'].includes(actionAbility(mustCard(entry.cardId))?.operation)){
      cancelPrevious=true;
      log(s,`「${mustCard(entry.cardId).name}」が直前のチェーン効果を無効化します。`);
+     continue;
+   }
+   if(actionAbility(mustCard(entry.cardId))?.operation==='redirectSpellTarget'){
+     const earlier=ch.stack[i-1];
+     const newIndex=redirectedSpellTargetSlot(s,entry.seat,earlier);
+     if(newIndex>=0){
+       const priorAbility=actionAbility(CARD[earlier.cardId]);
+       const side=priorAbility.target==='ownMonster'?earlier.seat:1-earlier.seat;
+       earlier.target=newIndex;
+       const key=s.players[side].monsters[newIndex]?.key;
+       if(Number.isInteger(key))earlier.targetMonsterKey=key;
+       else delete earlier.targetMonsterKey; // Firebase cannot store undefined.
+       log(s,`「${mustCard(entry.cardId).name}」：直前の魔法の対象を変更しました。`);
+     }else log(s,`「${mustCard(entry.cardId).name}」：適切な別の対象がなく不発。`);
      continue;
    }
    executeAbility(s,entry,ch);
@@ -1461,6 +1971,7 @@ export function applyAction(current,actorUid,action) {
   let cueType=null, cueCard=null, cueActor=seat, cueSlot=null, cueTarget=null, cueTargetSeat=null;
   switch(a.type){
     case 'summon':cueType=a.faceDown?'set':'summon';cueCard=p.hand[a.hand];break;
+    case 'activateContinuousTrap':cueType='trap';cueCard=p.backrow[a.index]?.id;break;
     case 'ritualSummon':cueType='ritual';cueCard=p.hand[a.ritualHand];break;
     case 'fusionSummon':cueType='fusion';cueCard=a.fusionId;break;
     case 'flip':cueType='summon';cueCard=p.monsters[a.index]?.id;break;
@@ -1476,9 +1987,27 @@ export function applyAction(current,actorUid,action) {
   switch(a.type) {
     case 'ritualSummon':
     case 'fusionSummon':{doSpecialSummon(s,seat,a);break;}
+    case 'specialSummonSelf':{
+      requireMain(s,seat);
+      assert(arrayIndex(p.hand,a.hand),'手札の位置が不正です');
+      const id=p.hand[a.hand],c=mustCard(id);
+      const byOwnAbility=c.ability?.operation==='selfSpecialFromHand'&&c.ability?.when==='main';
+      const byMaterials=c.monsterEffect?.kind==='hand'&&c.monsterEffect.code==='specialByThreeNames';
+      assert(c.type==='monster'&&summonKind(c)==='normal'&&(byOwnAbility||byMaterials),'このカードは手札から特殊召喚できません');
+      const tributes=byMaterials?specialHandTributeSlots(s,seat,c):[];
+      if(byMaterials)assert(tributes.length===3,'指定名のモンスター3体が場に必要です');
+      const slot=p.monsters.findIndex((m,i)=>m===null||tributes.includes(i));assert(slot>=0,'モンスターゾーンが満杯です');
+      // Complete all eligibility checks before any state mutation.
+      for(const i of tributes)sendToGrave(p,'monsters',i,s);
+      p.hand.splice(a.hand,1);
+      p.monsters[slot]={key:++s.nextKey,id,ownerSeat:seat,pos:'atk',bornTurn:s.turnNo,changedTurn:s.turnNo,attacked:false,bonus:0};
+      log(s,`${p.name}は「${c.name}」を手札から特殊召喚しました。`);
+      cueType='summon';cueCard=id;break;
+    }
     case 'summon': {
       requireMain(s,seat);
-      assert(!p.normalUsed,'このターンはすでに通常召喚しました');
+      const additional=p.normalUsed;
+      if(additional)assert(canExtraNormalSummon(s,seat),'通常召喚済みです。表側の追加召喚効果とLPを確認してください');
       assert(arrayIndex(p.hand,a.hand),'手札の位置が不正です');
       const id=p.hand[a.hand],c=mustCard(id);
       assert(c.type==='monster'&&summonKind(c)==='normal','儀式・融合モンスターは通常召喚できません');
@@ -1486,9 +2015,11 @@ export function applyAction(current,actorUid,action) {
       assert(validSummonTributes(c,p.hand.length,p.monsters,tributes),'必要なリリース数またはリリース対象が正しくありません');
       const slot=p.monsters.findIndex((m,i)=>m===null||tributes.includes(i));
       assert(slot>=0,'モンスターゾーンが満杯です');
+      if(additional)p.lp-=500; // Paid only after every summon precondition succeeds.
       for(const i of tributes)sendToGrave(p,'monsters',i,s);
       p.hand.splice(a.hand,1);
-      p.monsters[slot]={key:++s.nextKey,id,pos:a.faceDown?'set':(a.position==='def'?'def':'atk'),bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+      p.monsters[slot]={key:++s.nextKey,id,ownerSeat:seat,pos:a.faceDown?'set':(a.position==='def'?'def':'atk'),bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+      const summonedKey=p.monsters[slot].key;
       p.normalUsed=true;
       if(!a.faceDown&&c.subtype==='effect'&&s.status==='playing'){
         if(c.ability?.when==='summon'){
@@ -1500,7 +2031,9 @@ export function applyAction(current,actorUid,action) {
           else log(s,`「${c.name}」の効果は対象がいないため処理できませんでした。`);
         }else if(c.monsterEffect?.kind==='trigger')activateMonsterAbility(s,seat,p.monsters[slot],'trigger');
       }
+      if(additional)log(s,`${p.name} は追加通常召喚のため500LPを支払いました。`);
       log(s,`${p.name} はモンスターを${a.faceDown?'裏側守備表示でセット':a.position==='def'?'守備表示で召喚':'召喚'}しました。`);
+      if(!a.faceDown)resolveSummonTrap(s,seat,slot,summonedKey);
       break;
     }
     case 'activateMonsterEffect': {
@@ -1520,7 +2053,7 @@ export function applyAction(current,actorUid,action) {
         assert(p.monsters.some(m=>m===null),'モンスターゾーンが満杯です');
         assert(p.extraDeck.some(id=>CARD[id]?.type==='monster'&&summonKind(CARD[id])==='fusion'),'EXデッキに融合モンスターがありません');
       }
-      const actualTarget=ab?.operation==='doubleOriginalAtkEndDestroy'?a.index:a.target;
+      const actualTarget=['doubleOriginalAtkEndDestroy','timeWizardCoin'].includes(ab?.operation)?a.index:a.target;
       abilityTargetCheck(s,seat,ab,actualTarget,a.index);
       payBefore(s,seat,ab,a.costIndices,null,actualTarget);
       if(ab?.operation==='fusionFromExtraPay5000')p.lp-=5000; // activation cost, not on resolution
@@ -1564,6 +2097,7 @@ export function applyAction(current,actorUid,action) {
         if(target!==-1)executeAbility(s,{seat,cardId:m.id,target},null);
       }
       if(CARD[m.id]?.monsterEffect?.kind==='trigger'&&['searchDeckOnSummon','copyOpponentPrintedStats'].includes(CARD[m.id].monsterEffect.code))activateMonsterAbility(s,seat,m,'trigger');
+      resolveSummonTrap(s,seat,a.index,m.key);
       break;
     }
     case 'changePosition': {
@@ -1580,7 +2114,7 @@ export function applyAction(current,actorUid,action) {
       // target UI, recurring listeners, or asynchronous state is introduced.
       if(wasAttack&&CARD[m.id]?.monsterEffect?.kind==='position'&&CARD[m.id]?.monsterEffect?.code==='destroyOnAttackToDefense'){
         const at=enemy.monsters.findIndex(Boolean);
-        if(at>=0){const victim=CARD[enemy.monsters[at].id]?.name||'モンスター';sendToGrave(enemy,'monsters',at,s);log(s,`「${CARD[m.id].name}」：${victim}を破壊しました（自動選択）。`);}
+        if(at>=0){const victim=CARD[enemy.monsters[at].id]?.name||'モンスター';sendToGrave(enemy,'monsters',at,s,true);log(s,`「${CARD[m.id].name}」：${victim}を破壊しました（自動選択）。`);}
         else log(s,`「${CARD[m.id].name}」：相手フィールドに対象がありません。`);
       }
       break;
@@ -1592,13 +2126,18 @@ export function applyAction(current,actorUid,action) {
       const m=getMonster(s,seat,a.index);
       assert(m&&m.pos==='atk','攻撃表示のモンスターを選んでください');
       assert(remainingAttacks(m)>0,'このモンスターはすでに規定回数攻撃しました');
-      assert((m.attackLockedUntil||0)<s.turnNo,'このモンスターは攻撃を封じられています');
+      assert((m.attackLockedUntil||0)<s.turnNo&&!isAttackSealedByEquip(s,seat,m),'このモンスターは攻撃を封じられています');
+      const tributeAttack=m&&CARD[m.id]?.ability?.operation==='tributeOtherToAttack';
+      const tributeAt=tributeAttack?p.monsters.findIndex((x,i)=>i!==a.index&&x):-1;
+      if(tributeAttack)assert(tributeAt>=0,'攻撃するにはほかの自分のモンスター1体が必要です');
       // -1 is a Firebase-safe sentinel; null would silently disappear in RTDB.
       // Reject omitted targets, rather than accidentally treating them as direct attacks.
       assert(Object.hasOwn(a,'target'),'攻撃対象を選んでください');
       const target=a.target===null||a.target===-1?-1:a.target;
       if(target===-1)assert(canDirectAttackWithMonsters(s,seat,m),'相手のモンスターがいるため直接攻撃できません');
       else assert(isAttackTargetLegal(s,seat,target),'このモンスターは攻撃対象に選択できません');
+      // Cost is sent to the grave only after attack legality has been checked.
+      if(tributeAt>=0)sendToGrave(p,'monsters',tributeAt,s);
       m.attackCount=(Number.isInteger(m.attackCount)?Math.max(0,m.attackCount):(m.attacked?1:0))+1;
       m.attacked=true;
       const postAttack=CARD[m.id]?.monsterEffect;
@@ -1611,19 +2150,47 @@ export function applyAction(current,actorUid,action) {
         ...(target>=0&&enemy.monsters[target]?.key!==undefined?{targetKey:enemy.monsters[target].key}:{})};
       log(s,`${p.name} の攻撃宣言。${enemy.name} は罠を使うか選んでください。`);break;
     }
+    case 'discardBattleGuard': {
+      assert(s.pending?.kind==='attack'&&s.pending.by!==seat,'相手の攻撃に対応中のみ発動できます');
+      assert(s.pending.preventBattleDamageSeat!==seat,'この戦闘では既にダメージを防いでいます');
+      assert(arrayIndex(p.hand,a.hand),'手札の位置が不正です');
+      const id=p.hand[a.hand],e=CARD[id]?.monsterEffect;
+      assert(e?.kind==='hand'&&e.code==='preventBattleDamage','このカードの効果は発動できません');
+      p.hand.splice(a.hand,1);p.grave.push(id);
+      s.pending.preventBattleDamageSeat=seat;
+      log(s,`「${CARD[id].name}」を手札から捨て、この戦闘での自分へのダメージを0にします。`);
+      cueType='effect';cueCard=id;break;
+    }
     case 'passAttack': {
       assert(s.pending?.kind==='attack'&&s.pending.by!==seat,'対応できる攻撃がありません');
       cueType='impact';cueActor=s.pending.by;cueCard=s.players[cueActor].monsters[s.pending.attacker]?.id||null;
       cueSlot=s.pending.attacker;cueTarget=s.pending.target==null?-1:s.pending.target;cueTargetSeat=1-cueActor;
       log(s,`${p.name} はカードを発動しませんでした。`);resolveAttack(s);break;
     }
+    case 'activateContinuousTrap': {
+      requireMain(s,seat);
+      assert(!trapsSuppressed(s),'罠カードの効果は無効化されています');
+      assert(arrayIndex(p.backrow,a.index),'ゾーンが不正です');
+      const item=p.backrow[a.index];
+      assert(item&&item.faceDown&&item.setTurn<s.turnNo,'セットした次のターン以降に発動できます');
+      const card=mustCard(item.id);
+      assert(card.type==='trap'&&card.ability?.when==='continuous'&&
+        card.ability.operation==='extraNormalSummon'&&card.ability.amount===500,'この永続罠は発動できません');
+      item.faceDown=false;
+      log(s,`${p.name} は「${card.name}」を発動しました。`);
+      break;
+    }
     case 'activateTrap': {
       assert(s.pending?.kind==='attack'&&s.pending.by!==seat,'相手の攻撃時に発動できます');
       assert(!trapsSuppressed(s),'サイコ・ショッカーの効果で罠カードを発動できません');
       assert(arrayIndex(p.backrow,a.index),'ゾーンが不正です');
       const item=p.backrow[a.index];assert(item&&mustCard(item.id).type==='trap','セットされた罠カードがありません');
+      assert(item.faceDown===true,'セット状態の罠カードだけ発動できます');
       assert(item.setTurn<s.turnNo,'セットしたターンに罠は発動できません');
       const c=mustCard(item.id),ab=actionAbility(c);assert(ab?.when==='attack','この攻撃に対応できない罠です');
+      if(ab.operation==='redirectAttack')assert(redirectedAttackSlot(s,s.pending)>=0,'攻撃対象を変更できる別のモンスターがありません');
+ if(ab.operation==='redirectToAttackerAlly')assert(attackerAllySlot(s,seat,s.pending)>=0,'攻撃者側に別の表側モンスターがありません');
+      if(ab.operation==='concealDefender')assert(concealDefenderSlot(s,seat,s.pending)>=0,'裏側守備にできる攻撃対象がありません');
       abilityTargetCheck(s,seat,ab,a.target);
       payBefore(s,seat,ab,a.costIndices,{zone:'backrow',index:a.index},a.target);
       const attack=s.pending;

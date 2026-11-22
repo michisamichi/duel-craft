@@ -1,13 +1,13 @@
 import {makeRoomCode,normalizeRoomCode,isRoomCode} from './room-code.js?v=1911';
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,PASSIVE_SCALE_CODES,PASSIVE_SCOPES,defaultPassiveConfig,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS,ATTRIBUTE_NAMES,RACE_NAMES,HISTORICAL_PRESETS} from './cards.js?v=1995';
-import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=1995';
-import {makeBackup,parseBackup,applyBackup} from './backup.js?v=1995';
-import {EFFECT_TEMPLATE_KEY,readTemplates,saveTemplate,deleteTemplate,canApplyTemplate,applyTemplate,templateDescription} from './effect-templates.js?v=1995';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef,isAttackTargetLegal,canManuallyChangePosition,remainingAttacks,canDirectAttackWithMonsters,trapsSuppressed,summonTributeNeed,validSummonTributes,hasDoubleLightTribute} from './engine.js?v=1995';
-import {LIMITS,cardLimit,cardCost,deckCost,fusionMaterialsMatch,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,BEFORE_META,abilityTargets,followUpTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=1995';
-import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=1995';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=1995';
-import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=1995';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,PASSIVE_SCALE_CODES,PASSIVE_SCOPES,defaultPassiveConfig,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS,ATTRIBUTE_NAMES,RACE_NAMES,HISTORICAL_PRESETS} from './cards.js?v=2022';
+import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=2022';
+import {makeBackup,parseBackup,applyBackup} from './backup.js?v=2022';
+import {EFFECT_TEMPLATE_KEY,readTemplates,saveTemplate,deleteTemplate,canApplyTemplate,applyTemplate,templateDescription} from './effect-templates.js?v=2022';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef,isAttackTargetLegal,canManuallyChangePosition,remainingAttacks,specialHandTributeSlots,canDirectAttackWithMonsters,isAttackSealedByEquip,trapsSuppressed,canExtraNormalSummon,summonTributeNeed,validSummonTributes,hasDoubleLightTribute,canProtectOwnTraps,redirectedSpellTargetSlot,attackerAllySlot} from './engine.js?v=2024';
+import {LIMITS,cardLimit,cardCost,deckCost,fusionMaterialsMatch,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,BEFORE_META,abilityTargets,followUpTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=2022';
+import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=2022';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=2022';
+import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=2022';
 import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=1922';
 import {playBoardCue,clearBoardCue} from './board-effects.js?v=1940';
 import {createRoomSnapshotGate,actionScopeIsCurrent,matchesOriginalRoom} from './online-guards.js?v=1931';
@@ -444,8 +444,8 @@ function deckModal(embedded=false){
     <h3 class="mt8">EXデッキ <span class="pill ex-total">${sum(extra)} / 15</span></h3>
     <div class="small muted">融合モンスターはここに入れます（最大15枚）。</div>
     <div class="deck-list ex-deck-list">${CARDS.filter(c=>summonKind(c)==='fusion'&&(!ui.sealedOnly||pool[c.id]>0)).map(c=>`<div class="deck-item ex-deck-item">
-     ${cardThumb(c)}<div class="grow"><b>${esc(c.name)}</b><div class="tiny muted">${esc(suffix(c))}${c.fusionMaterials?.length!==2?' · 3体融合未対応（保留）':''}</div></div>
-     ${btn('−','extraMinus','btn sm square',`data-id="${esc(c.id)}"`,!extra[c.id])}<span class="ex-count">${extra[c.id]||0}</span>${btn('＋','extraPlus','btn sm square',`data-id="${esc(c.id)}"`,c.fusionMaterials?.length!==2||(extra[c.id]||0)>=Math.min(cardLimit(c),ui.collectionOnly?(pool[c.id]||0):3)||sum(extra)>=15)}
+     ${cardThumb(c)}<div class="grow"><b>${esc(c.name)}</b><div class="tiny muted">${esc(suffix(c))}${![2,3].includes(c.fusionMaterials?.length)?' · 素材情報未対応':''}</div></div>
+     ${btn('−','extraMinus','btn sm square',`data-id="${esc(c.id)}"`,!extra[c.id])}<span class="ex-count">${extra[c.id]||0}</span>${btn('＋','extraPlus','btn sm square',`data-id="${esc(c.id)}"`,![2,3].includes(c.fusionMaterials?.length)||(extra[c.id]||0)>=Math.min(cardLimit(c),ui.collectionOnly?(pool[c.id]||0):3)||sum(extra)>=15)}
     </div>`).join('')}</div>
     <div class="sv-sticky-actions sv-deck-save">
       <div class="sv-save-total">メイン <strong class="sv-save-count">${sum(counts)} / ${ui.rules.deckSize}</strong>　 EX <strong class="sv-save-ex">${sum(extra)} / 15</strong></div>
@@ -550,6 +550,7 @@ const TRAP_EFFECTS={negate:'攻撃を無効化',counterdestroy:'攻撃したモ�
 // All abilities are configured in the ordinary card editor. For normal spells,
 // show the graveyard-choice operation early without adding a separate creation path.
 const availableOperations=(when,card=null)=>{
+ if(when==='summon'&&card?.type==='trap')return {destroyOnEnemySummon:OPERATIONS.destroyOnEnemySummon};
  if(when==='battleDamage')return card?.type==='monster'?{
    draw:OPERATIONS.draw,discardNewest:OPERATIONS.discardNewest,millFirstType:OPERATIONS.millFirstType
  }:{};
@@ -558,12 +559,12 @@ const availableOperations=(when,card=null)=>{
  const equipPierce=card?.type==='spell'&&spellKind(card)==='equip'&&when==='continuous';
  const responseTrap=card?.type==='trap'&&when==='response';
  const attackTrap=card?.type==='trap'&&when==='attack';
- const special={negateAndLockAttacker:attackTrap,lpRelativeEquip:equipPierce,fusionMaterialSubstitute:when==='continuous'&&card?.type==='monster',directEarthWaterFire:when==='continuous'&&card?.type==='monster',setAttackerDefense:attackTrap,destroyGiveOwn:ordinarySpell,borrowOpponentSpell:responseTrap,lockPositionNextTurn:ordinarySpell,summonRaceFromHand:when==='main'&&['monster','spell'].includes(card?.type)&&!(card?.type==='spell'&&spellKind(card)!=='normal'),reviveBothSet:ordinarySpell,millFirstType:false,summonNamedFromHand:when==='main'&&['monster','spell'].includes(card?.type),replaceHands:ordinarySpell,swapPrintedStats:ordinarySpell,recoverNormalAtk:responseTrap,earthAura:fieldAura,pierce:equipPierce,negateEndBattle:attackTrap,blastAttacker:attackTrap};
+ const special={removeSpellBackrow:ordinarySpell,banishSetBackrow:ordinarySpell,destroyThenSetBackrow:responseTrap,diceStats:when==='main'&&card?.type==='spell'&&spellKind(card)==='quick'||when==='attack'&&card?.type==='trap',extraNormalSummon:when==='continuous'&&card?.type==='trap',crushVirus:responseTrap,revealSetMonsters:responseTrap,negateWeakenAttacker:attackTrap,preventEquipAttack:when==='continuous'&&card?.type==='spell'&&spellKind(card)==='equip',tributeOtherToAttack:when==='continuous'&&card?.type==='monster',timeWizardCoin:when==='main'&&card?.type==='monster',selfSpecialFromHand:when==='main'&&card?.type==='monster',negateAndLockAttacker:attackTrap,lpRelativeEquip:equipPierce,fusionMaterialSubstitute:when==='continuous'&&card?.type==='monster',directEarthWaterFire:when==='continuous'&&card?.type==='monster',setAttackerDefense:attackTrap,destroyGiveOwn:ordinarySpell,borrowOpponentSpell:responseTrap,protectOwnTraps:responseTrap,redirectSpellTarget:responseTrap,lockPositionNextTurn:ordinarySpell,summonSheepTokens:when==='main'&&card?.type==='spell'&&['normal','quick'].includes(spellKind(card)),summonKuribohTokens:when==='main'&&card?.type==='spell'&&['normal','quick'].includes(spellKind(card)),summonRaceFromHand:when==='main'&&['monster','spell'].includes(card?.type)&&!(card?.type==='spell'&&spellKind(card)!=='normal'),reviveBothSet:ordinarySpell,millFirstType:false,summonNamedFromHand:when==='main'&&['monster','spell'].includes(card?.type),replaceHands:ordinarySpell,swapPrintedStats:ordinarySpell,recoverNormalAtk:responseTrap,earthAura:fieldAura,pierce:equipPierce,negateEndBattle:attackTrap,redirectAttack:attackTrap,redirectToAttackerAlly:attackTrap,destroyOnEnemySummon:when==='summon'&&card?.type==='trap',concealDefender:attackTrap,blastAttacker:attackTrap};
  const options=Object.entries(OPERATIONS).filter(([op])=>
    Object.hasOwn(special,op)&&!special[op]?false:
    op==='reflectAttack'&&!(when==='attack'&&card?.type==='trap')?false:
    op==='reviveSelected'&&!ordinarySpell?false:
-   when==='continuous'?['boost','weaken','boostDef','weakenDef','earthAura','pierce','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire'].includes(op):
+   when==='continuous'?card?.type==='trap'?op==='extraNormalSummon':['boost','weaken','boostDef','weakenDef','earthAura','pierce','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire','tributeOtherToAttack','preventEquipAttack'].includes(op):
    when==='attack'?op!=='negateEffect':when==='response'?op!=='negateAttack':!['negateAttack','negateEffect'].includes(op));
  if(ordinarySpell){
    const index=options.findIndex(([op])=>op==='reviveSelected');
@@ -572,6 +573,12 @@ const availableOperations=(when,card=null)=>{
  return Object.fromEntries(options);
 };
 function passiveScaleFields(effect){
+ if(effect.code==='specialByThreeNames'||effect.code==='reviveMaterialOnDestroy'){
+  const count=effect.code==='specialByThreeNames'?3:2;
+  return `<div class="sv-passive-editor"><p class="tiny muted">指定名のカードを完全一致で判定します。効果は追加の選択待ちなしに処理します。</p>${Array.from({length:count},(_,i)=>`<label class="field-label" for="cardNativeName${i+1}">モンスター名${i+1}</label><input id="cardNativeName${i+1}" class="input" maxlength="32" value="${esc(effect.names?.[i]||'')}">`).join('')}</div>`;
+ }
+ if(['preventBattleDamage','weakenOpponentOnGrave'].includes(effect.code))return '<p class="tiny muted">条件を満たした時だけ自動処理（クリボーは手札から発動）。チェーンの細かな裁定は省略します。</p>';
+
  if(effect.code==='recruitOnBattleDestroy')return `<div class="sv-passive-editor"><div class="form-duo"><div><label class="field-label" for="cardRecruitAttribute">特殊召喚するモンスターの属性</label><select class="input" id="cardRecruitAttribute">${selectOptions(Object.fromEntries(ATTRIBUTE_NAMES.map(x=>[x,x+'属性'])),effect.attribute||'地')}</select></div><div><label class="field-label" for="cardRecruitThreshold">元々のATK上限</label><input class="input" id="cardRecruitThreshold" type="number" min="0" max="5000" step="1" inputmode="numeric" value="${esc(effect.threshold??1500)}"></div></div><p class="tiny muted">戦闘破壊で墓地へ送られた時のみ。デッキの最初の候補を自動選択。空きゾーンがない場合は不発。</p></div>`;
  if(effect.code==='searchDeckOnSummon')return effect.filter==='named'?`<div class="sv-passive-editor"><label class="field-label" for="cardSearchName">デッキから探すカード名（完全一致）</label><input id="cardSearchName" class="input" maxlength="32" value="${esc(effect.name||'')}" placeholder="例：幻獣王ガゼル"></div>`:'';
  if(effect.code==='multiAttack')return `<div class="sv-passive-editor"><label class="field-label" for="cardMultiAttackCount">1回のバトルフェイズで攻撃できる回数</label><input class="input" id="cardMultiAttackCount" type="number" inputmode="numeric" min="2" max="5" step="1" value="${esc(effect.count??2)}"><p class="tiny muted">攻撃が無効になった場合も1回として数えます。守備表示では攻撃できません。</p></div>`;
@@ -601,14 +608,14 @@ function nativeRecipeTarget(e,card){
  if(e?.code==='searchStatOnGrave')return `<select class="input" id="cardGraveSearchStat">${selectOptions({atk:'自分のデッキのATK指定値以下',def:'自分のデッキのDEF指定値以下'},e.stat||'atk')}</select>`;
  if(e?.code==='searchDeckOnSummon')
    return `<select class="input" id="cardSearchFilter">${selectOptions({ritualMonster:'自分のデッキの儀式モンスター',ritualSpell:'自分のデッキの儀式魔法',named:'自分のデッキの指定名カード'},e.filter||'ritualMonster')}</select>`;
- const fixed={soloHandNoTribute:'自分の手札',doubleLightTribute:'自分自身（リリース時）',returnOpponentOnFlip:'相手のモンスター（左端から最大2体）',destroyOpponentOnFlip:'相手のモンスター（左端を自動選択）',recoverOwnSpellOnFlip:'自分の墓地の魔法（最初を自動選択）',destroyOnAttackToDefense:'相手のモンスター（左端を自動選択）',millOpponentDeck:'相手のデッキ',scoutDrawDiscardSpells:'相手の手札・デッキ',graveNamedScale:'墓地の指定カード',battleAttributeScale:'戦闘相手の指定属性',battleImmuneAtkThreshold:'戦闘相手',raceAuraGuard:'自分の指定種族',attributeFieldAura:'表側表示の指定属性',raceFieldGraveScale:'場・墓地の指定種族',recruitOnBattleDestroy:'自分デッキの指定属性・ATK以下',copyOpponentPrintedStats:'相手の表側モンスター（左端）',destroyAttachedEquip:'自身に装備されたカード',doubleOriginalAtkEndDestroy:'自分自身',selfReturnHand:'自分自身',postAttackDefenseLock:'自分自身',multiAttack:'自分自身',darkMagicianGrave300:'お互いの墓地',enemyDragon500:'相手の場・墓地',darkBattle500:'闇属性の戦闘相手',atk300:'自分自身',atk500:'自分自身',draw1:'自分のデッキ',heal500:'自分のLP',burn500:'相手のLP',destroy1:'相手のモンスター'};
+ const fixed={cyberJarRevealFive:'お互いのフィールド・デッキ（自動処理）',morphingJarTwo:'お互いのフィールド・デッキ（自動処理）',soloHandNoTribute:'自分の手札',doubleLightTribute:'自分自身（リリース時）',returnOpponentOnFlip:'相手のモンスター（左端から最大2体）',destroyOpponentOnFlip:'相手のモンスター（左端を自動選択）',recoverOwnSpellOnFlip:'自分の墓地の魔法（最初を自動選択）',destroyOnAttackToDefense:'相手のモンスター（左端を自動選択）',millOpponentDeck:'相手のデッキ',scoutDrawDiscardSpells:'相手の手札・デッキ',graveNamedScale:'墓地の指定カード',battleAttributeScale:'戦闘相手の指定属性',battleImmuneAtkThreshold:'戦闘相手',raceAuraGuard:'自分の指定種族',attributeFieldAura:'表側表示の指定属性',raceFieldGraveScale:'場・墓地の指定種族',recruitOnBattleDestroy:'自分デッキの指定属性・ATK以下',copyOpponentPrintedStats:'相手の表側モンスター（左端）',destroyAttachedEquip:'自身に装備されたカード',doubleOriginalAtkEndDestroy:'自分自身',selfReturnHand:'自分自身',postAttackDefenseLock:'自分自身',multiAttack:'自分自身',darkMagicianGrave300:'お互いの墓地',enemyDragon500:'相手の場・墓地',darkBattle500:'闇属性の戦闘相手',atk300:'自分自身',atk500:'自分自身',draw1:'自分のデッキ',heal500:'自分のLP',burn500:'相手のLP',destroy1:'相手のモンスター'};
  return `<select class="input" disabled aria-label="この効果の対象は固定"><option>${esc(fixed[e?.code]||'自分自身')}</option></select>`;
 }
 function draftEffectFields(d){
  const isEffect=d.type!=='monster'||d.subtype==='effect';if(!isEffect)return '';
  const mode=d.ability?'builder':'preset';
  const kind=spellKind(d);
- const whenChoices=d.type==='trap'?{attack:TRIGGERS.attack,response:TRIGGERS.response}:d.type==='spell'? (
+ const whenChoices=d.type==='trap'?{attack:TRIGGERS.attack,response:TRIGGERS.response,summon:'相手の通常召喚・反転召喚に自動対応',continuous:'表側の間ずっと（追加通常召喚）'}:d.type==='spell'? (
    kind==='equip'?{continuous:TRIGGERS.continuous}:persistentSpell(d)?{main:TRIGGERS.main,continuous:TRIGGERS.continuous}:{main:TRIGGERS.main}):
    {main:TRIGGERS.main,summon:TRIGGERS.summon,battleDamage:TRIGGERS.battleDamage,continuous:TRIGGERS.continuous};
  const when=whenChoices[d.ability?.when]?d.ability.when:Object.keys(whenChoices)[0];
@@ -637,9 +644,12 @@ function draftEffectFields(d){
  <div><label class="field-label" for="cardAbilityAmount">数値</label><input id="cardAbilityAmount" class="input" type="number" inputmode="numeric" step="1" min="${numeric?meta.min:0}" max="${numeric?meta.max:0}" value="${amount}" ${numeric?'':'disabled'}></div></div>
  ${['searchNamed','summonNamedFromHand'].includes(op)?`<div class="form-duo sv-search-params"><div><label class="field-label" for="cardNamedMatch">名前の条件</label><select id="cardNamedMatch" class="input">${selectOptions(op==='summonNamedFromHand'?{exact:'完全一致'}:{exact:'完全一致',contains:'名前に含む'},d.ability?.match||'exact')}</select></div><div><label class="field-label" for="cardNamedQuery">探すカード名・文字（最大32文字）</label><input id="cardNamedQuery" class="input" maxlength="32" value="${esc(d.ability?.query??(op==='summonNamedFromHand'?'ランプの魔精・ラ・ジーン':'融合'))}" placeholder="カード名"></div></div><p class="tiny muted">${op==='summonNamedFromHand'?'手札に同名モンスターがいて、場に空きがある場合に特殊召喚。先頭候補を自動選択します。':'デッキ内で先に見つかったカードを自動選択します。該当カードなしの場合は何もしません。'}</p>`:''}
  ${op==='summonRaceFromHand'?`<div class="sv-search-params form-duo"><div><label class="field-label" for="cardSummonRace">特殊召喚する種族</label><select id="cardSummonRace" class="input">${selectOptions(Object.fromEntries(RACE_NAMES.map(r=>[r,r])),d.ability?.query||'ドラゴン')}</select></div><div><label class="field-label" for="cardSummonRequired">場に必要な表側モンスター名（省略可）</label><input id="cardSummonRequired" class="input" maxlength="48" value="${esc(d.ability?.requiredFaceUpName||'')}" placeholder="条件なし"></div><p class="tiny muted">手札の先頭から自動選択。場の空きに応じて最大2体まで特殊召喚。</p></div>`:''}
+ ${op==='summonSheepTokens'?`<p class="tiny muted">4枠空いている場合だけ発動可能。羊トークンはアドバンス召喚には使えず、場を離れると消滅します。発動ターンの他の召喚制限は省略。</p>`:''}
+ ${op==='summonKuribohTokens'?`<p class="tiny muted">自分の表側「クリボー」が必要。発動時に自動リリースして、空き枠すべてにクリボートークンを守備表示で生成します。</p>`:''}
+ ${op==='extraNormalSummon'?`<p class="tiny muted">セットした次のターン以降、メインフェイズに表にする。通常召喚を使い切った後も1体につき500LPで追加召喚・セットできます。</p>`:''}
  ${op==='reviveBothSet'?`<p class="tiny muted">双方の墓地に通常召喚可能なモンスターと空きゾーンが必要。各自1体を裏側守備で蘇生します。</p>`:''}
  ${op==='millFirstType'?`<div class="sv-search-params"><label class="field-label" for="cardMillType">墓地へ送るカードの種類</label><select id="cardMillType" class="input">${selectOptions({monster:'モンスター',spell:'魔法',trap:'罠'},['monster','spell','trap'].includes(d.ability?.match)?d.ability.match:'monster')}</select><p class="tiny muted">相手デッキから最初に見つかったカード1枚を自動選択。候補がなければ処理なし。</p></div>`:''}
- ${(['main','attack','response'].includes(when))?`<div class="sv-sequence-controls"><label class="field-label" for="cardAbilitySequence">効果の構成</label><select id="cardAbilitySequence" class="input">${selectOptions({single:'通常（1つの効果）',ifResolved:'最初の効果を処理した場合、続けて追加効果',sequential:'発動時にコストを払う（従来方式）'},d.ability?.then?'ifResolved':d.ability?.before?'sequential':'single')}</select>
+ ${(['main','attack','response'].includes(when)&&!['summonSheepTokens','summonKuribohTokens'].includes(op))?`<div class="sv-sequence-controls"><label class="field-label" for="cardAbilitySequence">効果の構成</label><select id="cardAbilitySequence" class="input">${selectOptions({single:'通常（1つの効果）',ifResolved:'最初の効果を処理した場合、続けて追加効果',sequential:'発動時にコストを払う（従来方式）'},d.ability?.then?'ifResolved':d.ability?.before?'sequential':'single')}</select>
  ${d.ability?.then&&nextMeta?`<div class="sv-sequence-stage"><b>した場合、</b><div class="sv-recipe-grid sv-recipe-three"><div><label class="field-label" for="cardThenTarget">対象</label><select id="cardThenTarget" class="input">${selectOptions(Object.fromEntries(nextTargets.map(t=>[t,TARGETS[t]])),nextTarget)}</select></div><div><label class="field-label" for="cardThenOperation">効果</label><select id="cardThenOperation" class="input">${selectOptions(nextOperations,nextOp)}</select></div><div><label class="field-label" for="cardThenAmount">数値</label><input id="cardThenAmount" class="input" type="number" inputmode="numeric" step="1" min="${numericNext?nextMeta.min:0}" max="${numericNext?nextMeta.max:0}" value="${numericNext?d.ability.then.amount:0}" ${numericNext?'':'disabled'}></div></div><p class="tiny muted">最初の効果が実際に処理された場合のみ続けて実行。追加効果の対象は自動で特定できる範囲、または最初と同じカードに限定します。</p></div>`:''}
  ${d.ability?.before?`<div class="sv-sequence-stage"><b>① A｜発動に必要な処理</b><label class="field-label" for="cardBeforeOperation">Aの種類</label><select id="cardBeforeOperation" class="input">${selectOptions(Object.fromEntries(Object.entries(BEFORE_META).map(([k,v])=>[k,v.label])),d.ability.before.operation)}</select>
  <label class="field-label" for="cardBeforeAmount">Aで使う枚数・体数・LP（直接入力）</label><input id="cardBeforeAmount" class="input" type="number" inputmode="numeric" step="1" min="1" max="${BEFORE_META[d.ability.before.operation]?.max||1}" value="${esc(d.ability.before.amount)}"><p class="tiny muted">フィールド・手札のカードは発動時に選択。LP・デッキ・墓地は自動処理。Aを実行できない場合は発動不可です。</p></div>`:''}</div>`:''}
@@ -792,7 +802,8 @@ function editorModal(){
       ${isMonster?`<div><label class="field-label" for="cardSubtype">モンスター種別</label><select class="input" id="cardSubtype">${selectOptions({normal:'通常',effect:'効果'},d.subtype||'normal')}</select></div>`:''}</div>
       ${isMonster?`<label class="field-label" for="cardSummonKind">召喚方法</label><select id="cardSummonKind" class="input">${selectOptions(SUMMON_KINDS,summonKind(d))}</select><div class="form-duo mt8"><div><label class="field-label" for="cardAttribute">属性</label><select class="input" id="cardAttribute">${selectOptions(Object.fromEntries(ATTRIBUTE_NAMES.map(x=>[x,x])),d.attribute||'光')}</select></div><div><label class="field-label" for="cardRace">種族</label><select class="input" id="cardRace">${selectOptions(Object.fromEntries(RACE_NAMES.map(x=>[x,x+'族'])),d.race||'魔法使い')}</select></div></div>`:''}
       ${isMonster&&summonKind(d)==='fusion'?`<div class="form-duo"><div><label class="field-label">融合素材①</label><select id="fusionMat1" class="input">${selectOptions(Object.fromEntries(CARDS.filter(c=>c.type==='monster'&&summonKind(c)!=='fusion'&&c.id!==d.id).map(c=>[c.id,c.name])),d.fusionMaterials?.[0]||'m03')}</select></div>
-      <div><label class="field-label">融合素材②</label><select id="fusionMat2" class="input">${selectOptions(Object.fromEntries(CARDS.filter(c=>c.type==='monster'&&summonKind(c)!=='fusion'&&c.id!==d.id).map(c=>[c.id,c.name])),d.fusionMaterials?.[1]||'m12')}</select></div></div>`:''}
+      <div><label class="field-label">融合素材②</label><select id="fusionMat2" class="input">${selectOptions(Object.fromEntries(CARDS.filter(c=>c.type==='monster'&&summonKind(c)!=='fusion'&&c.id!==d.id).map(c=>[c.id,c.name])),d.fusionMaterials?.[1]||'m12')}</select></div></div>
+      <label class="field-label" for="fusionMat3">融合素材③（任意・3体融合）</label><select id="fusionMat3" class="input">${selectOptions({'':'2体融合',...Object.fromEntries(CARDS.filter(c=>c.type==='monster'&&summonKind(c)!=='fusion'&&c.id!==d.id).map(c=>[c.id,c.name]))},d.fusionMaterials?.[2]||'')}</select>`:''}
       ${d.type==='spell'&&spellKind(d)==='ritual'?`<label class="field-label" for="ritualFor">対応する儀式モンスター</label><select class="input" id="ritualFor">${selectOptions({ '':'すべての儀式モンスター',...Object.fromEntries(CARDS.filter(c=>summonKind(c)==='ritual').map(c=>[c.id,c.name]))},d.ritualFor||'')}</select>`:''}
       ${isMonster?`<div class="form-trio"><div><label class="field-label" for="cardLevel">レベル</label><input id="cardLevel" class="input" inputmode="numeric" type="number" min="1" max="12" value="${d.level||4}"></div>
           <div><label class="field-label" for="cardAtk">ATK</label><input id="cardAtk" class="input" inputmode="numeric" type="number" min="0" max="5000" value="${d.atk??1500}"></div>
@@ -826,7 +837,7 @@ function readCardForm(){
   d.rarity=value('cardRarity',d.rarity||'N');d.limit=value('cardLimit',d.limit||'unlimited');d.cost=Number(value('cardCost',d.cost??cardCost(d)));
   d.type=value('cardType',d.type);
   if(d.type==='spell')d.spellKind=value('cardSpellKind',d.spellKind||'normal');else delete d.spellKind;
-  if(d.type==='monster'){d.summonKind=value('cardSummonKind',d.summonKind||'normal');if(d.summonKind==='fusion')d.fusionMaterials=[value('fusionMat1',d.fusionMaterials?.[0]||'m03'),value('fusionMat2',d.fusionMaterials?.[1]||'m12')];else delete d.fusionMaterials;}else delete d.summonKind;
+  if(d.type==='monster'){d.summonKind=value('cardSummonKind',d.summonKind||'normal');if(d.summonKind==='fusion')d.fusionMaterials=[value('fusionMat1',d.fusionMaterials?.[0]||'m03'),value('fusionMat2',d.fusionMaterials?.[1]||'m12'),value('fusionMat3',d.fusionMaterials?.[2]||'')].filter(Boolean);else delete d.fusionMaterials;}else delete d.summonKind;
   if(d.type==='spell'&&d.spellKind==='ritual')d.ritualFor=value('ritualFor',d.ritualFor||'');else delete d.ritualFor;
   d.emoji=value('cardEmoji',d.emoji).trim()||'✦';
   d.desc=value('cardDesc',d.desc).trim();
@@ -842,9 +853,11 @@ function readCardForm(){
       const previous=d.monsterEffect;
       const preset=defaultPassiveConfig(code);
       d.monsterEffect={kind,code};
-      if(preset&&(kind==='summonRule'||kind==='continuous'||kind==='flip'||kind==='position'||kind==='endPhase'||kind==='grave'||kind==='battle'||code==='searchDeckOnSummon'||code==='copyOpponentPrintedStats')){
+      if(preset&&(kind==='hand'||kind==='summonRule'||kind==='continuous'||kind==='flip'||kind==='position'||kind==='endPhase'||kind==='grave'||kind==='battle'||code==='searchDeckOnSummon'||code==='copyOpponentPrintedStats')){
         d.monsterEffect={...preset,...(previous?.code===code?previous:{})};
-        if(code==='multiAttack'){
+        if(['specialByThreeNames','reviveMaterialOnDestroy'].includes(code)){
+          d.monsterEffect.names=Array.from({length:code==='specialByThreeNames'?3:2},(_,i)=>value(`cardNativeName${i+1}`,d.monsterEffect.names?.[i]||'').trim());
+        }else if(code==='multiAttack'){
           d.monsterEffect.count=Number(value('cardMultiAttackCount',d.monsterEffect.count));
         }else if(code==='returnOpponentOnFlip'){
           d.monsterEffect.amount=Number(value('cardFlipBounceCount',d.monsterEffect.amount));
@@ -854,7 +867,7 @@ function readCardForm(){
         }else if(code==='searchStatOnGrave'){
           d.monsterEffect.stat=value('cardGraveSearchStat',d.monsterEffect.stat||'atk');
           d.monsterEffect.threshold=Number(value('cardGraveSearchThreshold',d.monsterEffect.threshold));
-        }else if(['selfReturnHand','postAttackDefenseLock','destroyAttachedEquip','trapSuppression','soloHandNoTribute','doubleLightTribute','doubleOriginalAtkEndDestroy','destroyOpponentOnFlip','recoverOwnSpellOnFlip','destroyOnAttackToDefense','copyOpponentPrintedStats'].includes(code)){
+        }else if(['selfReturnHand','postAttackDefenseLock','destroyAttachedEquip','trapSuppression','soloHandNoTribute','doubleLightTribute','doubleOriginalAtkEndDestroy','destroyOpponentOnFlip','recoverOwnSpellOnFlip','destroyOnAttackToDefense','copyOpponentPrintedStats','preventBattleDamage','weakenOpponentOnGrave'].includes(code)){
           // No numeric inputs for automatic end-phase or post-attack behavior.
         }else if(code==='searchDeckOnSummon'){
           d.monsterEffect.filter=value('cardSearchFilter',d.monsterEffect.filter||'ritualMonster');
@@ -917,8 +930,8 @@ function readCardForm(){
       ...(operation==='summonRaceFromHand'?{match:'race',query:value('cardSummonRace',d.ability?.query||'ドラゴン'),...(value('cardSummonRequired','').trim()?{requiredFaceUpName:value('cardSummonRequired','').trim()}:{} )}:{}),
       ...(operation==='millFirstType'?{match:value('cardMillType',d.ability?.match||'monster')}:{}),
       ...(['searchNamed','summonNamedFromHand'].includes(operation)?{match:operation==='summonNamedFromHand'?'exact':value('cardNamedMatch',d.ability?.match||'exact'),query:value('cardNamedQuery',d.ability?.query??(operation==='summonNamedFromHand'?'ランプの魔精・ラ・ジーン':'融合'))}:{}),
-      ...(sequence==='sequential'&&BEFORE_META[costOp]&&['main','attack','response'].includes(when)?{before:{operation:costOp,amount:costAmount}}:{}),
-      ...(sequence==='ifResolved'&&thenInfo&&thenOpts.length&&when!=='continuous'?{then:{operation:nextOperation,target:thenOpts.includes(nextTargetChosen)?nextTargetChosen:thenOpts[0],amount:thenInfo.min===undefined?0:nextValue}}:{})};
+      ...(!['summonSheepTokens','summonKuribohTokens'].includes(operation)&&sequence==='sequential'&&BEFORE_META[costOp]&&['main','attack','response'].includes(when)?{before:{operation:costOp,amount:costAmount}}:{}),
+      ...(!['summonSheepTokens','summonKuribohTokens'].includes(operation)&&sequence==='ifResolved'&&thenInfo&&thenOpts.length&&when!=='continuous'?{then:{operation:nextOperation,target:thenOpts.includes(nextTargetChosen)?nextTargetChosen:thenOpts[0],amount:thenInfo.min===undefined?0:nextValue}}:{})};
   }else delete d.ability;
   // Builder and native preset are mutually exclusive: never apply hidden double bonuses.
   if(d.type==='monster'&&d.subtype==='effect'&&d.ability)delete d.monsterEffect;
@@ -1015,7 +1028,7 @@ function targetFlags(owner,zone,index,item){
    return {eligible,picked:eligible&&m.indices.includes(index),empty:false};
  }
  if(m.type==='tribute'){
-   const eligible=owner==='mine'&&zone==='monsters'&&occupied;
+   const eligible=owner==='mine'&&zone==='monsters'&&occupied&&!CARD[item?.id]?.isToken;
    return {eligible,picked:eligible&&m.indices.includes(index),empty:false};
  }
  if(m.type==='move'){
@@ -1200,8 +1213,11 @@ function renderPending(){
   if(s.pending.kind==='chain'){
     const ch=s.pending,priority=ch.priority===ui.seat;
     const traps=priority&&!trapsSuppressed(s)?activePlayer().backrow.map((v,i)=>({v,i})).filter(({v})=>{
-      if(!v||v.setTurn>=s.turnNo||CARD[v.id]?.type!=='trap')return false;
+      if(!v||v.faceDown!==true||v.setTurn>=s.turnNo||CARD[v.id]?.type!=='trap')return false;
       const card=CARD[v.id],guard=card.responseGuard,top=ch.stack[ch.stack.length-1];
+      if(card.ability?.operation==='redirectSpellTarget'&&redirectedSpellTargetSlot(s,ui.seat,top)<0)return false;
+      if(card.ability?.operation==='protectOwnTraps'&&!canProtectOwnTraps(s,ui.seat,top,i))return false;
+      if(card.ability?.operation==='redirectToAttackerAlly'&&attackerAllySlot(s,ui.seat,ch.afterAttack)<0)return false;
       if(guard){const linked=CARD[top?.cardId],ab=linked?.ability;
         if(linked?.type!=='spell'||guard==='targetedSpell'&&!['ownMonster','enemyMonster'].includes(ab?.target))return false;
       }
@@ -1227,11 +1243,13 @@ function renderPending(){
    <p class="sv-response-help">相手が罠・速攻魔法を使用するか選択しています。</p>
    ${ui.demo?btn('相手側に切り替える','switchSeat','btn secondary wide mt8'):''}</section>`;
   const p=activePlayer();
-  const traps=trapsSuppressed(s)?[]:p.backrow.map((v,i)=>({v,i})).filter(({v})=>v&&CARD[v.id]?.type==='trap'&&v.setTurn<s.turnNo&&(CARD[v.id]?.ability?.when==='attack'||!CARD[v.id]?.ability));
+  const guards=s.pending.preventBattleDamageSeat===ui.seat?[]:p.hand.map((id,i)=>({id,i})).filter(x=>CARD[x.id]?.monsterEffect?.kind==='hand'&&CARD[x.id].monsterEffect.code==='preventBattleDamage');
+  const traps=trapsSuppressed(s)?[]:p.backrow.map((v,i)=>({v,i})).filter(({v})=>v&&v.faceDown===true&&CARD[v.id]?.type==='trap'&&v.setTurn<s.turnNo&&(CARD[v.id]?.ability?.when==='attack'||!CARD[v.id]?.ability)&&
+    (CARD[v.id]?.ability?.operation!=='redirectToAttackerAlly'||attackerAllySlot(s,ui.seat,s.pending)>=0));
   return `<section class="respond sv-response sv-response--ready" role="region" aria-label="攻撃への応答">
     <div class="sv-response-heading"><span class="sv-response-label">BATTLE</span><strong>相手が攻撃！ 応答を選択</strong><span class="sv-response-status">選択できます</span></div>
     <p class="sv-response-help">使用可能な罠・速攻魔法を発動するか、攻撃を通してください。</p>
-    <div class="sv-response-actions row wrap">${traps.map(({v,i})=>btn(`${esc(CARD[v.id].emoji)} ${esc(CARD[v.id].name)}`,'trap','btn sm secondary',`data-index="${i}"`)).join('')}${quickChoiceButtons()}</div>
+    <div class="sv-response-actions row wrap">${traps.map(({v,i})=>btn(`${esc(CARD[v.id].emoji)} ${esc(CARD[v.id].name)}`,'trap','btn sm secondary',`data-index="${i}"`)).join('')}${quickChoiceButtons()}${guards.map(({id,i})=>btn(`✦ ${esc(CARD[id].name)}（戦闘ダメージ0）`,'discardBattleGuard','btn sm secondary',`data-index="${i}"`)).join('')}</div>
     <div class="sv-response-primary">${btn('何も発動せず攻撃を通す','passAttack','btn primary sm')}</div></section>`;
 }
 function renderTargetHint(){
@@ -1283,8 +1301,8 @@ function renderSelection(){
   const c=CARD[id];if(!c)return '';
   let options='';const canMain=inMain();
   if(sel.owner==='mine'&&sel.zone==='hand'&&myTurn()&&!s.pending&&(canMain||c.type==='spell'&&spellKind(c)==='quick')){
-    if(c.type==='monster'&&canMain){
-      options=summonKind(c)==='ritual'?btn('儀式召喚','openRitual','btn primary sm'):summonKind(c)==='fusion'?'':btn('攻撃表示で召喚','summonAtk','btn primary sm')+btn('裏側守備でセット','summonSet','btn sm');
+    if(c.type==='monster'&&canMain&&(!p.normalUsed||canExtraNormalSummon(s,ui.seat))){
+      options=((c.ability?.operation==='selfSpecialFromHand'&&p.monsters.includes(null)||specialHandTributeSlots(s,ui.seat,c).length===3)?btn('✦ 特殊召喚','specialSummonSelf','btn secondary sm'):'')+(summonKind(c)==='ritual'?btn('儀式召喚','openRitual','btn primary sm'):summonKind(c)==='fusion'?'':btn('攻撃表示で召喚','summonAtk','btn primary sm')+btn('裏側守備でセット','summonSet','btn sm'));
     }else if(c.type==='spell'){
       options=btn(['ritual','fusion'].includes(spellKind(c))?(spellKind(c)==='ritual'?'儀式召喚':'融合召喚'):'魔法を発動','spellHand','btn primary sm')+(canMain?btn('伏せてセット','setHand','btn sm'):'');
     }else if(canMain)options=btn('伏せてセット','setHand','btn primary sm');
@@ -1302,7 +1320,8 @@ function renderSelection(){
       (c.monsterEffect?.code!=='fusionFromExtraPay5000'||p.lp>5000&&p.monsters.some(m=>m===null)&&p.extraDeck.some(id=>summonKind(CARD[id])==='fusion'))&&
       (c.ability?.operation!=='summonNamedFromHand'||p.monsters.some(m=>m===null)&&p.hand.some(id=>CARD[id]?.type==='monster'&&summonKind(CARD[id])==='normal'&&CARD[id].name===c.ability.query)))
       options+=btn('✦ モンスター効果を発動','monsterEffect','btn secondary sm');
-    if(myTurn()&&s.phase==='battle'&&!s.pending&&item.pos==='atk'&&remainingAttacks(item)>0&&(item.attackLockedUntil||0)<s.turnNo&&s.turnNo>1){
+    if(myTurn()&&s.phase==='battle'&&!s.pending&&item.pos==='atk'&&remainingAttacks(item)>0&&(item.attackLockedUntil||0)<s.turnNo&&!isAttackSealedByEquip(s,ui.seat,item)&&s.turnNo>1&&
+      (c.ability?.operation!=='tributeOtherToAttack'||p.monsters.some((m,i)=>i!==sel.index&&m))){
       // A clear, explicit direct-attack command needs no redundant target picker.
       // The engine still validates the action; this changes only the UI route.
       const clearOpponentField=canDirectAttackWithMonsters(s,ui.seat,item);
@@ -1314,6 +1333,8 @@ function renderSelection(){
   if(sel.owner==='mine'&&sel.zone==='monsters'&&canMain&&item)options+=btn('位置移動','moveSelected','btn sm');
   if(sel.owner==='mine'&&(sel.zone==='backrow'||sel.zone==='field')&&item){
     if(c.type==='spell'&&item.faceDown&&myTurn()&&!s.pending&&(canMain||spellKind(c)==='quick'))options=btn(['ritual','fusion'].includes(spellKind(c))?'特殊召喚':'魔法を発動','spellField','btn primary sm');
+    if(c.type==='trap'&&sel.zone==='backrow'&&item.faceDown&&canMain&&myTurn()&&item.setTurn<s.turnNo&&!trapsSuppressed(s)&&c.ability?.operation==='extraNormalSummon'&&c.ability?.when==='continuous')
+      options=btn('永続罠を発動','activateContinuousTrap','btn primary sm',`data-index="${sel.index}"`);
     if(c.type==='trap'&&s.pending?.kind==='attack'&&s.pending.by!==ui.seat&&item.setTurn<s.turnNo)
       options=btn('罠を発動','trap','btn primary sm',`data-index="${sel.index}"`);
   }
@@ -1757,7 +1778,7 @@ function refreshDeckEditor(){
   const extra=ui.deckDraft.extraCounts||{},countExtra=sum(extra);
   const exTotal=document.querySelector('.ex-total');if(exTotal)exTotal.textContent=`${countExtra} / 15`;
   const exSave=document.querySelector('.sv-save-ex');if(exSave)exSave.textContent=`${countExtra} / 15`;
-  for(const row of document.querySelectorAll('.ex-deck-item')){const add=row.querySelector('[data-action="extraPlus"]'),minus=row.querySelector('[data-action="extraMinus"]'),qty=row.querySelector('.ex-count');if(!add)continue;const n=extra[add.dataset.id]||0;if(qty)qty.textContent=String(n);if(minus)minus.disabled=n<1;add.disabled=CARD[add.dataset.id]?.fusionMaterials?.length!==2||n>=Math.min(cardLimit(CARD[add.dataset.id]),ui.collectionOnly?(deckPool()[add.dataset.id]||0):3)||countExtra>=15;}
+  for(const row of document.querySelectorAll('.ex-deck-item')){const add=row.querySelector('[data-action="extraPlus"]'),minus=row.querySelector('[data-action="extraMinus"]'),qty=row.querySelector('.ex-count');if(!add)continue;const n=extra[add.dataset.id]||0;if(qty)qty.textContent=String(n);if(minus)minus.disabled=n<1;add.disabled=![2,3].includes(CARD[add.dataset.id]?.fusionMaterials?.length)||n>=Math.min(cardLimit(CARD[add.dataset.id]),ui.collectionOnly?(deckPool()[add.dataset.id]||0):3)||countExtra>=15;}
   for(const row of document.querySelectorAll('.deck-item:not(.ex-deck-item)')){
     const add=row.querySelector('[data-action="deckPlus"]');if(!add)continue;
     const id=add.dataset.id,c=CARD[id],count=counts[id]||0;
@@ -2320,7 +2341,7 @@ $('view').addEventListener('click',async e=>{
  if(action==='confirmSpecial')return confirmSpecial();
  if(action==='openRitual')return beginSpecial('ritual',{ritualHand:ui.selected?.index});
  if(action==='openFusion')return beginSpecial('fusion');
- if(action==='extraPlus'||action==='extraMinus'){if(!ui.deckDraft)return;const id=el.dataset.id,c=CARD[id];if(!c||summonKind(c)!=='fusion')return;const counts=ui.deckDraft.extraCounts||={},n=counts[id]||0;if(action==='extraPlus'&&c.fusionMaterials?.length===2&&n<Math.min(cardLimit(c),ui.collectionOnly?(deckPool()[id]||0):3)&&sum(counts)<15)counts[id]=n+1;else if(action==='extraMinus'&&n>0){if(n===1)delete counts[id];else counts[id]=n-1;}ui.deckDraft.extraCounts=counts;saveSealedDraft();saveDeckDraft();refreshDeckEditor();return;}
+ if(action==='extraPlus'||action==='extraMinus'){if(!ui.deckDraft)return;const id=el.dataset.id,c=CARD[id];if(!c||summonKind(c)!=='fusion')return;const counts=ui.deckDraft.extraCounts||={},n=counts[id]||0;if(action==='extraPlus'&&[2,3].includes(c.fusionMaterials?.length)&&n<Math.min(cardLimit(c),ui.collectionOnly?(deckPool()[id]||0):3)&&sum(counts)<15)counts[id]=n+1;else if(action==='extraMinus'&&n>0){if(n===1)delete counts[id];else counts[id]=n-1;}ui.deckDraft.extraCounts=counts;saveSealedDraft();saveDeckDraft();refreshDeckEditor();return;}
  if(action==='toggleCompact'){ui.duelCompact=!ui.duelCompact;storage.setItem('duel-compact',ui.duelCompact?'1':'0');render();return;}
  if(action==='toggleHandZoom'){if(!ui.game)return;ui.handZoom=!ui.handZoom;storage.setItem('saho-hand-zoom-v1',ui.handZoom?'1':'0');render();return;}
  if(action==='openDuel'){ui.duelOpen=true;render();requestAnimationFrame(()=>document.getElementById('duel-setup')?.scrollIntoView({behavior:'smooth',block:'start'}));return;}
@@ -2540,6 +2561,7 @@ $('view').addEventListener('click',async e=>{
    }
    return send({type:'quickResponse',source,index});
  }
+ if(action==='activateContinuousTrap'){const i=Number(el.dataset.index??ui.selected?.index);return send({type:'activateContinuousTrap',index:i});}
  if(action==='chainTrap'){const i=Number(el.dataset.index),c=CARD[activePlayer()?.backrow[i]?.id];
   if(c&&beginComposite({type:'chainTrap',index:i,id:c.id}))return;
   if(c&&effectNeedsTarget(c.id)){startTargetMode({type:'chainTrap',index:i,id:c.id});return;}
@@ -2566,6 +2588,7 @@ $('view').addEventListener('click',async e=>{
  }
  if(action==='endTurn')return send({type:'endTurn'});
  if(action==='passAttack')return send({type:'passAttack'});
+ if(action==='discardBattleGuard')return send({type:'discardBattleGuard',hand:Number(el.dataset.index)});
  if(action==='trap'){
   const i=Number(el.dataset.index??ui.selected?.index),c=CARD[activePlayer()?.backrow[i]?.id];
   if(c&&beginComposite({type:'chainTrap',attack:true,index:i,id:c.id}))return;
@@ -2576,6 +2599,7 @@ $('view').addEventListener('click',async e=>{
  }
  if(action==='confirmPrerequisite'){const m=ui.targetMode,c=CARD[m?.id]?.ability?.before;if(m?.type==='prerequisite'&&c?.amount===m.indices.length)completePrerequisite(m,[...m.indices]);return;}
  if(action==='confirmTributes'){const m=ui.targetMode;if(m?.type==='tribute'&&validSummonTributes(CARD[activePlayer()?.hand[m.hand]],activePlayer()?.hand.length,activePlayer()?.monsters,m.indices))return send({type:'summon',hand:m.hand,faceDown:m.faceDown,tributes:[...m.indices]});return;}
+ if(action==='specialSummonSelf')return send({type:'specialSummonSelf',hand:ui.selected?.index});
  if(action==='summonAtk')return attemptSummon(false);
  if(action==='summonSet')return attemptSummon(true);
  if(action==='setHand')return send({type:'setBackrow',hand:ui.selected.index});
@@ -2600,7 +2624,8 @@ $('view').addEventListener('click',async e=>{
    const sel=ui.selected,s=ui.game,me=activePlayer(),opponent=s?.players?.[1-ui.seat];
    const monster=sel?.owner==='mine'&&sel.zone==='monsters'?me?.monsters?.[sel.index]:null;
    if(!s||!myTurn()||s.phase!=='battle'||s.pending||s.turnNo<=1||!monster||
-      monster.pos!=='atk'||remainingAttacks(monster)<1||(monster.attackLockedUntil||0)>=s.turnNo||
+      monster.pos!=='atk'||remainingAttacks(monster)<1||(monster.attackLockedUntil||0)>=s.turnNo||isAttackSealedByEquip(s,ui.seat,monster)||
+      (CARD[monster.id]?.ability?.operation==='tributeOtherToAttack'&&!me.monsters.some((m,i)=>i!==sel.index&&m))||
       !canDirectAttackWithMonsters(s,ui.seat,monster))return toast('攻撃条件が変わりました。カードを選び直してください');
    return send({type:'attack',index:sel.index,target:-1});
  }
@@ -2695,7 +2720,7 @@ $('view').addEventListener('change',async e=>{
      ui.cardDraft.ability.when=e.target.value;
      const operations=availableOperations(e.target.value,ui.cardDraft);
      if(!Object.hasOwn(operations,ui.cardDraft.ability.operation)){
-       const op=e.target.value==='continuous'?'boost':e.target.value==='response'?'negateEffect':e.target.value==='attack'?'negateAttack':'draw';
+       const op=e.target.value==='continuous'?(ui.cardDraft.type==='trap'?'extraNormalSummon':'boost'):e.target.value==='response'?'negateEffect':e.target.value==='attack'?'negateAttack':'draw';
        ui.cardDraft.ability.operation=op;ui.cardDraft.ability.amount=ABILITY_META[op].amount;
      }
      const validTargets=abilityTargets(ui.cardDraft.ability.operation,e.target.value,ui.cardDraft.type,spellKind(ui.cardDraft));
@@ -2707,7 +2732,7 @@ $('view').addEventListener('change',async e=>{
    if(e.target.id==='cardAbilitySequence'&&ui.cardDraft.ability){
      const ab=ui.cardDraft.ability;
      delete ab.before;delete ab.then;
-     if(e.target.value==='sequential')ab.before={operation:'sendOwnMonsterGrave',amount:1};
+     if(e.target.value==='sequential'||ab.operation==='crushVirus')ab.before={operation:'sendOwnMonsterGrave',amount:1};
      if(e.target.value==='ifResolved'){
        const options=Object.keys(availableOperations(ab.when,ui.cardDraft)).filter(op=>followUpTargets(op,ab.target,ab.when,ui.cardDraft.type,spellKind(ui.cardDraft)).length);
        const op=options.includes('draw')?'draw':options[0];
@@ -2725,6 +2750,9 @@ $('view').addEventListener('change',async e=>{
    if(e.target.id==='cardAbilityOperation'&&ui.cardDraft.ability){
      const op=e.target.value,when=ui.cardDraft.ability.when;
      ui.cardDraft.ability.operation=op;const valid=abilityTargets(op,when,ui.cardDraft.type,spellKind(ui.cardDraft));if(!valid.includes(ui.cardDraft.ability.target))ui.cardDraft.ability.target=valid[0];ui.cardDraft.ability.amount=ABILITY_META[op].amount;
+     if(op==='crushVirus'){ui.cardDraft.ability.before={operation:'sendOwnMonsterGrave',amount:1};delete ui.cardDraft.ability.then;}
+     else if(op==='revealSetMonsters'){delete ui.cardDraft.ability.before;delete ui.cardDraft.ability.then;}
+     if(['summonSheepTokens','summonKuribohTokens'].includes(op)){delete ui.cardDraft.ability.before;delete ui.cardDraft.ability.then;}
      if(op==='summonRaceFromHand'){ui.cardDraft.ability.match='race';ui.cardDraft.ability.query='ドラゴン';delete ui.cardDraft.ability.then;delete ui.cardDraft.ability.before;}
      else if(op==='millFirstType'){ui.cardDraft.ability.match='monster';delete ui.cardDraft.ability.query;delete ui.cardDraft.ability.then;}
      else if(op==='summonNamedFromHand'){ui.cardDraft.ability.match='exact';ui.cardDraft.ability.query='ランプの魔精・ラ・ジーン';delete ui.cardDraft.ability.then;}
