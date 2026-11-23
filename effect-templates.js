@@ -1,6 +1,7 @@
 /** A small, declarative user effect-recipe library. No script execution, no engine extensions. */
-import {validMonsterEffect} from './cards.js?v=2047';
-import {isValidAbility,abilityText} from './rules.js?v=2047';
+import {effectText,validMonsterEffect} from './cards.js?v=2048';
+import {HISTORICAL_CARDS} from './historical-data.js?v=2048';
+import {isValidAbility,abilityText} from './rules.js?v=2048';
 
 export const EFFECT_TEMPLATE_KEY='saho-effect-templates-v1';
 export const EFFECT_TEMPLATE_LIMIT=40;
@@ -42,7 +43,7 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'spell',spellKind:'quick',ability:{when:'main',operation:'summonSheepTokens',target:'self',amount:4}},'スケープ・ゴート式：羊4体','et_builtin_sheep'),
  templateFromCard({type:'trap',ability:{when:'main',operation:'graveRevive',target:'self',amount:1}},'リビングデッド式：墓地蘇生','et_builtin_haunted'),
  templateFromCard({type:'spell',spellKind:'equip',ability:{when:'continuous',operation:'preventEquipAttack',target:'enemyMonster',amount:0}},'ブラックダスト式：2ターン後破壊','et_builtin_virus'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'grave',code:'weakenOpponentOnGrave'}},'ギルファー式：墓地でATK－500','et_builtin_gilfer'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='暗黒魔族ギルファー・デーモン'),'ギルファー式：墓地でATK－500','et_builtin_gilfer'),
  templateFromCard({type:'monster',subtype:'effect',ability:{when:'main',operation:'selfSpecialFromHandGiveRevive',target:'self',amount:0}},'ギラザウルス式：双方特殊召喚','et_builtin_gilasa'),
  templateFromCard({type:'monster',subtype:'effect',ability:{when:'summon',operation:'lockWhileSourceFaceUp',target:'enemyMonster',amount:0}},'ルシファー式：継続攻撃禁止','et_builtin_lucifer'),
  templateFromCard({type:'monster',subtype:'effect',ability:{when:'main',operation:'timeWizardCoin',target:'self',amount:0}},'時の魔術師式：コイントス','et_builtin_wizard'),
@@ -64,10 +65,10 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'trap',ability:{when:'attack',operation:'setAttackerDefense',target:'attacker',amount:0}},'鎖付きブーメラン式：守備変更','et_builtin_boomerang'),
  templateFromCard({type:'spell',spellKind:'quick',ability:{when:'main',operation:'summonKuribohTokens',target:'self',amount:0}},'増殖式：クリボートークン','et_builtin_multiply'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'summonRaceFromHand',target:'self',amount:2,match:'race',query:'ドラゴン',requiredFaceUpName:'ロード・オブ・ドラゴン－ドラゴンの支配者－'}},'ドラゴンの笛式：手札から2体','et_builtin_flute'),
- templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'enemyMonster',amount:0,before:{operation:'discardOwnHand',amount:1}}},'死者への手向け式：手札を捨て破壊','et_builtin_offering'),
+ templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'eitherMonster',amount:0,before:{operation:'discardOwnHand',amount:1}}},'死者への手向け式：手札を捨て破壊','et_builtin_offering'),
  templateFromCard({type:'spell',spellKind:'equip',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:1000}},'デーモンの斧式：装備ATK＋1000','et_builtin_axe'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'removeSpellBackrow',target:'enemyBackrow',amount:0}},'魔法除去式：伏せ確認・魔法破壊','et_builtin_magicremoval'),
- templateFromCard({type:'spell',spellKind:'quick',ability:{when:'main',operation:'destroyBackrow',target:'enemyBackrow',amount:0}},'サイクロン式：魔法・罠1枚破壊','et_builtin_cyclone'),
+ templateFromCard({type:'spell',spellKind:'quick',ability:{when:'main',operation:'destroyBackrow',target:'eitherBackrow',amount:0}},'サイクロン式：魔法・罠1枚破壊','et_builtin_cyclone'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'bothMonsters',amount:0}},'ブラック・ホール式：全モンスター破壊','et_builtin_blackhole'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'reviveBothSet',target:'none',amount:0}},'浅すぎた墓穴式：双方裏守備蘇生','et_builtin_shallow'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'draw',target:'self',amount:3,then:{operation:'discardNewest',target:'self',amount:2}}},'天使の施し式：3枚引いて2枚捨てる','et_builtin_graceful'),
@@ -82,11 +83,11 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'trap',ability:{when:'attack',operation:'negateEndBattle',target:'none',amount:0}},'攻撃の無力化式：バトル終了','et_builtin_negatebattle'),
  templateFromCard({type:'trap',ability:{when:'attack',operation:'blastAttacker',target:'attacker',amount:0}},'破壊輪式：攻撃者破壊・双方にダメージ','et_builtin_ring'),
  templateFromCard({type:'trap',ability:{when:'summon',operation:'destroyOnEnemySummon',target:'enemyMonster',amount:1000}},'落とし穴式：召喚時に自動破壊','et_builtin_traphole'),
- templateFromCard({type:'trap',ability:{when:'response',operation:'negateEffect',target:'none',amount:0,before:{operation:'discardOwnHand',amount:1}}},'ジャマー式：手札を捨て魔法無効','et_builtin_jammer'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='マジック・ジャマー'),'ジャマー式：手札を捨て魔法無効','et_builtin_jammer'),
  templateFromCard({type:'trap',ability:{when:'response',operation:'redirectSpellTarget',target:'none',amount:0}},'天使の手鏡式：魔法対象変更','et_builtin_handmirror'),
  templateFromCard({type:'trap',ability:{when:'response',operation:'protectOwnTraps',target:'none',amount:0}},'偽物のわな式：罠破壊を防止','et_builtin_faketrap'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'lockPositionNextTurn',target:'opponent',amount:0}},'催眠術式：次ターン表示変更禁止','et_builtin_hypnosis'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'trigger',code:'searchDeckOnSummon',filter:'named',name:'幻獣王ガゼル'}},'バフォメット式：召喚時に指定名サーチ','et_builtin_baphomet'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='バフォメット'),'バフォメット式：召喚時に指定名サーチ','et_builtin_baphomet'),
  templateFromCard({type:'monster',subtype:'effect',ability:{when:'main',operation:'summonNamedFromHand',target:'self',amount:0,match:'exact',query:'ランプの魔精・ラ・ジーン'}},'マジック・ランプ式：手札から特殊召喚','et_builtin_lamp'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'ignition',code:'fusionFromExtraPay5000'}},'デビル・フランケン式：5000LPで融合召喚','et_builtin_franken'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'ignition',code:'doubleOriginalAtkEndDestroy'}},'カラテマン式：ATK倍化と自壊','et_builtin_karate'),
@@ -94,26 +95,26 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'enemyLowestAtk',amount:0}},'地割れ式：相手の最低ATKを破壊','et_builtin_fissure'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'searchNamed',target:'self',amount:1,match:'exact',query:'融合'}},'融合賢者式：指定カードをサーチ','et_builtin_sage'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'draw',target:'self',amount:2}},'強欲な壺式：カードを2枚ドロー','et_builtin_pot'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'grave',code:'searchStatOnGrave',stat:'atk',threshold:1500}},'クリッター式：墓地でATK1500以下サーチ','et_builtin_sangan'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'grave',code:'searchStatOnGrave',stat:'def',threshold:1500}},'ウィッチ式：墓地でDEF1500以下サーチ','et_builtin_witch'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='クリッター'),'クリッター式：墓地でATK1500以下サーチ','et_builtin_sangan'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='黒き森のウィッチ'),'ウィッチ式：墓地でDEF1500以下サーチ','et_builtin_witch'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'battle',code:'recruitOnBattleDestroy',attribute:'地',threshold:1500}},'巨大ネズミ式：戦闘破壊で地属性を募集','et_builtin_giantrat'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'returnOpponentOnFlip',amount:2}},'ペンギン式：リバースで最大2体手札へ','et_builtin_penguin'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'destroyOpponentOnFlip'}},'人喰い虫式：リバースで1体破壊','et_builtin_maneater'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='ペンギン・ソルジャー'),'ペンギン式：リバースで最大2体手札へ','et_builtin_penguin'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='人喰い虫'),'人喰い虫式：リバースで1体破壊','et_builtin_maneater'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'millOpponentDeck',amount:5}},'ニードルワーム式：リバースで5枚墓地へ','et_builtin_needle'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'scoutDrawDiscardSpells',amount:3}},'悪魔の偵察者式：相手3枚ドロー魔法捨て','et_builtin_scout'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'returnBackrow',target:'bothAllBackrow',amount:0}},'ハリケーン式：場の魔法・罠を全返却','et_builtin_hurricane'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'darkMagicianGrave300'}},'ブラック・マジシャン・ガール式：墓地ATK上昇','et_builtin_bmg'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='ブラック・マジシャン・ガール'),'ブラック・マジシャン・ガール式：墓地ATK上昇','et_builtin_bmg'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'summonRule',code:'soloHandNoTribute'}},'疾風の暗黒騎士ガイア式：手札1枚ならリリース不要','et_builtin_gaia'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'battleImmuneAtkThreshold',threshold:1900}},'翻弄するエルフの剣士式：高ATK戦闘で破壊されない','et_builtin_celtic'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'enemyDragon500'}},'バスター・ブレイダー式：相手ドラゴンの数でATK上昇','et_builtin_buster'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='バスター・ブレイダー'),'バスター・ブレイダー式：相手ドラゴンの数でATK上昇','et_builtin_buster'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'hand',code:'specialByThreeNames',names:['磁石の戦士α','磁石の戦士β','磁石の戦士γ']}},'磁石の戦士マグネット・バルキリオン式：指定名3体をリリースして','et_builtin_valkyrion'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'hand',code:'preventBattleDamage'}},'クリボー式：手札から戦闘ダメージ0','et_builtin_kuriboh'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'cyberJarRevealFive'}},'サイバーポッド式：リバースでモンスター破壊と公開','et_builtin_cyberjar'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'grave',code:'reviveMaterialOnDestroy',names:['幻獣王ガゼル','バフォメット']}},'有翼幻獣キマイラ式：破壊時に指定素材を蘇生','et_builtin_chimera'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'darkBattle500'}},'太陽の戦士式：闇属性との戦闘時ATK上昇','et_builtin_sunwarrior'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='有翼幻獣キマイラ'),'有翼幻獣キマイラ式：破壊時に指定素材を蘇生','et_builtin_chimera'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='太陽の戦士'),'太陽の戦士式：闇属性との戦闘時ATK上昇','et_builtin_sunwarrior'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'raceAuraGuard',race:'戦士',amount:400}},'コマンド・ナイト式：戦士強化と攻撃対象制限','et_builtin_command'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'trapSuppression'}},'人造人間－サイコ・ショッカー式：表側の間罠無効','et_builtin_jinzo'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'trigger',code:'copyOpponentPrintedStats'}},'ものマネ幻想師式：召喚時に元々のATK・DEFコピー','et_builtin_copycat'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='ものマネ幻想師'),'ものマネ幻想師式：召喚時に元々のATK・DEFコピー','et_builtin_copycat'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'rocketAssault'}},'ロケット戦士式：自分攻撃時の戦闘耐性と弱体化','et_builtin_rocket'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'destroyAttachedEquip'}},'鉄の騎士 ギア・フリード式：自身の装備カード破壊','et_builtin_gearfried'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'multiAttack',count:2}},'隼の騎士式：バトルフェイズ2回攻撃','et_builtin_hayabusa'),
@@ -132,7 +133,8 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'dragonTargetGuard'}},'ロード・オブ・ドラゴン式：ドラゴンを対象保護','et_builtin_dragonlord'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroyBackrow',target:'bothAllBackrow',amount:0}},'大嵐式：魔法・罠を全破壊','et_builtin_heavystorm'),
  templateFromCard({type:'trap',ability:{when:'response',operation:'negateEffect',target:'none',amount:0},responseGuard:'targetedSpell'},'フォースフィールド式：対象魔法を無効','et_builtin_forcefield'),
- templateFromCard({type:'spell',spellKind:'equip',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:300}},'強奪・現行代替式：ATK＋300','et_builtin_snatch_proxy'),
+ templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'stealUntilEnd',target:'enemyMonster',amount:0}},'心変わり式：エンドフェイズまでコントロール取得','et_builtin_changeofheart'),
+ templateFromCard({type:'spell',spellKind:'equip',ability:{when:'continuous',operation:'stealWithEquip',target:'enemyMonster',amount:1000}},'強奪式：装備中コントロール取得','et_builtin_snatch'),
 ].filter(Boolean).map(Object.freeze));
 
 export function isValidTemplate(t){
@@ -194,6 +196,7 @@ export function templateDescription(t){
  if(!isValidTemplate(t))return '';
  if(t.ability)return abilityText(t.ability)+(t.responseGuard==='targetedSpell'?'（モンスター1体を対象とする魔法限定）':t.responseGuard==='spell'?'（魔法限定）':'');
  const e=t.monsterEffect;
+ if(['countStatScale','battleAttributeScale','searchStatOnGrave','returnOpponentOnFlip','destroyOpponentOnFlip','weakenOpponentOnGrave','reviveMaterialOnDestroy','searchDeckOnSummon','copyOpponentPrintedStats'].includes(e.code))return effectText(t);
  const n=e.amount!==undefined?`（${e.amount}）`:e.threshold!==undefined?`（ATK ${e.threshold}以上）`:'';
  const base={destroyAttachedEquip:'装備されたカードを破壊',multiAttack:'1度のバトルフェイズで複数回攻撃',copyOpponentPrintedStats:'召喚時相手の元々の攻撃力と守備力をコピー',millFirstType:'戦闘ダメージ時指定種別のデッキ破棄',directEarthWaterFire:'条件付き直接攻撃',fusionMaterialSubstitute:'融合素材の代用',morphingJarTwo:'リバース時双方のモンスターをデッキへ戻す',cyberJarRevealFive:'リバース時双方の場を破壊しデッキ5枚公開',darkBattle500:'闇属性との戦闘中にATK上昇',enemyDragon500:'相手のドラゴン族の数に応じてATK上昇',darkMagicianGrave300:'墓地のブラック・マジシャン系の数に応じてATK上昇',preventBattleDamage:'手札から捨て、戦闘ダメージ0',specialByThreeNames:'指定名3体をリリースして手札から特殊召喚',weakenOpponentOnGrave:'墓地へ送られたとき相手ATK－500（場を離れるまで）',reviveMaterialOnDestroy:'効果・戦闘破壊時に墓地の指定名モンスターを蘇生',rocketAssault:'攻撃時の戦闘破壊・ダメージ防止＋相手ATK－500',fusionFromExtraPay5000:'5000LPを払いEXデッキから融合モンスターを特殊召喚',soloHandNoTribute:'手札が自身1枚ならリリース不要',doubleLightTribute:'光属性の上級召喚時に2体分のリリース',graveNamedScale:'墓地の指定名でATK変化',raceFieldGraveScale:'場・墓地の指定種族でATK変化',battleAttributeScale:'特定属性との戦闘時にATK変化',battleImmuneAtkThreshold:'戦闘破壊耐性',attributeFieldAura:'属性別の全体ATK変化',raceAuraGuard:'種族強化＋攻撃対象制限',returnOpponentOnFlip:'リバース時に相手モンスターを手札へ戻す',searchStatOnGrave:'フィールドから墓地へ送られた際に指定ATK/DEF以下をサーチ',millOpponentDeck:'リバース時のデッキ破棄',selfReturnHand:'自分エンドフェイズに自身を手札へ戻す',postAttackDefenseLock:'攻撃後に守備表示＋次の自分ターン終了まで手動変更不可',trapSuppression:'表側表示で罠の発動・効果を封じる',dragonTargetGuard:'表側表示で相手がドラゴン族を効果対象にできない'};
  return (base[e.code]||`${e.kind}・${e.code}`)+n;

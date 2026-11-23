@@ -1,6 +1,6 @@
-import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2047';
-import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
-export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2048';
+import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2048';
+export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2048';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},
@@ -73,6 +73,7 @@ export const MONSTER_EFFECTS = {
     darkMagicianGrave300:'お互いの墓地の「ブラック・マジシャン」「マジシャン・オブ・ブラックカオス」1枚につき攻撃力＋300',
     enemyDragon500:'相手の表側表示フィールド・墓地のドラゴン族モンスター1体につき攻撃力＋500',
     darkBattle500:'闇属性モンスターとのダメージ計算中のみ攻撃力＋500',
+    countStatScale:'公開ゾーンの条件に合うモンスターの数で攻守を強化',
     graveNamedScale:'指定名のカードが墓地にある数だけATKアップ（カスタム）',
     raceFieldGraveScale:'指定種族がフィールド・墓地にある数だけATKアップ（カスタム）',
     battleAttributeScale:'指定属性との戦闘時だけATKアップ（カスタム）',
@@ -89,17 +90,36 @@ export const MONSTER_EFFECTS = {
   hand: {preventBattleDamage:'手札から捨てて戦闘ダメージを0にする（簡易）',specialByThreeNames:'自分フィールドの指定名3体をリリースして手札から特殊召喚（簡易）'},
   summonRule: {soloHandNoTribute:'手札が自身1枚ならリリースなしで通常召喚できる',doubleLightTribute:'光属性のレベル7以上の召喚時、このカードは2体分のリリースになる'},
   ignition: {fusionFromExtraPay5000:'5000LPを支払い、EXデッキ先頭の融合モンスター1体を特殊召喚（簡易）',doubleOriginalAtkEndDestroy:'自身の元々のATKをエンドフェイズまで2倍にし、そのエンドフェイズに自壊（簡易）',burn500:'相手に500ダメージ',heal500:'自分のLPを500回復',draw1:'1枚ドロー',destroy1:'相手のモンスター1体を破壊',atk500:'自分の攻撃力＋500（ターン終了まで）'},
-  trigger: {copyOpponentPrintedStats:'召喚・反転召喚・特殊召喚時：相手の表側モンスターの元々のATK・DEFをコピー（左端自動選択）',searchDeckOnSummon:'召喚・反転召喚時：デッキから条件に合うカードを手札へ加える',draw1:'召喚成功時に1枚ドロー',heal500:'召喚成功時にLP500回復',burn500:'召喚成功時に相手に500ダメージ',atk500:'召喚成功時に攻撃力＋500（ターン終了まで）'},
+  trigger: {copyOpponentPrintedStats:'召喚・反転召喚・特殊召喚時：表側モンスターの元々のATK・DEFをコピー（自動選択）',searchDeckOnSummon:'召喚時：デッキから条件に合うカードを手札へ加える',draw1:'召喚成功時に1枚ドロー',heal500:'召喚成功時にLP500回復',burn500:'召喚成功時に相手に500ダメージ',atk500:'召喚成功時に攻撃力＋500（ターン終了まで）'},
   battle: {recruitOnBattleDestroy:'戦闘で破壊され墓地へ送られたとき：指定属性・指定ATK以下のモンスターをデッキから特殊召喚（簡易）'},
-  grave: {weakenOpponentOnGrave:'フィールドから墓地へ送られた時、相手モンスター1体のATK－500（場を離れるまで・簡易）',reviveMaterialOnDestroy:'フィールドで破壊された時、指定名のモンスターを墓地から蘇生（簡易）',searchStatOnGrave:'フィールドから墓地へ送られた時：指定ATK/DEF以下のモンスターをデッキから1体手札に加える（自動選択・簡易）'},
-  flip: {cyberJarRevealFive:'リバース時：双方のモンスターを破壊し各5枚公開、レベル4以下を特殊召喚（簡易）',morphingJarTwo:'リバース時：双方のモンスターをデッキへ戻して、戻した数だけモンスターを公開しレベル4以下を裏側守備で特殊召喚（簡易）',returnOpponentOnFlip:'リバース時：相手モンスターを最大2体手札へ戻す（左端から自動選択・簡易）',destroyOpponentOnFlip:'リバース時：相手のモンスター1体を破壊（自動選択・簡易）',recoverOwnSpellOnFlip:'リバース時：墓地の魔法1枚を回収（自動選択・簡易）',millOpponentDeck:'リバース時：相手のデッキ上から指定枚数を墓地へ送る',scoutDrawDiscardSpells:'リバース時：相手が指定枚数ドローし、その中の魔法カードを墓地へ捨てる'},
+  grave: {weakenOpponentOnGrave:'フィールドから墓地へ送られた時、表側モンスター1体のATKを下げる（簡易）',reviveMaterialOnDestroy:'フィールドで破壊された時、指定名のモンスターを墓地から蘇生（簡易）',searchStatOnGrave:'フィールドから墓地へ送られた時：指定ATK/DEF以下のモンスターをデッキから1体手札に加える（自動選択・簡易）'},
+  flip: {cyberJarRevealFive:'リバース時：双方のモンスターを破壊し各5枚公開、レベル4以下を特殊召喚（簡易）',morphingJarTwo:'リバース時：双方のモンスターをデッキへ戻して、戻した数だけモンスターを公開しレベル4以下を裏側守備で特殊召喚（簡易）',returnOpponentOnFlip:'リバース時：モンスターを最大2体手札へ戻す（自動選択・簡易）',destroyOpponentOnFlip:'リバース時：モンスター1体を破壊（自動選択・簡易）',recoverOwnSpellOnFlip:'リバース時：墓地の魔法1枚を回収（自動選択・簡易）',millOpponentDeck:'リバース時：相手のデッキ上から指定枚数を墓地へ送る',scoutDrawDiscardSpells:'リバース時：相手が指定枚数ドローし、その中の魔法カードを墓地へ捨てる'},
   position: {destroyOnAttackToDefense:'攻撃表示から守備表示に手動変更したとき：相手のモンスター1体を破壊（自動選択・簡易）'},
   endPhase: {selfReturnHand:'自分エンドフェイズ：表側の自身を持ち主の手札に戻す'},
 };
 // Configurable passive effects share the same stat/damage routes as historical effects.
 // No per-turn caches, timers or synchronization fields are needed.
-export const PASSIVE_SCALE_CODES=['graveNamedScale','raceFieldGraveScale','battleAttributeScale','battleImmuneAtkThreshold','attributeFieldAura','raceAuraGuard'];
+export const PASSIVE_SCALE_CODES=['countStatScale','graveNamedScale','raceFieldGraveScale','battleAttributeScale','battleImmuneAtkThreshold','attributeFieldAura','raceAuraGuard'];
 export const PASSIVE_SCOPES={own:'自分',opponent:'相手',both:'お互い'};
+export const COUNT_STAT_ZONES={field:'表側フィールド',grave:'墓地',banished:'除外'};
+export const COUNT_MONSTER_KINDS={normal:'通常モンスター',effect:'効果モンスター',ritual:'儀式モンスター',fusion:'融合モンスター',token:'トークン'};
+const COUNT_STAT_KEYS=new Set(['kind','code','scope','zones','stat','amount','names','attribute','race','level','monsterKind']);
+
+function validCountStatScale(e){
+  const {scope,zones,stat,amount,names,attribute,race,level,monsterKind}=e;
+  return e.kind==='continuous'&&Object.keys(e).every(key=>COUNT_STAT_KEYS.has(key))&&
+    Object.hasOwn(PASSIVE_SCOPES,scope)&&['atk','def'].includes(stat)&&
+    Number.isInteger(amount)&&amount>=50&&amount<=2000&&
+    Array.isArray(zones)&&zones.length>0&&zones.length<=3&&new Set(zones).size===zones.length&&
+    zones.every(zone=>Object.hasOwn(COUNT_STAT_ZONES,zone))&&
+    (names===undefined||Array.isArray(names)&&names.length>=1&&names.length<=3&&new Set(names).size===names.length&&
+      names.every(name=>typeof name==='string'&&name.trim()===name&&name.length>=1&&name.length<=32))&&
+    (attribute===undefined||ATTRIBUTE_NAMES.includes(normalizeAttribute(attribute)))&&
+    (race===undefined||RACE_NAMES.includes(normalizeRace(race)))&&
+    (level===undefined||Number.isInteger(level)&&level>=1&&level<=12)&&
+    (monsterKind===undefined||Object.hasOwn(COUNT_MONSTER_KINDS,monsterKind))&&
+    (monsterKind!=='token'||zones.includes('field'));
+}
 const PASSIVE_RACES_EN={dragon:'ドラゴン',warrior:'戦士',spellcaster:'魔法使い',machine:'機械',fiend:'悪魔',fairy:'天使',beast:'獣','beast-warrior':'獣戦士','winged-beast':'鳥獣',aqua:'水',insect:'昆虫',rock:'岩石',plant:'植物',zombie:'アンデット',reptile:'爬虫類',pyro:'炎',fish:'魚',thunder:'雷',dinosaur:'恐竜','sea-serpent':'海竜',psychic:'サイキック',wyrm:'幻竜',cyberse:'サイバース',illusion:'幻想魔','divine-beast':'幻神獣'};
 export const normalizeRace=r=>PASSIVE_RACES_EN[r]||r;
 const PASSIVE_ATTRIBUTES_EN={dark:'闇',light:'光',earth:'地',water:'水',fire:'炎',wind:'風',divine:'神'};
@@ -110,6 +130,7 @@ export function defaultPassiveConfig(code){
   if(code==='specialByThreeNames')return {kind:'hand',code,names:['磁石の戦士α','磁石の戦士β','磁石の戦士γ']};
   if(code==='weakenOpponentOnGrave')return {kind:'grave',code};
   if(code==='reviveMaterialOnDestroy')return {kind:'grave',code,names:['幻獣王ガゼル','バフォメット']};
+  if(code==='countStatScale')return {...shared,amount:300,stat:'atk',scope:'both',zones:['grave']};
   if(code==='graveNamedScale')return {...shared,amount:300,names:['ブラック・マジシャン'],scope:'both'};
   if(code==='raceFieldGraveScale')return {...shared,race:'ドラゴン',scope:'opponent'};
   if(code==='battleAttributeScale')return {...shared,attribute:'闇'};
@@ -136,25 +157,38 @@ export function defaultPassiveConfig(code){
   return null;
 }
 export function validMonsterEffect(e){
-  if(!e||typeof e!=='object'||!MONSTER_EFFECTS[e.kind]?.[e.code])return false;
+  if(!e||typeof e!=='object'||!Object.hasOwn(MONSTER_EFFECTS,e.kind)||!Object.hasOwn(MONSTER_EFFECTS[e.kind],e.code))return false;
+  if(e.code==='countStatScale')return validCountStatScale(e);
   if(['soloHandNoTribute','doubleLightTribute'].includes(e.code))return e.kind==='summonRule'&&Object.keys(e).length===2;
-  if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&Object.keys(e).length===2;
+  if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&
+    Object.keys(e).length===(e.scope===undefined?2:3)&&(e.scope===undefined||Object.hasOwn(PASSIVE_SCOPES,e.scope));
   if(e.kind==='battle')return e.code==='recruitOnBattleDestroy'&&Object.keys(e).length===4&&
     ATTRIBUTE_NAMES.includes(normalizeAttribute(e.attribute))&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000;
   if(e.code==='searchDeckOnSummon')return e.kind==='trigger'&&
     ['ritualMonster','ritualSpell','named'].includes(e.filter)&&
-    (e.filter==='named'?typeof e.name==='string'&&e.name.trim()===e.name&&e.name.length>=1&&e.name.length<=32&&Object.keys(e).length===4:
-      e.name===undefined&&Object.keys(e).length===3);
+    (e.filter==='named'?typeof e.name==='string'&&e.name.trim()===e.name&&e.name.length>=1&&e.name.length<=32&&
+      (e.normalOrFlipOnly===undefined||e.normalOrFlipOnly===true)&&Object.keys(e).length===(e.normalOrFlipOnly===true?5:4):
+      e.name===undefined&&e.normalOrFlipOnly===undefined&&Object.keys(e).length===3);
   if(e.kind==='hand')return (e.code==='preventBattleDamage'&&Object.keys(e).length===2)||
    (e.code==='specialByThreeNames'&&Object.keys(e).length===3&&Array.isArray(e.names)&&e.names.length===3&&
     new Set(e.names).size===3&&e.names.every(n=>typeof n==='string'&&n.trim()===n&&n.length>=1&&n.length<=32));
-  if(e.kind==='grave'&&e.code==='weakenOpponentOnGrave')return Object.keys(e).length===2;
-  if(e.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return Object.keys(e).length===3&&Array.isArray(e.names)&&e.names.length===2&&
+  if(e.kind==='grave'&&e.code==='weakenOpponentOnGrave')return Object.keys(e).length===2||
+    Object.keys(e).length===4&&Object.hasOwn(PASSIVE_SCOPES,e.scope)&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2000;
+  if(e.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return Object.keys(e).length===(e.position===undefined?3:4)&&
+   (e.position===undefined||['atk','def'].includes(e.position))&&Array.isArray(e.names)&&e.names.length===2&&
    new Set(e.names).size===2&&e.names.every(n=>typeof n==='string'&&n.trim()===n&&n.length>=1&&n.length<=32);
-  if(e.kind==='grave')return e.code==='searchStatOnGrave'&&Object.keys(e).length===4&&
+  if(e.kind==='grave')return e.code==='searchStatOnGrave'&&
+    Object.keys(e).length===(e.restrictActivation===true?5:4)&&
+    (e.restrictActivation===undefined||e.restrictActivation===true)&&
     ['atk','def'].includes(e.stat)&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000;
   if(e.kind==='position')return e.code==='destroyOnAttackToDefense'&&Object.keys(e).length===2;
-  if(e.kind==='flip')return (['destroyOpponentOnFlip','recoverOwnSpellOnFlip','cyberJarRevealFive','morphingJarTwo'].includes(e.code)&&Object.keys(e).length===2)|| (e.code==='returnOpponentOnFlip'&&Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2)|| (e.code==='millOpponentDeck'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=10)||
+  if(e.kind==='flip'&&['returnOpponentOnFlip','destroyOpponentOnFlip'].includes(e.code)){
+    const bounce=e.code==='returnOpponentOnFlip';
+    return (e.scope===undefined||Object.hasOwn(PASSIVE_SCOPES,e.scope))&&
+      Object.keys(e).length===(bounce?3:2)+(e.scope===undefined?0:1)&&
+      (!bounce||Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2);
+  }
+  if(e.kind==='flip')return (['recoverOwnSpellOnFlip','cyberJarRevealFive','morphingJarTwo'].includes(e.code)&&Object.keys(e).length===2)|| (e.code==='millOpponentDeck'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=10)||
     (e.code==='scoutDrawDiscardSpells'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=5&&Object.keys(e).length===3);
   if(e.kind==='endPhase')return e.code==='selfReturnHand'&&Object.keys(e).length===2;
   if(['destroyAttachedEquip','doubleOriginalAtkEndDestroy','trapSuppression','rocketAssault','fusionFromExtraPay5000','dragonTargetGuard'].includes(e.code))return (['doubleOriginalAtkEndDestroy','fusionFromExtraPay5000'].includes(e.code)?e.kind==='ignition':e.kind==='continuous')&&Object.keys(e).length===2;
@@ -181,21 +215,22 @@ export function effectText(c){
   if(c.ability)return abilityText(c.ability);
   if(e?.kind==='hand'&&e.code==='preventBattleDamage')return '相手の攻撃への対応中に手札から捨て、自分へのその戦闘のダメージを0にする（専用ボタンで発動）。';
   if(e?.kind==='hand'&&e.code==='specialByThreeNames')return `自分フィールドの「${e.names.join('」「')}」を各1体リリースして手札から特殊召喚する（手動選択省略）。`;
-  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return 'フィールドから墓地へ送られた時、相手の左端の表側モンスターのATKを場を離れるまで500下げる（装備リンク省略）。';
-  if(e?.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return `フィールドで破壊された時、墓地の「${e.names.join('」か「')}」1体を攻撃表示で特殊召喚（左端自動選択）。`;
+  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return `フィールドから墓地へ送られた時、${PASSIVE_SCOPES[e.scope]||'相手'}の表側モンスター1体のATKを${e.amount??500}下げる。場を離れるか裏側表示になるまで有効（自動選択・装備カード化省略）。`;
+  if(e?.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return `フィールドで破壊された時、墓地の「${e.names.join('」か「')}」1体を${e.position==='def'?'表側守備':'攻撃'}表示で特殊召喚（自動選択）。`;
   if(e?.kind==='summonRule'&&e.code==='soloHandNoTribute')return '手札がこのカード1枚だけの場合、リリースなしで通常召喚・セットできる（条件を満たした場合はリリースなしを優先）。';
   if(e?.kind==='summonRule'&&e.code==='doubleLightTribute')return '光属性・レベル7以上のモンスターをアドバンス召喚・セットする場合、このカード1体を2体分のリリースにできる。';
   if(e?.kind==='trigger'&&e.code==='searchDeckOnSummon'){
     const target=e.filter==='ritualMonster'?'儀式モンスター':e.filter==='ritualSpell'?'儀式魔法':`「${e.name||''}」`;
-    return `召喚・反転召喚したとき、自分のデッキから${target}1枚を手札に加える（自動で最初の候補を選ぶ簡易処理）`;
+    const extra=e.filter==='named'&&!e.normalOrFlipOnly?'、または指定名効果で手札から特殊召喚したとき':'';
+    return `通常召喚・反転召喚したとき${extra}、自分のデッキから${target}1枚を手札に加える（自動選択）。`;
   }
-  if(e?.kind==='grave'&&e.code==='searchStatOnGrave')return `フィールドから墓地へ送られたとき、デッキから${e.stat==='def'?'DEF':'ATK'}${e.threshold}以下のモンスター1体を手札に加える（最初を自動選択。チェーン・サーチ後の制限は保留）`;
   if(e?.kind==='battle'&&e.code==='recruitOnBattleDestroy')return `戦闘で破壊され墓地へ送られたとき、自分のデッキの${normalizeAttribute(e.attribute)}属性・元々のATK${e.threshold}以下のモンスター1体を攻撃表示で特殊召喚（自動選択・チェーン簡略化）`;
-  if(e?.kind==='trigger'&&e.code==='copyOpponentPrintedStats')return '召喚・反転召喚・特殊召喚時、相手の表側モンスターの元々のATK・DEFをコピー（左端を自動選択・チェーン簡略化）';
+  if(e?.kind==='trigger'&&e.code==='copyOpponentPrintedStats')return `通常召喚・反転召喚・特殊召喚時、${PASSIVE_SCOPES[e.scope]||'相手'}の表側モンスターの元々のATK・DEFをコピー（自動選択・チェーン応答は省略）`;
   if(e?.kind==='flip'&&e.code==='cyberJarRevealFive')return 'リバース時、フィールドの全モンスターを破壊。お互いのデッキ上から最大5枚を公開し、その中のレベル4以下の通常召喚可能なモンスターを攻撃表示で特殊召喚、残りを手札へ（表示形式の選択・個別チェーン省略）。';
   if(e?.kind==='flip'&&e.code==='morphingJarTwo')return 'リバース時、全モンスターを持ち主のデッキへ戻し、戻した数だけデッキからモンスターを公開。レベル4以下の通常召喚可能なモンスターは裏側守備で特殊召喚し、残りはデッキへ戻す（選択・個別チェーン省略）。トークンは消滅し融合モンスターはEXデッキに戻る。';
-  if(e?.kind==='flip'&&e.code==='returnOpponentOnFlip')return `リバース時、相手のモンスターを左端から最大${e.amount}体、持ち主の手札へ戻す（自動選択・チェーン簡略化）`;
-  if(e?.kind==='flip'&&e.code==='destroyOpponentOnFlip')return 'リバース時、相手のモンスター1体を破壊する（左端を自動選択・チェーン簡略化）';
+  if(e?.kind==='flip'&&e.code==='returnOpponentOnFlip')return `リバース時、${PASSIVE_SCOPES[e.scope]||'相手'}の有効なモンスターを左端から最大${e.amount}体、持ち主の手札へ戻す（相手側を優先して自動選択。チェーン応答は省略）`;
+  if(e?.kind==='flip'&&e.code==='destroyOpponentOnFlip')return `リバース時、${PASSIVE_SCOPES[e.scope]||'相手'}の有効なモンスター1体を破壊する（相手側を優先して自動選択。チェーン応答は省略）`;
+  if(e?.kind==='grave'&&e.code==='searchStatOnGrave')return `フィールドから墓地へ送られたとき、デッキの${e.stat==='def'?'DEF':'ATK'}${e.threshold}以下のモンスター1体を手札に加える（自動選択）。${e.restrictActivation?'同名のサーチはターン中1回。加えたカードと同名の発動する効果はターン終了まで使えない。':''}`;
   if(e?.kind==='flip'&&e.code==='recoverOwnSpellOnFlip')return 'リバース時、自分の墓地の魔法カード1枚を手札に戻す（最初の候補を自動選択・チェーン簡略化）';
   if(e?.kind==='position'&&e.code==='destroyOnAttackToDefense')return '攻撃表示から表側守備表示に手動変更したとき、相手のモンスター1体を破壊する（左端を自動選択。カード効果による表示変更・チェーンは未対応）';
   if(e?.kind==='flip'&&e.code==='millOpponentDeck')return `リバース時、相手のデッキの上から${e.amount}枚を墓地へ送る`;
@@ -210,6 +245,13 @@ export function effectText(c){
   if(e?.kind==='continuous'&&e.code==='postAttackDefenseLock')return '攻撃した場合、バトルフェイズ終了時に守備表示になり、次の自分ターン終了時まで手動で表示形式を変更できない（カード効果による変更は可能）';
   if(e?.kind==='continuous'&&e.code==='multiAttack')return `1度のバトルフェイズ中に${e.count}回まで攻撃できる`;
   if(e?.kind==='continuous'){
+    if(e.code==='countStatScale'){
+      const conditions=[
+        e.names?.map(name=>`「${name}」`).join('または'),e.attribute&&`${normalizeAttribute(e.attribute)}属性`,
+        e.race&&`${normalizeRace(e.race)}族`,e.level&&`レベル${e.level}`,COUNT_MONSTER_KINDS[e.monsterKind]
+      ].filter(Boolean);
+      return `${PASSIVE_SCOPES[e.scope]}の${(e.zones||[]).map(zone=>COUNT_STAT_ZONES[zone]).join('・')}にある${conditions.length?`${conditions.join('／')}に該当する`:''}モンスター1体につき、自身の${e.stat==='def'?'DEF':'ATK'}＋${e.amount}`;
+    }
     if(e.code==='graveNamedScale')return `${PASSIVE_SCOPES[e.scope]||'お互い'}の墓地の「${(e.names||[]).join('」「')}」1枚につきATK＋${e.amount}`;
     if(e.code==='raceFieldGraveScale')return `${PASSIVE_SCOPES[e.scope]||'相手'}の表側表示フィールド・墓地の${normalizeRace(e.race)}族1体につきATK＋${e.amount}`;
     if(e.code==='battleAttributeScale')return `${normalizeAttribute(e.attribute)}属性モンスターとのダメージ計算中だけATK＋${e.amount}`;

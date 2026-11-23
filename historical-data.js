@@ -231,6 +231,8 @@ const SPECIAL={
 };
 const RITUALS={'マジシャン・オブ・ブラックカオス':'カオス－黒魔術の儀式','サクリファイス':'イリュージョンの儀式'};
 const SPELLS={
+ '心変わり':{ability:{when:'main',operation:'stealUntilEnd',target:'enemyMonster',amount:0},status:'simplified',note:'相手モンスター1体を選び、エンドフェイズまでコントロールを得る。自分の場に空きが必要。返却先に空きがなければ破壊。重複するコントロール変更は簡略化'},
+ '強奪':{ability:{when:'continuous',operation:'stealWithEquip',target:'enemyMonster',amount:1000},status:'simplified',note:'相手の表側モンスター1体に装備し、装備中はコントロールを得る。相手ターン開始時に相手は1000LP回復。返却先に空きがなければ破壊。重複するコントロール変更は簡略化'},
  '血の代償':{ability:{when:'continuous',operation:'extraNormalSummon',target:'self',amount:500},status:'simplified',note:'セットした次のターン以降、自分メインフェイズに表にできる。通常召喚済みでも追加で通常召喚・セットでき、その都度500LPを払う。相手バトルフェイズでの召喚とチェーン応答は省略'},
  '強欲な壺':{effect:'draw2',ability:{when:'main',operation:'draw',target:'self',amount:2},status:'exact',note:'カードを2枚ドローする（デッキに2枚以上ある場合のみ発動可能）。カード作成の既存「強欲な壺式」と同じ宣言型処理'},
  '手札抹殺':{ability:{when:'main',operation:'replaceHands',target:'none',amount:0},status:'simplified',note:'双方の手札（発動したこのカードを除く）を墓地へ送り、同じ枚数ドロー。交換する手札がない・いずれかのデッキが不足するときは発動候補を表示しない（チェーン裁定は省略）'},
@@ -267,13 +269,13 @@ const SPELLS={
  '地割れ':{ability:{when:'main',operation:'destroy',target:'enemyLowestAtk',amount:0},status:'simplified',note:'相手の表側モンスターがいる場合のみ発動。現在ATKが最も低い1体を破壊。同値は左端優先。裏側のみの場合の空撃ちを防止'},
  'サンダー・ボルト':{ability:{when:'main',operation:'destroy',target:'enemyAllMonsters',amount:0},status:'exact',note:'相手フィールドのモンスターをすべて破壊する'},
  'ブラック・ホール':{ability:{when:'main',operation:'destroy',target:'bothMonsters',amount:0},status:'exact',note:'お互いのモンスターが0体なら発動候補を表示しない。フィールドのモンスターをすべて破壊する'},
- 'サイクロン':{ability:{when:'main',operation:'destroyBackrow',target:'enemyBackrow',amount:0},status:'simplified',note:'相手の魔法・罠ゾーンにカードがない場合は発動候補を表示しない。自分の魔法・罠を対象にする選択は省略'},
+ 'サイクロン':{ability:{when:'main',operation:'destroyBackrow',target:'eitherBackrow',amount:0},status:'simplified',note:'自分・相手の場の魔法・罠（フィールド魔法を含む）1枚を選んで破壊する。使用中の単発魔法・罠はチェーン内にあり、選択対象から外れる'},
  '魔法除去':{ability:{when:'main',operation:'removeSpellBackrow',target:'enemyBackrow',amount:0},status:'simplified',note:'相手の対象にできるセット魔法・罠または表側魔法がない場合は発動候補を表示しない。相手の表側魔法かセットされた魔法・罠1枚を選ぶ。魔法なら破壊、裏側の罠なら確認だけで破壊しない（自分側を対象にする選択は省略）'},
  '大嵐':{ability:{when:'main',operation:'destroyBackrow',target:'bothAllBackrow',amount:0},status:'simplified',note:'お互いの魔法・罠（フィールド魔法も含む）を全て破壊。破壊時の個別チェーン裁定は簡略化'},
  'ハリケーン':{ability:{when:'main',operation:'returnBackrow',target:'bothAllBackrow',amount:0},status:'simplified',note:'フィールドに戻せる魔法・罠がある場合のみ発動し、お互いの魔法・罠（フィールド魔法を含む）を全て持ち主の手札へ戻す。個別チェーン裁定は簡略化'},
  '撲滅の使徒':{ability:{when:'main',operation:'banishSetBackrow',target:'enemyBackrow',amount:0},status:'simplified',note:'相手のセット魔法・罠1枚を除外。罠なら双方のデッキから同名カードも除外する（手札・墓地の同名は対象外。チェーン裁定は簡略化）'},
  '抹殺の使徒':{ability:{when:'main',operation:'banish',target:'enemyFaceDownMonster',amount:0},status:'simplified',note:'相手の裏側守備モンスターを左端優先で除外。リバース効果モンスターなら双方のデッキの同名カードも除外する（解決時の位置・個体照合あり。対象選択とチェーン裁定は簡略化）'},
- '死者への手向け':{ability:{when:'main',operation:'destroy',target:'enemyMonster',amount:0,before:{operation:'discardOwnHand',amount:1}},status:'simplified',note:'対象のモンスターか捨てる手札がない場合は発動操作を提示しない。相手のモンスター限定の処理'},
+ '死者への手向け':{ability:{when:'main',operation:'destroy',target:'eitherMonster',amount:0,before:{operation:'discardOwnHand',amount:1}},status:'exact',note:'手札を1枚捨て、自分・相手の場からモンスター1体を選んで破壊する。捨てる手札か対象がないときは発動できない'},
  '融合':{effect:'fusionSummon',spellKind:'fusion',status:'simplified',note:'融合素材は2体まで。青眼の究極竜は保留'},
  'カオス－黒魔術の儀式':{effect:'ritualSummon',spellKind:'ritual',status:'simplified'},
  'イリュージョンの儀式':{effect:'ritualSummon',spellKind:'ritual',status:'simplified'},
@@ -333,9 +335,9 @@ const HISTORICAL_MONSTER_ABILITIES={
 const NATIVE_MONSTER_EFFECTS={
  'ロード・オブ・ドラゴン－ドラゴンの支配者－':{kind:'continuous',code:'dragonTargetGuard',status:'simplified',desc:'このカードが表側表示でいる間、相手はフィールドのドラゴン族モンスターを効果の対象にできない（対象を取らない効果には適用しない）。'},
  'クリボー':{kind:'hand',code:'preventBattleDamage',status:'simplified',desc:'相手の攻撃に対応し、このカードを手札から捨てると、その戦闘で自分が受ける戦闘ダメージを0にする（ダメージ計算時の細かなチェーン裁定は省略）。'},
- '暗黒魔族ギルファー・デーモン':{kind:'grave',code:'weakenOpponentOnGrave',status:'simplified',desc:'フィールドから墓地へ送られた時、相手の表側モンスターの左端1体のATKを場を離れるまで500下げる（装備カード化・装備解除は省略）。'},
+ '暗黒魔族ギルファー・デーモン':{kind:'grave',code:'weakenOpponentOnGrave',params:{scope:'opponent',amount:500},status:'simplified',desc:'フィールドから墓地へ送られた時、相手の有効な表側モンスター1体を自動で選び、場を離れるか裏側表示になるまでATKを500下げる。装備カード化、他の領域からの墓地送り、任意発動・チェーン応答は省略。'},
  '磁石の戦士マグネット・バルキリオン':{kind:'hand',code:'specialByThreeNames',params:{names:['磁石の戦士α','磁石の戦士β','磁石の戦士γ']},status:'simplified',desc:'自分フィールドのα・β・γを各1体ずつリリースし、手札から特殊召喚（分離効果・墓地からの特殊召喚は省略）。'},
- '有翼幻獣キマイラ':{kind:'grave',code:'reviveMaterialOnDestroy',params:{names:['幻獣王ガゼル','バフォメット']},status:'simplified',desc:'フィールドで破壊され墓地へ送られた時、自分の墓地のガゼルかバフォメットを左端に攻撃表示で特殊召喚（対象選択・チェーン省略）。'},
+ '有翼幻獣キマイラ':{kind:'grave',code:'reviveMaterialOnDestroy',params:{names:['幻獣王ガゼル','バフォメット'],position:'atk'},status:'simplified',desc:'フィールドで破壊され墓地へ送られた時、自分の墓地のガゼルかバフォメットを左端に攻撃表示で特殊召喚。候補・表示形式の選択とチェーン応答は省略。'},
 
  'ロケット戦士':{kind:'continuous',code:'rocketAssault',status:'simplified',desc:'自分のバトルフェイズに攻撃する場合、このカードは戦闘破壊されず自分への戦闘ダメージは0。戦闘後、相手のモンスターが場に残っていればそのATKをターン終了まで500下げる（チェーン処理は簡略化）。'},
  'デビル・フランケン':{kind:'ignition',code:'fusionFromExtraPay5000',status:'simplified',desc:'自分メインフェイズに5000LPを支払い、EXデッキの融合モンスター1体を攻撃表示で特殊召喚。LP5000以下・空きゾーンなし・融合候補なしの場合は発動不可（自動選択・召喚裁定は簡略化）。'},
@@ -344,10 +346,10 @@ const NATIVE_MONSTER_EFFECTS={
  '人造人間－サイコ・ショッカー':{kind:'continuous',code:'trapSuppression',status:'simplified',desc:'このカードが表側表示で存在する限り、お互いの罠カードを新たに発動できず、解決時に存在する罠カードの効果を無効化する（複雑な永続罠の再評価・特殊なチェーン裁定は省略）。'},
  '巨大ネズミ':{kind:'battle',code:'recruitOnBattleDestroy',params:{attribute:'地',threshold:1500},status:'simplified',desc:'戦闘で破壊され墓地へ送られたとき、デッキ内の地属性・元々のATK1500以下を1体特殊召喚（自動選択）。デッキ候補なし・ゾーン満杯なら安全に終了。'},
  'キラー・トマト':{kind:'battle',code:'recruitOnBattleDestroy',params:{attribute:'闇',threshold:1500},status:'simplified',desc:'戦闘で破壊され墓地へ送られたとき、デッキ内の闇属性・元々のATK1500以下のモンスターを攻撃表示で1体特殊召喚（最初の候補を自動選択。チェーン省略）。'},
- 'ものマネ幻想師':{kind:'trigger',code:'copyOpponentPrintedStats',status:'simplified',desc:'召喚・反転召喚・特殊召喚時、相手の表側モンスター1体の元々の攻撃力・守備力をコピー（左端を自動選択。チェーン省略）。'},
+ 'ものマネ幻想師':{kind:'trigger',code:'copyOpponentPrintedStats',params:{scope:'opponent'},status:'simplified',desc:'召喚・反転召喚・特殊召喚時、相手の有効な表側モンスター1体の元々の攻撃力・守備力をコピー。左端を自動選択し、チェーン応答は省略。'},
  'センジュ・ゴッド':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'ritualMonster'},status:'simplified',desc:'召喚・反転召喚時、デッキの儀式モンスター1体を手札に加える（候補の選択とチェーンは簡略化）。'},
  'ソニックバード':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'ritualSpell'},status:'simplified',desc:'召喚・反転召喚時、デッキの儀式魔法1枚を手札に加える（候補の選択とチェーンは簡略化）。'},
- 'バフォメット':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'named',name:'幻獣王ガゼル'},status:'simplified',desc:'召喚・反転召喚時、デッキに「幻獣王ガゼル」があれば先頭候補を自動で1枚サーチ。候補がなければ何もしない（チェーンは簡略化）。'},
+ 'バフォメット':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'named',name:'幻獣王ガゼル',normalOrFlipOnly:true},status:'simplified',desc:'通常召喚・反転召喚時、デッキに「幻獣王ガゼル」があれば先頭候補を自動で1枚サーチ。特殊召喚時は発動しない。候補の選択・チェーン応答は省略。'},
  'サイバーポッド':{kind:'flip',code:'cyberJarRevealFive',status:'simplified',desc:'リバース時に双方のフィールドのモンスターを破壊し、各デッキの上から最大5枚を公開。レベル4以下の通常召喚可能なモンスターを攻撃表示で特殊召喚し、その他を手札に加える（表示形式の選択・個別チェーンは省略）。'},
  'カオスポッド':{kind:'flip',code:'morphingJarTwo',status:'simplified',desc:'リバース時に双方のモンスターを持ち主のデッキに戻し、各自が戻したモンスターの数だけモンスターをデッキから公開する。レベル4以下の通常召喚可能なモンスターは裏側守備表示で特殊召喚し、残りはデッキへ戻す（選択・シャッフルの詳細裁定・個別チェーンは省略）。トークンは消滅し、融合モンスターはEXデッキへ戻す。'},
  '鉄の騎士 ギア・フリード':{
@@ -362,12 +364,12 @@ const NATIVE_MONSTER_EFFECTS={
    kind:'flip',code:'scoutDrawDiscardSpells',params:{amount:3},status:'simplified',
    desc:'リバース時、相手が3枚ドローし、その中の魔法カードのみ墓地へ送る。デッキ不足時はドローによる敗北判定に従う（公開演出・チェーンは簡略化）。'
  },
- '人喰い虫':{kind:'flip',code:'destroyOpponentOnFlip',status:'simplified',desc:'リバース時、相手の左端のモンスター1体を破壊（対象不在なら安全終了。対象選択とチェーンは簡略化）。'},
+ '人喰い虫':{kind:'flip',code:'destroyOpponentOnFlip',params:{scope:'both'},status:'simplified',desc:'リバース時、フィールドのモンスター1体を破壊する。相手側、自分側の順で左端の有効な対象を自動選択し、他にいなければ場に残っている自身も対象になる。チェーン応答は省略。'},
  '聖なる魔術師':{kind:'flip',code:'recoverOwnSpellOnFlip',status:'simplified',desc:'リバース時、自分の墓地の魔法カード1枚を手札に戻す（最初の候補を自動選択。対象選択とチェーンは簡略化）。'},
  'ドリーム・ピエロ':{kind:'position',code:'destroyOnAttackToDefense',status:'simplified',desc:'攻撃表示から表側守備表示に手動変更した場合、相手のモンスター1体を破壊する（左端を自動選択。カード効果による表示変更とチェーンは保留）。'},
- 'ペンギン・ソルジャー':{kind:'flip',code:'returnOpponentOnFlip',params:{amount:2},status:'simplified',desc:'リバース時、相手モンスターを左端から最大2体、持ち主の手札へ戻す。装備カードは解除（対象選択・自分のカードを戻す選択・チェーンは保留）。'},
- 'クリッター':{kind:'grave',code:'searchStatOnGrave',params:{stat:'atk',threshold:1500},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからATK1500以下のモンスターを1体手札へ加える（最初の候補を自動選択。チェーン・検索後の発動制限は保留）。'},
- '黒き森のウィッチ':{kind:'grave',code:'searchStatOnGrave',params:{stat:'def',threshold:1500},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからDEF1500以下のモンスターを1体手札へ加える（最初の候補を自動選択。チェーン・検索後の発動制限は保留）。'},
+ 'ペンギン・ソルジャー':{kind:'flip',code:'returnOpponentOnFlip',params:{amount:2,scope:'opponent'},status:'simplified',desc:'リバース時、相手の有効な対象を左端から最大2体、持ち主の手札へ戻す。装備カードは解除。対象の任意選択・自分のモンスターの指定・チェーン応答は省略。'},
+ 'クリッター':{kind:'grave',code:'searchStatOnGrave',params:{stat:'atk',threshold:1500,restrictActivation:true},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからATK1500以下のモンスターを自動で1体手札に加える。同名のサーチはターン中1回。加えたカードと同名の発動する効果は、そのターン中使えない。チェーン応答は省略。'},
+ '黒き森のウィッチ':{kind:'grave',code:'searchStatOnGrave',params:{stat:'def',threshold:1500,restrictActivation:true},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからDEF1500以下のモンスターを自動で1体手札に加える。同名のサーチはターン中1回。加えたカードと同名の発動する効果は、そのターン中使えない。チェーン応答は省略。'},
  '隼の騎士':{
    kind:'continuous',code:'multiAttack',params:{count:2},status:'exact',
    desc:'このカードは1度のバトルフェイズ中に2回攻撃できる。'
@@ -385,15 +387,15 @@ const NATIVE_MONSTER_EFFECTS={
    desc:'リバース時に相手のデッキ上から最大5枚を墓地へ送る。5枚未満なら残り枚数だけ送る（チェーン応答は簡略化）。'
  },
  'ブラック・マジシャン・ガール':{
-   code:'darkMagicianGrave300',
+   code:'countStatScale',params:{scope:'both',zones:['grave'],stat:'atk',amount:300,names:['ブラック・マジシャン','マジシャン・オブ・ブラックカオス']},
    desc:'お互いの墓地の「ブラック・マジシャン」「マジシャン・オブ・ブラックカオス」1枚につき攻撃力300アップ。'
  },
  'バスター・ブレイダー':{
-   code:'enemyDragon500',
+   code:'countStatScale',params:{scope:'opponent',zones:['field','grave'],stat:'atk',amount:500,race:'ドラゴン'},
    desc:'相手フィールドの表側表示・相手墓地のドラゴン族モンスター1体につき攻撃力500アップ。'
  },
  '太陽の戦士':{
-   code:'darkBattle500',
+   code:'battleAttributeScale',params:{attribute:'闇',amount:500},
    desc:'闇属性モンスターとの戦闘中、ダメージ計算で攻撃力500アップ。'
  },
  '翻弄するエルフの剣士':{

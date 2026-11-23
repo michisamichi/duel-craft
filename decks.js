@@ -1,6 +1,6 @@
 // v0.4: browser-local saved decks. No deck data is uploaded to Firebase.
-import {copyPreset} from './cards.js?v=2047';
-import {HISTORICAL_PRESETS} from './historical-data.js?v=2047';
+import {copyPreset} from './cards.js?v=2048';
+import {HISTORICAL_PRESETS} from './historical-data.js?v=2048';
 
 export const DECK_STORE_KEY='duel-decks-v4';
 export const MAX_SAVED_DECKS=30;
