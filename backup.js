@@ -1,7 +1,7 @@
 /** SAHOVERSE local backup v1. Deliberately excludes room states, anonymous auth, and Firebase config. */
-import {normalizeDeckStore} from './decks.js?v=2047';
-import {isSafeCustomCard} from './cards.js?v=2047';
-import {EFFECT_TEMPLATE_KEY,normalizeTemplates} from './effect-templates.js?v=2047';
+import {normalizeDeckStore} from './decks.js?v=2080';
+import {isSafeCustomCard} from './cards.js?v=2080';
+import {EFFECT_TEMPLATE_KEY,normalizeTemplates} from './effect-templates.js?v=2080';
 export const BACKUP_KEYS=[
  'duel-name','duel-compact','duel-deck','duel-decks-v4','duel-custom-cards',
  'duel-packs-v5','duel-rules-v5','duel-fx-settings','duel-appearance-v5',

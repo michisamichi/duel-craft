@@ -1,6 +1,6 @@
-import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2047';
-import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
-export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2080';
+import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2080';
+export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2080';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},
@@ -116,17 +116,21 @@ export function defaultPassiveConfig(code){
   if(code==='battleImmuneAtkThreshold')return {kind:'continuous',code,threshold:1900};
   if(code==='attributeFieldAura')return {...shared,amount:500,attribute:'地',negativeAttribute:'風',negativeAmount:400,scope:'both'};
   if(code==='raceAuraGuard')return {...shared,amount:400,race:'戦士'};
-  if(code==='destroyOpponentOnFlip'||code==='recoverOwnSpellOnFlip')return {kind:'flip',code};
+  if(code==='destroyOpponentOnFlip')return {kind:'flip',code};
+  if(code==='recoverOwnSpellOnFlip')return {kind:'flip',code};
   if(code==='returnOpponentOnFlip')return {kind:'flip',code,amount:2};
   if(code==='searchStatOnGrave')return {kind:'grave',code,stat:'atk',threshold:1500};
   if(code==='destroyOnAttackToDefense')return {kind:'position',code};
   if(code==='millOpponentDeck')return {kind:'flip',code,amount:5};
   if(code==='scoutDrawDiscardSpells')return {kind:'flip',code,amount:3};
-  if(code==='cyberJarRevealFive'||code==='morphingJarTwo')return {kind:'flip',code};
+  if(code==='cyberJarRevealFive')return {kind:'flip',code};
+  if(code==='morphingJarTwo')return {kind:'flip',code};
   if(code==='searchDeckOnSummon')return {kind:'trigger',code,filter:'ritualMonster'};
   if(code==='copyOpponentPrintedStats')return {kind:'trigger',code};
   if(code==='recruitOnBattleDestroy')return {kind:'battle',code,attribute:'地',threshold:1500};
-  if(code==='destroyAttachedEquip'||code==='trapSuppression'||code==='rocketAssault'||code==='dragonTargetGuard')return {kind:'continuous',code};
+  if(code==='destroyAttachedEquip'||code==='trapSuppression')return {kind:'continuous',code};
+  if(code==='rocketAssault')return {kind:'continuous',code};
+  if(code==='dragonTargetGuard')return {kind:'continuous',code};
   if(code==='fusionFromExtraPay5000')return {kind:'ignition',code};
   if(code==='soloHandNoTribute'||code==='doubleLightTribute')return {kind:'summonRule',code};
   if(code==='doubleOriginalAtkEndDestroy')return {kind:'ignition',code};
@@ -137,28 +141,47 @@ export function defaultPassiveConfig(code){
 }
 export function validMonsterEffect(e){
   if(!e||typeof e!=='object'||!MONSTER_EFFECTS[e.kind]?.[e.code])return false;
-  if(['soloHandNoTribute','doubleLightTribute'].includes(e.code))return e.kind==='summonRule'&&Object.keys(e).length===2;
-  if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&Object.keys(e).length===2;
-  if(e.kind==='battle')return e.code==='recruitOnBattleDestroy'&&Object.keys(e).length===4&&
-    ATTRIBUTE_NAMES.includes(normalizeAttribute(e.attribute))&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000;
+  if(e.code==='soloHandNoTribute')return e.kind==='summonRule'&&(
+    Object.keys(e).length===2||Object.keys(e).length===3&&Number.isInteger(e.maxHand)&&e.maxHand>=1&&e.maxHand<=3);
+  if(e.code==='doubleLightTribute')return e.kind==='summonRule'&&(
+    Object.keys(e).length===2||Object.keys(e).length===3&&ATTRIBUTE_NAMES.includes(normalizeAttribute(e.attribute)));
+  if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&(Object.keys(e).length===2||Object.keys(e).length===3&&['left','highest'].includes(e.selection));
+  if(e.kind==='battle')return e.code==='recruitOnBattleDestroy'&&[4,5].includes(Object.keys(e).length)&&
+    ATTRIBUTE_NAMES.includes(normalizeAttribute(e.attribute))&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000&&
+    (e.race===undefined&&Object.keys(e).length===4||Object.keys(e).length===5&&typeof e.race==='string'&&RACE_NAMES.includes(normalizeRace(e.race)));
   if(e.code==='searchDeckOnSummon')return e.kind==='trigger'&&
     ['ritualMonster','ritualSpell','named'].includes(e.filter)&&
-    (e.filter==='named'?typeof e.name==='string'&&e.name.trim()===e.name&&e.name.length>=1&&e.name.length<=32&&Object.keys(e).length===4:
-      e.name===undefined&&Object.keys(e).length===3);
+    (e.count===undefined||Number.isInteger(e.count)&&e.count>=1&&e.count<=2)&&
+    (e.filter==='named'?typeof e.name==='string'&&e.name.trim()===e.name&&e.name.length>=1&&e.name.length<=32&&Object.keys(e).length===(e.count===undefined?4:5):
+      e.name===undefined&&Object.keys(e).length===(e.count===undefined?3:4));
   if(e.kind==='hand')return (e.code==='preventBattleDamage'&&Object.keys(e).length===2)||
    (e.code==='specialByThreeNames'&&Object.keys(e).length===3&&Array.isArray(e.names)&&e.names.length===3&&
     new Set(e.names).size===3&&e.names.every(n=>typeof n==='string'&&n.trim()===n&&n.length>=1&&n.length<=32));
-  if(e.kind==='grave'&&e.code==='weakenOpponentOnGrave')return Object.keys(e).length===2;
-  if(e.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return Object.keys(e).length===3&&Array.isArray(e.names)&&e.names.length===2&&
+  if(e.kind==='grave'&&e.code==='weakenOpponentOnGrave')return Object.keys(e).length===2||Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=50&&e.amount<=2000;
+  if(e.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return Object.keys(e).length===(e.count===undefined?3:4)&&
+   (e.count===undefined||Number.isInteger(e.count)&&e.count>=1&&e.count<=2)&&Array.isArray(e.names)&&e.names.length===2&&
    new Set(e.names).size===2&&e.names.every(n=>typeof n==='string'&&n.trim()===n&&n.length>=1&&n.length<=32);
-  if(e.kind==='grave')return e.code==='searchStatOnGrave'&&Object.keys(e).length===4&&
-    ['atk','def'].includes(e.stat)&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000;
+  if(e.kind==='grave')return e.code==='searchStatOnGrave'&&[4,5].includes(Object.keys(e).length)&&
+    ['atk','def'].includes(e.stat)&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000&&
+    (e.race===undefined&&Object.keys(e).length===4||Object.keys(e).length===5&&typeof e.race==='string'&&RACE_NAMES.includes(normalizeRace(e.race)));
   if(e.kind==='position')return e.code==='destroyOnAttackToDefense'&&Object.keys(e).length===2;
-  if(e.kind==='flip')return (['destroyOpponentOnFlip','recoverOwnSpellOnFlip','cyberJarRevealFive','morphingJarTwo'].includes(e.code)&&Object.keys(e).length===2)|| (e.code==='returnOpponentOnFlip'&&Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2)|| (e.code==='millOpponentDeck'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=10)||
-    (e.code==='scoutDrawDiscardSpells'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=5&&Object.keys(e).length===3);
-  if(e.kind==='endPhase')return e.code==='selfReturnHand'&&Object.keys(e).length===2;
-  if(['destroyAttachedEquip','doubleOriginalAtkEndDestroy','trapSuppression','rocketAssault','fusionFromExtraPay5000','dragonTargetGuard'].includes(e.code))return (['doubleOriginalAtkEndDestroy','fusionFromExtraPay5000'].includes(e.code)?e.kind==='ignition':e.kind==='continuous')&&Object.keys(e).length===2;
-  if(e.code==='postAttackDefenseLock')return e.kind==='continuous'&&Object.keys(e).length===2;
+  if(e.kind==='flip')return (['recoverOwnSpellOnFlip','morphingJarTwo'].includes(e.code)&&Object.keys(e).length===2)||
+    (['destroyOpponentOnFlip','cyberJarRevealFive'].includes(e.code)&&
+     (Object.keys(e).length===2||Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=(e.code==='cyberJarRevealFive'?5:3)))||
+    (e.code==='returnOpponentOnFlip'&&Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=5)||
+    (e.code==='millOpponentDeck'&&Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=10)||
+    (e.code==='scoutDrawDiscardSpells'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=5&&
+      (Object.keys(e).length===3||Object.keys(e).length===4&&['spell','trap','monster'].includes(e.discardType)));
+  if(e.kind==='endPhase')return e.code==='selfReturnHand'&&(Object.keys(e).length===2||Object.keys(e).length===3&&['own','both'].includes(e.phase));
+  if(e.code==='rocketAssault')return e.kind==='continuous'&&(Object.keys(e).length===2||Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=50&&e.amount<=2000);
+  if(e.code==='dragonTargetGuard')return e.kind==='continuous'&&(Object.keys(e).length===2||Object.keys(e).length===3&&typeof e.race==='string'&&RACE_NAMES.includes(normalizeRace(e.race)));
+  if(e.code==='fusionFromExtraPay5000')return e.kind==='ignition'&&
+    Object.keys(e).every(k=>['kind','code','cost','selection'].includes(k))&&
+    (e.cost===undefined||Number.isInteger(e.cost)&&e.cost>=500&&e.cost<=10000)&&
+    (e.selection===undefined||['first','highest'].includes(e.selection));
+  if(e.code==='doubleOriginalAtkEndDestroy')return e.kind==='ignition'&&(Object.keys(e).length===2||Object.keys(e).length===3&&Number.isInteger(e.multiplier)&&e.multiplier>=2&&e.multiplier<=4);
+  if(['destroyAttachedEquip','trapSuppression'].includes(e.code))return e.kind==='continuous'&&Object.keys(e).length===2;
+  if(e.code==='postAttackDefenseLock')return e.kind==='continuous'&&(Object.keys(e).length===2||Object.keys(e).length===3&&Number.isInteger(e.lockTurns)&&e.lockTurns>=1&&e.lockTurns<=2);
   if(e.code==='multiAttack')return e.kind==='continuous'&&Object.keys(e).length===3&&Number.isInteger(e.count)&&e.count>=2&&e.count<=5;
   if(!PASSIVE_SCALE_CODES.includes(e.code))return true;
   if(e.kind!=='continuous')return false;
@@ -181,33 +204,33 @@ export function effectText(c){
   if(c.ability)return abilityText(c.ability);
   if(e?.kind==='hand'&&e.code==='preventBattleDamage')return '相手の攻撃への対応中に手札から捨て、自分へのその戦闘のダメージを0にする（専用ボタンで発動）。';
   if(e?.kind==='hand'&&e.code==='specialByThreeNames')return `自分フィールドの「${e.names.join('」「')}」を各1体リリースして手札から特殊召喚する（手動選択省略）。`;
-  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return 'フィールドから墓地へ送られた時、相手の左端の表側モンスターのATKを場を離れるまで500下げる（装備リンク省略）。';
-  if(e?.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return `フィールドで破壊された時、墓地の「${e.names.join('」か「')}」1体を攻撃表示で特殊召喚（左端自動選択）。`;
-  if(e?.kind==='summonRule'&&e.code==='soloHandNoTribute')return '手札がこのカード1枚だけの場合、リリースなしで通常召喚・セットできる（条件を満たした場合はリリースなしを優先）。';
-  if(e?.kind==='summonRule'&&e.code==='doubleLightTribute')return '光属性・レベル7以上のモンスターをアドバンス召喚・セットする場合、このカード1体を2体分のリリースにできる。';
+  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return `フィールドから墓地へ送られた時、相手の左端の表側モンスターのATKを場を離れるまで${e.amount??500}下げる（装備リンク省略）。`;
+  if(e?.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return `フィールドで破壊された時、墓地の「${e.names.join('」か「')}」から最大${e.count??1}体を攻撃表示で特殊召喚（自動選択）。`;
+  if(e?.kind==='summonRule'&&e.code==='soloHandNoTribute')return `手札がこのカードを含め${e.maxHand??1}枚以下の場合、リリースなしで通常召喚・セットできる（簡易仕様）。`;
+  if(e?.kind==='summonRule'&&e.code==='doubleLightTribute')return `${normalizeAttribute(e.attribute||'光')}属性・レベル7以上のモンスターをアドバンス召喚・セットする場合、このカード1体を2体分のリリースにできる。`;
   if(e?.kind==='trigger'&&e.code==='searchDeckOnSummon'){
     const target=e.filter==='ritualMonster'?'儀式モンスター':e.filter==='ritualSpell'?'儀式魔法':`「${e.name||''}」`;
-    return `召喚・反転召喚したとき、自分のデッキから${target}1枚を手札に加える（自動で最初の候補を選ぶ簡易処理）`;
+    return `召喚・反転召喚したとき、自分のデッキから${target}を最大${e.count??1}枚手札に加える（自動で最初の候補を選ぶ簡易処理）`;
   }
-  if(e?.kind==='grave'&&e.code==='searchStatOnGrave')return `フィールドから墓地へ送られたとき、デッキから${e.stat==='def'?'DEF':'ATK'}${e.threshold}以下のモンスター1体を手札に加える（最初を自動選択。チェーン・サーチ後の制限は保留）`;
-  if(e?.kind==='battle'&&e.code==='recruitOnBattleDestroy')return `戦闘で破壊され墓地へ送られたとき、自分のデッキの${normalizeAttribute(e.attribute)}属性・元々のATK${e.threshold}以下のモンスター1体を攻撃表示で特殊召喚（自動選択・チェーン簡略化）`;
-  if(e?.kind==='trigger'&&e.code==='copyOpponentPrintedStats')return '召喚・反転召喚・特殊召喚時、相手の表側モンスターの元々のATK・DEFをコピー（左端を自動選択・チェーン簡略化）';
-  if(e?.kind==='flip'&&e.code==='cyberJarRevealFive')return 'リバース時、フィールドの全モンスターを破壊。お互いのデッキ上から最大5枚を公開し、その中のレベル4以下の通常召喚可能なモンスターを攻撃表示で特殊召喚、残りを手札へ（表示形式の選択・個別チェーン省略）。';
+  if(e?.kind==='grave'&&e.code==='searchStatOnGrave')return `フィールドから墓地へ送られたとき、デッキから${e.stat==='def'?'DEF':'ATK'}${e.threshold}以下${e.race?'・'+normalizeRace(e.race)+'族':''}のモンスター1体を手札に加える（最初を自動選択。チェーン・サーチ後の制限は保留）`;
+  if(e?.kind==='battle'&&e.code==='recruitOnBattleDestroy')return `戦闘で破壊され墓地へ送られたとき、自分のデッキの${normalizeAttribute(e.attribute)}属性${e.race?'・'+normalizeRace(e.race)+'族':''}・元々のATK${e.threshold}以下のモンスター1体を攻撃表示で特殊召喚（自動選択・チェーン簡略化）`;
+  if(e?.kind==='trigger'&&e.code==='copyOpponentPrintedStats')return `召喚・反転召喚・特殊召喚時、相手の表側モンスターの元々のATK・DEFをコピー（${e.selection==='highest'?'元々のATK最高':'左端'}を自動選択・チェーン簡略化）`;
+  if(e?.kind==='flip'&&e.code==='cyberJarRevealFive')return `リバース時、フィールドの全モンスターを破壊。お互いのデッキ上から最大${e.amount??5}枚を公開し、その中のレベル4以下の通常召喚可能なモンスターを攻撃表示で特殊召喚、残りを手札へ（表示形式の選択・個別チェーン省略）。`;
   if(e?.kind==='flip'&&e.code==='morphingJarTwo')return 'リバース時、全モンスターを持ち主のデッキへ戻し、戻した数だけデッキからモンスターを公開。レベル4以下の通常召喚可能なモンスターは裏側守備で特殊召喚し、残りはデッキへ戻す（選択・個別チェーン省略）。トークンは消滅し融合モンスターはEXデッキに戻る。';
   if(e?.kind==='flip'&&e.code==='returnOpponentOnFlip')return `リバース時、相手のモンスターを左端から最大${e.amount}体、持ち主の手札へ戻す（自動選択・チェーン簡略化）`;
-  if(e?.kind==='flip'&&e.code==='destroyOpponentOnFlip')return 'リバース時、相手のモンスター1体を破壊する（左端を自動選択・チェーン簡略化）';
+  if(e?.kind==='flip'&&e.code==='destroyOpponentOnFlip')return `リバース時、相手のモンスターを最大${e.amount??1}体破壊する（左端を自動選択・チェーン簡略化）`;
   if(e?.kind==='flip'&&e.code==='recoverOwnSpellOnFlip')return 'リバース時、自分の墓地の魔法カード1枚を手札に戻す（最初の候補を自動選択・チェーン簡略化）';
   if(e?.kind==='position'&&e.code==='destroyOnAttackToDefense')return '攻撃表示から表側守備表示に手動変更したとき、相手のモンスター1体を破壊する（左端を自動選択。カード効果による表示変更・チェーンは未対応）';
   if(e?.kind==='flip'&&e.code==='millOpponentDeck')return `リバース時、相手のデッキの上から${e.amount}枚を墓地へ送る`;
-  if(e?.kind==='flip'&&e.code==='scoutDrawDiscardSpells')return `リバース時、相手は${e.amount}枚ドローし、その中の魔法カードを墓地へ捨てる（公開演出・チェーンは簡略化）`;
+  if(e?.kind==='flip'&&e.code==='scoutDrawDiscardSpells')return `リバース時、相手は${e.amount}枚ドローし、その中の${{spell:'魔法',trap:'罠',monster:'モンスター'}[e.discardType||'spell']}カードを墓地へ捨てる（公開演出・チェーンは簡略化）`;
   if(e?.kind==='continuous'&&e.code==='destroyAttachedEquip')return 'このカードに装備カードが装備されたとき、その装備カードを破壊する（チェーンは簡略化）';
-  if(e?.kind==='continuous'&&e.code==='rocketAssault')return '自分バトルフェイズにこのカードで攻撃する場合、戦闘破壊されず自分への戦闘ダメージは0。戦闘後、相手モンスターが残ればATKを500下げる（ターン終了まで・簡易処理）';
-  if(e?.kind==='ignition'&&e.code==='fusionFromExtraPay5000')return '5000LPを払って発動。EXデッキの先頭の融合モンスター1体を攻撃表示で特殊召喚（LPは5000より多い必要あり。簡易処理）';
-  if(e?.kind==='continuous'&&e.code==='dragonTargetGuard')return '表側表示の間、相手はフィールドのドラゴン族を効果の対象に選べない（対象を取らない効果は有効）。';
+  if(e?.kind==='continuous'&&e.code==='rocketAssault')return `自分バトルフェイズにこのカードで攻撃する場合、戦闘破壊されず自分への戦闘ダメージは0。戦闘後、相手モンスターが残ればATKを${e.amount??500}下げる（ターン終了まで・簡易処理）`;
+  if(e?.kind==='ignition'&&e.code==='fusionFromExtraPay5000')return `${e.cost??5000}LPを払って発動。EXデッキの${e.selection==='highest'?'元々のATKが最高の':'先頭の'}融合モンスター1体を攻撃表示で特殊召喚（LPは支払額より多い必要あり。簡易処理）`;
+  if(e?.kind==='continuous'&&e.code==='dragonTargetGuard')return `表側表示の間、相手はフィールドの${normalizeRace(e.race||'ドラゴン')}族を効果の対象に選べない（対象を取らない効果は有効）。`;
   if(e?.kind==='continuous'&&e.code==='trapSuppression')return '表側表示で存在する限り、お互いの罠カードを発動できず、罠のチェーン効果を解決時に無効化する（簡易処理）';
-  if(e?.kind==='ignition'&&e.code==='doubleOriginalAtkEndDestroy')return '1ターンに1度、元々のATKの2倍にし、そのエンドフェイズに自身を破壊する（チェーンは簡略化）';
-  if(e?.kind==='endPhase'&&e.code==='selfReturnHand')return '自分のエンドフェイズに、表側表示のこのカードを持ち主の手札に戻す（チェーン応答は簡略化）';
-  if(e?.kind==='continuous'&&e.code==='postAttackDefenseLock')return '攻撃した場合、バトルフェイズ終了時に守備表示になり、次の自分ターン終了時まで手動で表示形式を変更できない（カード効果による変更は可能）';
+  if(e?.kind==='ignition'&&e.code==='doubleOriginalAtkEndDestroy')return `1ターンに1度、元々のATKの${e.multiplier??2}倍にし、そのエンドフェイズに自身を破壊する（チェーンは簡略化）`;
+  if(e?.kind==='endPhase'&&e.code==='selfReturnHand')return `${e.phase==='both'?'お互い':'自分'}のエンドフェイズに、表側表示のこのカードを持ち主の手札に戻す（チェーン応答は簡略化）`;
+  if(e?.kind==='continuous'&&e.code==='postAttackDefenseLock')return `攻撃した場合、バトルフェイズ終了時に守備表示になり、${(e.lockTurns??1)===1?'次の':(e.lockTurns)+'回後の'}自分ターン終了まで手動で表示形式を変更できない（カード効果による変更は可能）`;
   if(e?.kind==='continuous'&&e.code==='multiAttack')return `1度のバトルフェイズ中に${e.count}回まで攻撃できる`;
   if(e?.kind==='continuous'){
     if(e.code==='graveNamedScale')return `${PASSIVE_SCOPES[e.scope]||'お互い'}の墓地の「${(e.names||[]).join('」「')}」1枚につきATK＋${e.amount}`;

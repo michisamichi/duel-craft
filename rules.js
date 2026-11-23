@@ -20,7 +20,7 @@ export const ABILITY_META={
  searchNamed:{label:'デッキから指定名のカードを手札へ加える',scope:'player',amount:1,min:1,max:3},
  summonNamedFromHand:{label:'手札の指定名モンスター1体を特殊召喚',scope:'player',amount:0},
  summonRaceFromHand:{label:'手札の指定種族モンスターを特殊召喚',scope:'player',amount:2,min:1,max:2},
- summonSheepTokens:{label:'羊トークン4体を守備表示で特殊召喚',scope:'player',amount:4,min:4,max:4},
+ summonSheepTokens:{label:'羊トークンを守備表示で特殊召喚（1～4体）',scope:'player',amount:4,min:1,max:4},
  summonKuribohTokens:{label:'表側の「クリボー」をリリースしてクリボートークンを可能な限り特殊召喚',scope:'player',amount:0},
  extraNormalSummon:{label:'通常召喚済みでも500LPで追加通常召喚（永続罠）',scope:'player',amount:500,min:500,max:500},
  searchTrap:{label:'山札で最初の罠を手札へ加える',scope:'player',amount:1,min:1,max:5},
@@ -32,7 +32,7 @@ export const ABILITY_META={
  replaceHands:{label:'お互いの手札を全て捨て、各自同じ枚数ドロー',scope:'none',amount:0},
  swapPrintedStats:{label:'お互いの表側モンスターの元々のATK・DEFを交換',scope:'monster',amount:0},
  recoverNormalAtk:{label:'墓地のATK1500以下の通常モンスターを回収（新しい順）',scope:'player',amount:3,min:1,max:3},
- earthAura:{label:'地属性のATK＋指定値／DEF－400（フィールド）',scope:'monster',amount:500,min:1,max:2000},
+ earthAura:{label:'指定属性のATK＋指定値／DEF減少（フィールド）',scope:'monster',amount:500,min:1,max:2000},
  pierce:{label:'装備モンスターに貫通ダメージ能力',scope:'monster',amount:0},
  sealEnemyAttacks:{label:'相手の次の3ターンの攻撃を禁止（新しいモンスターにも適用）',scope:'none',amount:0},
  negateEndBattle:{label:'攻撃を無効にしバトルフェイズ終了',scope:'none',amount:0},
@@ -182,7 +182,7 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
      (a.requiredFaceUpName!==undefined&&(typeof a.requiredFaceUpName!=='string'||!a.requiredFaceUpName.trim()||a.requiredFaceUpName.length>48))||
      Object.keys(a).some(k=>!['when','operation','target','amount','match','query','requiredFaceUpName'].includes(k)))return false;
  }
- if(a.operation==='summonSheepTokens'&&!(type==='spell'&&['normal','quick'].includes(spellKind)&&a.when==='main'&&a.target==='self'&&a.amount===4&&!a.before&&!a.then&&Object.keys(a).sort().join(',')==='amount,operation,target,when'))return false;
+ if(a.operation==='summonSheepTokens'&&!(type==='spell'&&['normal','quick'].includes(spellKind)&&a.when==='main'&&a.target==='self'&&Number.isInteger(a.amount)&&a.amount>=1&&a.amount<=4&&!a.before&&!a.then&&Object.keys(a).sort().join(',')==='amount,operation,target,when'))return false;
  if(a.operation==='summonKuribohTokens'&&!(type==='spell'&&['normal','quick'].includes(spellKind)&&a.when==='main'&&a.target==='self'&&a.amount===0&&!a.before&&!a.then&&Object.keys(a).sort().join(',')==='amount,operation,target,when'))return false;
  if(a.operation==='extraNormalSummon'&&!(type==='trap'&&a.when==='continuous'&&a.target==='self'&&a.amount===500&&!a.before&&!a.then&&Object.keys(a).sort().join(',')==='amount,operation,target,when'))return false;
  if(a.operation==='reviveBothSet'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&a.target==='none'&&a.amount===0&&a.then===undefined&&a.before===undefined&&Object.keys(a).every(k=>['when','operation','target','amount'].includes(k))))return false;
@@ -229,7 +229,12 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  if(['fusionMaterialSubstitute','directEarthWaterFire'].includes(a.operation)&&!(type==='monster'&&a.when==='continuous'&&a.target==='self'&&a.amount===0&&!a.before&&!a.then))return false;
  if(a.operation==='setAttackerDefense'&&!(type==='trap'&&a.when==='attack'&&a.target==='attacker'&&a.amount===0&&!a.before&&!a.then))return false;
  if(a.operation==='lockPositionNextTurn'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&a.target==='opponent'&&a.amount===0&&!a.before&&!a.then))return false;
- if(a.operation==='earthAura'&&!(type==='spell'&&spellKind==='field'&&a.when==='continuous'&&a.target==='bothMonsters'))return false;
+ if(a.operation==='earthAura'){
+  if(!(type==='spell'&&spellKind==='field'&&a.when==='continuous'&&a.target==='bothMonsters'&&!a.before&&!a.then&&
+       Object.keys(a).every(k=>['when','operation','target','amount','attribute','defDecrease'].includes(k))))return false;
+  if(a.attribute!==undefined&&(!['闇','光','地','水','炎','風','神'].includes(a.attribute)||typeof a.attribute!=='string'))return false;
+  if(a.defDecrease!==undefined&&(!Number.isInteger(a.defDecrease)||a.defDecrease<0||a.defDecrease>2000))return false;
+ }
  if(a.operation==='pierce'&&!(type==='spell'&&spellKind==='equip'&&a.when==='continuous'&&a.target==='ownMonster'))return false;
  if(a.operation==='replaceHands'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&a.target==='none'))return false;
  if(a.operation==='swapPrintedStats'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&a.target==='bothMonsters'))return false;
@@ -275,6 +280,7 @@ export function abilityText(a){if(!a)return '';
  const label=meta.label;
  if(a.operation==='reviveSelected'&&!a.then)return (a.before?`コスト：${beforeText(a.before)}。\n`:'')+'自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
  if(a.operation==='negateWeakenAttacker')return `${TRIGGERS[a.when]}：攻撃を無効にし、この罠が表側で残る間、攻撃モンスターのATKを${a.amount}下げ、攻撃を禁止する。`;
+ if(a.operation==='earthAura')return `${a.attribute||'地'}属性の表側モンスターのATKを${a.amount}上げ、DEFを${a.defDecrease??400}下げる（フィールド魔法）。`;
  if(a.operation==='removeSpellBackrow')return '自分メイン：相手の表側魔法またはセットされた魔法・罠1枚を選ぶ。魔法なら破壊、裏側の罠なら確認するだけ。';
  if(a.operation==='banishSetBackrow')return '自分メイン：相手のセットされた魔法・罠1枚を対象として除外する。同名カードのデッキ除外は省略。';
  if(a.operation==='destroyThenSetBackrow')return '相手の効果にチェーン：相手の魔法・罠1枚を破壊。その後、自分の手札から魔法・罠1枚を自動選択してセット（フィールド魔法は対象外）。';
@@ -300,7 +306,7 @@ export function abilityText(a){if(!a)return '';
  if(a.operation==='setAttackerDefense')return `${TRIGGERS[a.when]}：攻撃モンスターを守備表示にしその攻撃を中断する（装備・攻撃力上昇は省略）。`;
  if(a.operation==='destroyGiveOwn')return `${TRIGGERS[a.when]}：相手モンスター1体を破壊し自分の左端1体を相手に渡す。`;
  if(a.operation==='lockPositionNextTurn')return `${TRIGGERS[a.when]}：次の相手ターンに相手の手動表示形式変更と反転召喚を禁止する。`;
- if(a.operation==='summonSheepTokens')return '自分の空きモンスターゾーン4枠に羊トークン4体を守備表示で特殊召喚（4枠必要。アドバンス召喚にはリリース不可。発動ターンの他の召喚制限は省略）。';
+ if(a.operation==='summonSheepTokens')return `自分の空きモンスターゾーンに羊トークン${a.amount}体を守備表示で特殊召喚（${a.amount}枠必要。アドバンス召喚にはリリース不可。発動ターンの他の召喚制限は省略）。`;
  if(a.operation==='summonKuribohTokens')return '発動時に自分の表側「クリボー」1体をリリースし、空きゾーンにクリボートークンを可能な限り守備表示で特殊召喚（最大5体・リリース不可）。';
  if(a.operation==='reviveBothSet')return `${TRIGGERS[a.when]}：お互いの墓地のモンスターを新しい順に1体ずつ裏側守備で特殊召喚する。`;
  if(a.operation==='summonRaceFromHand')return `${TRIGGERS[a.when]}：${a.requiredFaceUpName?`「${a.requiredFaceUpName}」が表側で存在する場合、`:''}手札の${a.query}族モンスターを最大${a.amount}体特殊召喚する（先頭側から自動選択）。`;
