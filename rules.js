@@ -11,7 +11,7 @@ export function cardCost(card){
 }
 export function deckCost(counts,cardIndex){return Object.entries(counts||{}).reduce((total,[id,count])=>total+cardCost(cardIndex[id])*Number(count||0),0);}
 export const TRIGGERS={main:'自分メインで発動',summon:'召喚したとき',battleDamage:'戦闘ダメージを与えたとき',continuous:'表側の間ずっと',attack:'相手の攻撃に対応',response:'相手の効果にチェーン'};
-export const TARGETS={none:'対象なし',self:'自分',opponent:'相手',ownMonster:'自分のモンスター1体',enemyMonster:'相手のモンスター1体',attacker:'攻撃しているモンスター',ownAllMonsters:'自分のモンスター全体',enemyAllMonsters:'相手のモンスター全体',enemyAttackMonsters:'相手の攻撃表示モンスター全体',enemyLowestAtk:'相手の表側モンスター（ATK最低・左端優先）',enemyFaceDownMonster:'相手の裏側守備モンスター（左端優先）',bothMonsters:'お互いのモンスター全体',ownBackrow:'自分の魔法・罠1枚',enemyBackrow:'相手の魔法・罠1枚',ownAllBackrow:'自分の魔法・罠すべて',enemyAllBackrow:'相手の魔法・罠すべて',bothAllBackrow:'お互いの魔法・罠すべて（フィールド魔法を含む）',eitherGraveMonster:'自分・相手の墓地のモンスター1体'};
+export const TARGETS={none:'対象なし',self:'自分',opponent:'相手',ownMonster:'自分のモンスター1体',enemyMonster:'相手のモンスター1体',eitherMonster:'自分・相手のモンスター1体',attacker:'攻撃しているモンスター',ownAllMonsters:'自分のモンスター全体',enemyAllMonsters:'相手のモンスター全体',enemyAttackMonsters:'相手の攻撃表示モンスター全体',enemyLowestAtk:'相手の表側モンスター（ATK最低・左端優先）',enemyFaceDownMonster:'相手の裏側守備モンスター（左端優先）',bothMonsters:'お互いのモンスター全体',eitherBackrow:'自分・相手の魔法・罠1枚（フィールド魔法を含む）',ownBackrow:'自分の魔法・罠1枚',enemyBackrow:'相手の魔法・罠1枚',ownAllBackrow:'自分の魔法・罠すべて',enemyAllBackrow:'相手の魔法・罠すべて',bothAllBackrow:'お互いの魔法・罠すべて（フィールド魔法を含む）',eitherGraveMonster:'自分・相手の墓地のモンスター1体'};
 // Display order is the priority order in the editor. Each operation has a working engine implementation.
 export const ABILITY_META={
  draw:{label:'カードをドロー',scope:'player',amount:1,min:1,max:10},
@@ -68,6 +68,8 @@ export const ABILITY_META={
  lockPositionNextTurn:{label:'次の相手ターンの手動表示変更を禁止',scope:'player',amount:0},
  lockEffect:{label:'次のターンまで起動効果を封じる',scope:'monster',amount:0},
  steal:{label:'モンスターのコントロールを移す',scope:'monster',amount:0},
+ stealUntilEnd:{label:'ターン終了まで相手モンスターのコントロールを得る',scope:'monster',amount:0},
+ stealWithEquip:{label:'装備中はコントロールを得て相手ターン開始時に相手LPを回復',scope:'monster',amount:1000,min:0,max:5000},
  destroyGiveOwn:{label:'相手モンスターを破壊し自分の左端1体を相手に渡す',scope:'monster',amount:0},
  destroyBackrow:{label:'魔法・罠を破壊',scope:'backrow',amount:0},
  removeSpellBackrow:{label:'魔法除去：魔法なら破壊・伏せ罠なら確認のみ',scope:'backrow',amount:0},
@@ -106,7 +108,7 @@ export const ABILITY_META={
 // Single-card targets may be reused only when the preceding stage selected that same side/zone.
 export function followUpTargets(operation,firstTarget,when='main',type='monster',spellKind='normal'){
  const op=ABILITY_META[operation];
- if(!op||when==='battleDamage'||['reflectAttack','redirectAttack','concealDefender','negateAttack','negateEndBattle','blastAttacker','negateEffect','protectOwnTraps','redirectSpellTarget','crushVirus','revealSetMonsters','reviveSelected','sealEnemyAttacks','steal','searchNamed','summonNamedFromHand','replaceHands','swapPrintedStats','recoverNormalAtk','earthAura','pierce','diceStats','millFirstType','summonRaceFromHand','summonSheepTokens','summonKuribohTokens','extraNormalSummon','reviveBothSet','destroyGiveOwn','borrowOpponentSpell','lockPositionNextTurn','setAttackerDefense','negateAndLockAttacker','negateWeakenAttacker','preventEquipAttack','tributeOtherToAttack','timeWizardCoin','selfSpecialFromHand','selfSpecialFromHandGiveRevive','lockWhileSourceFaceUp','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire'].includes(operation))return [];
+ if(!op||when==='battleDamage'||['reflectAttack','redirectAttack','concealDefender','negateAttack','negateEndBattle','blastAttacker','negateEffect','protectOwnTraps','redirectSpellTarget','crushVirus','revealSetMonsters','reviveSelected','sealEnemyAttacks','steal','stealUntilEnd','stealWithEquip','searchNamed','summonNamedFromHand','replaceHands','swapPrintedStats','recoverNormalAtk','earthAura','pierce','diceStats','millFirstType','summonRaceFromHand','summonSheepTokens','summonKuribohTokens','extraNormalSummon','reviveBothSet','destroyGiveOwn','borrowOpponentSpell','lockPositionNextTurn','setAttackerDefense','negateAndLockAttacker','negateWeakenAttacker','preventEquipAttack','tributeOtherToAttack','timeWizardCoin','selfSpecialFromHand','selfSpecialFromHandGiveRevive','lockWhileSourceFaceUp','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire'].includes(operation))return [];
  const permitted=abilityTargets(operation,when,type,spellKind);
  const automatic=new Set(['none','self','opponent','ownAllMonsters','enemyAllMonsters','enemyAttackMonsters','bothMonsters','ownAllBackrow','enemyAllBackrow','bothAllBackrow','enemyLowestAtk','enemyFaceDownMonster']);
  return permitted.filter(target=>automatic.has(target)||target===firstTarget&&['ownMonster','enemyMonster','ownBackrow','enemyBackrow','attacker'].includes(target));
@@ -126,6 +128,11 @@ export const BEFORE_META={
  recycleOwnGrave:{label:'自分の墓地からデッキへ戻す（新しい順）',zone:'grave',amount:1,max:60},
  payLP:{label:'自分のLPを支払う',zone:'lp',amount:500,max:99999}
 };
+export function abilityCostOptions(operation,target){
+ if(operation==='stealUntilEnd')return ['payLP'];
+ if(target==='eitherBackrow'||target==='eitherMonster')return ['discardOwnHand','returnOwnHandDeck','payLP'];
+ return Object.keys(BEFORE_META);
+}
 export const beforeText=a=>{const m=BEFORE_META[a?.operation];return m?`${m.label}（${a.amount}${m.zone==='lp'?'LP':m.zone==='monsters'?'体':'枚'}）`:'';};
 export const OPERATIONS=Object.fromEntries(Object.entries(ABILITY_META).map(([k,v])=>[k,v.label]));
 // Legacy reference: the first member now means the recommended initial value, not the only allowed value.
@@ -149,13 +156,18 @@ export function abilityTargets(operation,when='main',type='monster',spellKind='n
  if(operation==='lockWhileSourceFaceUp')return ['enemyMonster'];
  if(operation==='summonRaceFromHand'||operation==='summonSheepTokens'||operation==='summonKuribohTokens')return ['self'];
  if(meta.scope==='player')return ['self','opponent'];
- if(meta.scope==='backrow')return ['enemyBackrow','ownBackrow','enemyAllBackrow','ownAllBackrow','bothAllBackrow'];
+ if(['stealUntilEnd','stealWithEquip'].includes(operation))return ['enemyMonster'];
+ if(meta.scope==='backrow')return [
+  ...(operation==='destroyBackrow'&&when==='main'&&type==='spell'&&['normal','quick'].includes(spellKind)?['eitherBackrow']:[]),
+  'enemyBackrow','ownBackrow','enemyAllBackrow','ownAllBackrow','bothAllBackrow'];
  if(when==='continuous'){
   if(type==='monster')return ['ownMonster'];
   if(spellKind==='field')return ['ownAllMonsters','enemyAllMonsters','bothMonsters'];
   if(spellKind==='equip')return ['ownMonster','enemyMonster'];
  }
- if(operation==='destroy')return ['enemyMonster','ownMonster','enemyLowestAtk','enemyAllMonsters','enemyAttackMonsters','ownAllMonsters','bothMonsters'];
+ if(operation==='destroy')return ['enemyMonster','ownMonster',
+  ...(when==='main'&&type==='spell'&&['normal','quick'].includes(spellKind)?['eitherMonster']:[]),
+  'enemyLowestAtk','enemyAllMonsters','enemyAttackMonsters','ownAllMonsters','bothMonsters'];
  if(operation==='banish')return ['enemyMonster','ownMonster','enemyFaceDownMonster','enemyAllMonsters','ownAllMonsters','bothMonsters'];
  const first=['boost','boostDef','setAtk','setDef'].includes(operation)?'ownMonster':'enemyMonster';
  const second=first==='ownMonster'?'enemyMonster':'ownMonster';
@@ -215,7 +227,9 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  if(a.operation==='revealSetMonsters'&&!(type==='trap'&&a.when==='response'&&a.target==='none'&&a.amount===0&&!a.before&&!a.then&&Object.keys(a).length===4))return false;
  if(a.operation==='destroyOnEnemySummon'&&!(type==='trap'&&a.when==='summon'&&a.target==='enemyMonster'&&a.amount>=0&&a.amount<=5000&&!a.before&&!a.then&&Object.keys(a).length===4))return false;
  if(a.operation==='redirectToAttackerAlly'&&!(type==='trap'&&a.when==='attack'&&a.target==='none'&&a.amount===0&&!a.before&&!a.then&&Object.keys(a).length===4))return false;
- if(a.when==='continuous'&&!['boost','weaken','boostDef','weakenDef','earthAura','pierce','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire','tributeOtherToAttack','preventEquipAttack','extraNormalSummon'].includes(a.operation))return false;
+ if(a.when==='continuous'&&!['boost','weaken','boostDef','weakenDef','earthAura','pierce','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire','tributeOtherToAttack','preventEquipAttack','extraNormalSummon','stealWithEquip'].includes(a.operation))return false;
+ if(a.operation==='stealUntilEnd'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&!a.then&&(!a.before||a.before.operation==='payLP')))return false;
+ if(a.operation==='stealWithEquip'&&!(type==='spell'&&spellKind==='equip'&&a.when==='continuous'&&!a.before&&!a.then))return false;
  // Exceptional recipe types are deliberately bound to one supported trigger/zone.
  if(a.operation==='destroyGiveOwn'&&!(type==='spell'&&spellKind==='normal'&&a.when==='main'&&a.target==='enemyMonster'&&a.amount===0&&!a.before&&!a.then))return false;
  if(a.operation==='borrowOpponentSpell'&&!(type==='trap'&&a.when==='response'&&a.target==='self'&&a.amount===0&&!a.before&&!a.then))return false;
@@ -249,7 +263,8 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  }
  if(a.before!==undefined){
   const cost=BEFORE_META[a.before?.operation];
-  if(!cost||!Number.isSafeInteger(a.before.amount)||a.before.amount<1||a.before.amount>cost.max)return false;
+  if(!cost||!abilityCostOptions(a.operation,a.target).includes(a.before.operation)||
+    !Number.isSafeInteger(a.before.amount)||a.before.amount<1||a.before.amount>cost.max)return false;
   if(!['main','attack','response'].includes(a.when)||type==='spell'&&spellKind!=='normal'&&spellKind!=='quick')return false;
  }
  // Graveyard choice is deliberately a normal-spell-only feature; avoid invalid trap/continuous triggers.
@@ -274,6 +289,7 @@ export function abilityText(a){if(!a)return '';
  const usesAmount=meta.min!==undefined;
  const label=meta.label;
  if(a.operation==='reviveSelected'&&!a.then)return (a.before?`コスト：${beforeText(a.before)}。\n`:'')+'自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
+ if(a.operation==='stealWithEquip')return `相手の表側モンスター1体に装備し、このカードが装備されている間コントロールを得る。${a.amount?`相手ターン開始時に相手は${a.amount}LP回復する。`:''}`;
  if(a.operation==='negateWeakenAttacker')return `${TRIGGERS[a.when]}：攻撃を無効にし、この罠が表側で残る間、攻撃モンスターのATKを${a.amount}下げ、攻撃を禁止する。`;
  if(a.operation==='removeSpellBackrow')return '自分メイン：相手の表側魔法またはセットされた魔法・罠1枚を選ぶ。魔法なら破壊、裏側の罠なら確認するだけ。';
  if(a.operation==='banishSetBackrow')return '自分メイン：相手のセットされた魔法・罠1枚を対象として除外する。同名カードのデッキ除外は省略。';

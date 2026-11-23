@@ -231,6 +231,8 @@ const SPECIAL={
 };
 const RITUALS={'マジシャン・オブ・ブラックカオス':'カオス－黒魔術の儀式','サクリファイス':'イリュージョンの儀式'};
 const SPELLS={
+ '心変わり':{ability:{when:'main',operation:'stealUntilEnd',target:'enemyMonster',amount:0},status:'simplified',note:'相手モンスター1体を選び、エンドフェイズまでコントロールを得る。自分の場に空きが必要。返却先に空きがなければ破壊。重複するコントロール変更は簡略化'},
+ '強奪':{ability:{when:'continuous',operation:'stealWithEquip',target:'enemyMonster',amount:1000},status:'simplified',note:'相手の表側モンスター1体に装備し、装備中はコントロールを得る。相手ターン開始時に相手は1000LP回復。返却先に空きがなければ破壊。重複するコントロール変更は簡略化'},
  '血の代償':{ability:{when:'continuous',operation:'extraNormalSummon',target:'self',amount:500},status:'simplified',note:'セットした次のターン以降、自分メインフェイズに表にできる。通常召喚済みでも追加で通常召喚・セットでき、その都度500LPを払う。相手バトルフェイズでの召喚とチェーン応答は省略'},
  '強欲な壺':{effect:'draw2',ability:{when:'main',operation:'draw',target:'self',amount:2},status:'exact',note:'カードを2枚ドローする（デッキに2枚以上ある場合のみ発動可能）。カード作成の既存「強欲な壺式」と同じ宣言型処理'},
  '手札抹殺':{ability:{when:'main',operation:'replaceHands',target:'none',amount:0},status:'simplified',note:'双方の手札（発動したこのカードを除く）を墓地へ送り、同じ枚数ドロー。交換する手札がない・いずれかのデッキが不足するときは発動候補を表示しない（チェーン裁定は省略）'},
@@ -267,13 +269,13 @@ const SPELLS={
  '地割れ':{ability:{when:'main',operation:'destroy',target:'enemyLowestAtk',amount:0},status:'simplified',note:'相手の表側モンスターがいる場合のみ発動。現在ATKが最も低い1体を破壊。同値は左端優先。裏側のみの場合の空撃ちを防止'},
  'サンダー・ボルト':{ability:{when:'main',operation:'destroy',target:'enemyAllMonsters',amount:0},status:'exact',note:'相手フィールドのモンスターをすべて破壊する'},
  'ブラック・ホール':{ability:{when:'main',operation:'destroy',target:'bothMonsters',amount:0},status:'exact',note:'お互いのモンスターが0体なら発動候補を表示しない。フィールドのモンスターをすべて破壊する'},
- 'サイクロン':{ability:{when:'main',operation:'destroyBackrow',target:'enemyBackrow',amount:0},status:'simplified',note:'相手の魔法・罠ゾーンにカードがない場合は発動候補を表示しない。自分の魔法・罠を対象にする選択は省略'},
+ 'サイクロン':{ability:{when:'main',operation:'destroyBackrow',target:'eitherBackrow',amount:0},status:'simplified',note:'自分・相手の場の魔法・罠（フィールド魔法を含む）1枚を選んで破壊する。使用中の単発魔法・罠はチェーン内にあり、選択対象から外れる'},
  '魔法除去':{ability:{when:'main',operation:'removeSpellBackrow',target:'enemyBackrow',amount:0},status:'simplified',note:'相手の対象にできるセット魔法・罠または表側魔法がない場合は発動候補を表示しない。相手の表側魔法かセットされた魔法・罠1枚を選ぶ。魔法なら破壊、裏側の罠なら確認だけで破壊しない（自分側を対象にする選択は省略）'},
  '大嵐':{ability:{when:'main',operation:'destroyBackrow',target:'bothAllBackrow',amount:0},status:'simplified',note:'お互いの魔法・罠（フィールド魔法も含む）を全て破壊。破壊時の個別チェーン裁定は簡略化'},
  'ハリケーン':{ability:{when:'main',operation:'returnBackrow',target:'bothAllBackrow',amount:0},status:'simplified',note:'フィールドに戻せる魔法・罠がある場合のみ発動し、お互いの魔法・罠（フィールド魔法を含む）を全て持ち主の手札へ戻す。個別チェーン裁定は簡略化'},
  '撲滅の使徒':{ability:{when:'main',operation:'banishSetBackrow',target:'enemyBackrow',amount:0},status:'simplified',note:'相手のセット魔法・罠1枚を除外。罠なら双方のデッキから同名カードも除外する（手札・墓地の同名は対象外。チェーン裁定は簡略化）'},
  '抹殺の使徒':{ability:{when:'main',operation:'banish',target:'enemyFaceDownMonster',amount:0},status:'simplified',note:'相手の裏側守備モンスターを左端優先で除外。リバース効果モンスターなら双方のデッキの同名カードも除外する（解決時の位置・個体照合あり。対象選択とチェーン裁定は簡略化）'},
- '死者への手向け':{ability:{when:'main',operation:'destroy',target:'enemyMonster',amount:0,before:{operation:'discardOwnHand',amount:1}},status:'simplified',note:'対象のモンスターか捨てる手札がない場合は発動操作を提示しない。相手のモンスター限定の処理'},
+ '死者への手向け':{ability:{when:'main',operation:'destroy',target:'eitherMonster',amount:0,before:{operation:'discardOwnHand',amount:1}},status:'exact',note:'手札を1枚捨て、自分・相手の場からモンスター1体を選んで破壊する。捨てる手札か対象がないときは発動できない'},
  '融合':{effect:'fusionSummon',spellKind:'fusion',status:'simplified',note:'融合素材は2体まで。青眼の究極竜は保留'},
  'カオス－黒魔術の儀式':{effect:'ritualSummon',spellKind:'ritual',status:'simplified'},
  'イリュージョンの儀式':{effect:'ritualSummon',spellKind:'ritual',status:'simplified'},

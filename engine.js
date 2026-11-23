@@ -592,7 +592,7 @@ function breakEquipsOnMonster(s){
   }
  }
 }
-function sweepOrphanEquips(s){
+function removeDetachedEquips(s){
  for(let seat=0;seat<2;seat++){
   const p=s.players[seat];if(!p)continue;
   for(let i=0;i<p.backrow.length;i++){
@@ -605,6 +605,51 @@ function sweepOrphanEquips(s){
    }
   }
  }
+}
+function moveControlledMonster(s,from,index,to){
+ const source=s.players[from],destination=s.players[to],item=source.monsters[index];
+ const slot=destination.monsters.indexOf(null);
+ if(slot<0)return false;
+ if(!Number.isInteger(item.key))item.key=++s.nextKey;
+ item.ownerSeat??=from;
+ source.monsters[index]=null;
+ destination.monsters[slot]=item;
+ for(const [seat,player] of s.players.entries())for(const equip of player.backrow){
+  if(equip?.linkKey===item.key&&(equip.linkOwner??seat)===from)equip.linkOwner=to;
+ }
+ return true;
+}
+function linkedControlEquip(s,item){
+ if(!Number.isInteger(item.controlEquipKey))return null;
+ return s.players[1-item.controlReturnSeat]?.backrow.find(equip=>
+  equip?.key===item.controlEquipKey&&!equip.faceDown&&equip.linkKey===item.key)||null;
+}
+function returnBorrowedMonsters(s,endPhase=false){
+ let changed=false;
+ for(const [seat,p] of s.players.entries()){
+  if(!p)continue;
+  for(const [index,item] of p.monsters.entries()){
+   const destination=item?.controlReturnSeat;
+   if(destination!==0&&destination!==1)continue;
+   if(Number.isInteger(item.controlEquipKey)?linkedControlEquip(s,item):!endPhase||s.turnNo<item.controlThroughTurn)continue;
+   delete item.controlReturnSeat;
+   delete item.controlEquipKey;
+   delete item.controlThroughTurn;
+   if(seat===destination)continue;
+   changed=true;
+   if(moveControlledMonster(s,seat,index,destination)){
+    log(s,`「${CARD[item.id]?.name||item.id}」のコントロールを返しました。`);
+   }else{
+    sendToGrave(p,'monsters',index,s,true);
+    log(s,`「${CARD[item.id]?.name||item.id}」は返却先に空きがないため破壊されました。`);
+   }
+  }
+ }
+ return changed;
+}
+function sweepOrphanEquips(s){
+ removeDetachedEquips(s);
+ if(returnBorrowedMonsters(s))removeDetachedEquips(s);
 }
 // Protect only a face-up aura source when another allied monster exists.
 // Reused by the action validator and the board's target highlighting.
@@ -899,12 +944,22 @@ function canSummonRaceFromHand(s,seat,ab){
 // Pure, no-wait eligibility shared between spell buttons and the engine.
 // Checks the four reusable historic recipes that otherwise lead to an empty
 // target/cost picker. Never uses card names or new serialized state fields.
-export function canOfferSpell(s,seat,card,source='hand'){
+export function canOfferSpell(s,seat,card,source='hand',sourceIndex=-1){
  if(!s||![0,1].includes(seat)||card?.type!=='spell')return false;
  const p=s.players?.[seat],enemy=s.players?.[1-seat],ab=actionAbility(card);
  if(!p||!enemy)return false;
  if(!ab)return true; // Ritual/fusion spells have separate, already validated UI paths.
  const op=ab.operation;
+ if(op==='stealUntilEnd'||op==='stealWithEquip'){
+   return p.monsters.includes(null)&&
+     (op!=='stealWithEquip'||source!=='hand'||p.backrow.includes(null))&&
+     (ab.before?.operation!=='payLP'||p.lp>ab.before.amount)&&
+     enemy.monsters.some((_,index)=>canBorrowMonster(s,seat,index,op==='stealWithEquip'));
+ }
+ if(op==='destroyBackrow'&&ab.target==='eitherBackrow'){
+   return s.players.some((player,side)=>player.field||player.backrow.some((item,index)=>
+     item&&(side!==seat||source!=='backrow'||index!==sourceIndex)));
+ }
  if(op==='summonKuribohTokens')return p.monsters.some(m=>m&&m.pos!=='set'&&!CARD[m.id]?.isToken&&CARD[m.id]?.name==='クリボー');
  if(op==='summonRaceFromHand')return canSummonRaceFromHand(s,seat,ab);
  // Four historic spell recipes use only existing board/grave information.
@@ -952,9 +1007,11 @@ export function canOfferSpell(s,seat,card,source='hand'){
  if(spellKind(card)==='equip'&&op==='pierce'&&ab.target==='ownMonster')
    return p.monsters.some((m,i)=>m&&m.pos!=='set'&&!isDragonEffectTargetBlocked(s,seat,seat,i))&&
      (source!=='hand'||p.backrow.some(item=>item===null));
- if(op==='destroy'&&ab.target==='enemyMonster'&&ab.before?.operation==='discardOwnHand'){
+ if(op==='destroy'&&(ab.target==='eitherMonster'||['enemyMonster','ownMonster'].includes(ab.target)&&ab.before?.operation==='discardOwnHand')){
    const available=p.hand.length-(source==='hand'?1:0);
-   return available>=ab.before.amount&&enemy.monsters.some((m,i)=>m&&!isDragonEffectTargetBlocked(s,seat,1-seat,i));
+   const sides=ab.target==='eitherMonster'?[seat,1-seat]:[ab.target==='ownMonster'?seat:1-seat];
+   return (ab.before?.operation!=='discardOwnHand'||available>=ab.before.amount)&&
+     sides.some(side=>s.players[side].monsters.some((m,i)=>m&&!isDragonEffectTargetBlocked(s,seat,side,i)));
  }
  if(spellKind(card)==='equip'&&ab.operation==='boost'&&ab.target==='ownMonster')
    return p.monsters.some((m,i)=>m&&m.pos!=='set'&&!isDragonEffectTargetBlocked(s,seat,seat,i))&&
@@ -1060,6 +1117,16 @@ export function isDragonEffectTargetBlocked(s,casterSeat,targetSeat,index){
  return !!s.players[1-casterSeat]?.monsters?.some(m=>m&&m.pos!=='set'&&
    CARD[m.id]?.monsterEffect?.kind==='continuous'&&CARD[m.id].monsterEffect.code==='dragonTargetGuard');
 }
+export function canBorrowMonster(s,seat,index,equip=false){
+ const item=s.players?.[1-seat]?.monsters?.[index];
+ return !!item&&item.controlReturnSeat===undefined&&(!equip||item.pos!=='set')&&
+  !isDragonEffectTargetBlocked(s,seat,1-seat,index);
+}
+function eitherBackrowItem(s,target){
+ if(!target||![0,1].includes(target.seat)||!Number.isInteger(target.index)||target.index<-1||target.index>=5)return null;
+ const player=s.players[target.seat];
+ return target.index===-1?player?.field:player?.backrow[target.index];
+}
 function abilityTargetCheck(s,seat,ab,target,sourceIndex){
  if(!ab)fail('効果の定義がありません');
  const choices={ownMonster:seat,enemyMonster:1-seat,ownBackrow:seat,enemyBackrow:1-seat};
@@ -1081,6 +1148,14 @@ function abilityTargetCheck(s,seat,ab,target,sourceIndex){
  if(ab.target==='enemyFaceDownMonster'){
   assert(s.players[1-seat].monsters.some(m=>m?.pos==='set'),'相手に裏側守備表示のモンスターがありません');
  }
+ if(ab.target==='eitherBackrow')assert(eitherBackrowItem(s,target),'対象の魔法・罠を選んでください');
+ if(ab.target==='eitherMonster'){
+  assert(target&&[0,1].includes(target.seat)&&Number.isInteger(target.index)&&target.index>=0&&target.index<5&&
+    s.players[target.seat].monsters[target.index],'対象モンスターを選んでください');
+  assert(!isDragonEffectTargetBlocked(s,seat,target.seat,target.index),'ドラゴン族を効果の対象にできません');
+ }
+ if(ab.operation==='stealUntilEnd'||ab.operation==='stealWithEquip')
+  assert(canBorrowMonster(s,seat,target,ab.operation==='stealWithEquip'),'コントロールを得られる相手モンスターを選んでください');
  if(ab.target==='eitherGraveMonster'){
   assert(s.players[seat].monsters.some(m=>m===null),'自分のモンスターゾーンに空きがありません');
   assert(target&&typeof target==='object'&&!Array.isArray(target)&&
@@ -1115,6 +1190,11 @@ function abilityMonsterRefs(s,seat,target,index,chain,targetMonsterKey){
  }
  if(target==='ownMonster')return isDragonEffectTargetBlocked(s,seat,seat,index)?[]:one(seat,index);
  if(target==='enemyMonster')return isDragonEffectTargetBlocked(s,seat,1-seat,index)?[]:one(1-seat,index);
+ if(target==='eitherMonster'){
+  // Older pending copies of this effect stored an opposing slot number.
+  const selected=Number.isInteger(index)?{seat:1-seat,index}:index;
+  return [0,1].includes(selected?.seat)&&!isDragonEffectTargetBlocked(s,seat,selected.seat,selected.index)?one(selected.seat,selected.index):[];
+ }
  if(target==='attacker'){
   const a=chain?.afterAttack||(s.pending?.kind==='attack'?s.pending:null);
   return a&&!isDragonEffectTargetBlocked(s,seat,a.by,a.attacker)?one(a.by,a.attacker):[];
@@ -1127,6 +1207,11 @@ function abilityMonsterRefs(s,seat,target,index,chain,targetMonsterKey){
  }));
 }
 function abilityBackrowRefs(s,seat,target,index,identityKey){
+ if(target==='eitherBackrow'){
+  const selected=Number.isInteger(index)?{seat:1-seat,index}:index;
+  const item=eitherBackrowItem(s,selected);
+  return item&&(identityKey===undefined||item.key===identityKey)?[{side:selected.seat,index:selected.index,key:item.key}]:[];
+ }
  const one=(side,at)=>{
   const item=Number.isInteger(at)&&at>=0&&at<5?s.players[side].backrow[at]:null;
   return item&&(identityKey===undefined||item.key===identityKey)?[{side,index:at,key:item.key}]:[];
@@ -1282,6 +1367,28 @@ function executeAbility(s,entry,chain,stageOverride=null){
    const enemy=s.players[1-seat];
    enemy.attackSealedThroughTurn=Math.max(enemy.attackSealedThroughTurn||0,s.turnNo+5);
    log(s,`「${card.name}」：相手の次の3ターンの攻撃を禁止しました。`);
+   return;
+ }
+ if(ab.operation==='stealUntilEnd'||ab.operation==='stealWithEquip'){
+   const equipped=ab.operation==='stealWithEquip';
+   const equip=equipped?p.backrow[entry.persistentIndex]:null;
+   const enemy=1-seat;
+   const target=abilityMonsterRefs(s,seat,ab.target,entry.target,chain,entry.targetMonsterKey)[0];
+   if(!target||!canBorrowMonster(s,seat,target.index,equipped)||
+      (equipped&&(!equip||equip.key!==entry.sourceBackrowKey||equip.linkKey!==entry.targetMonsterKey))){
+     if(equipped&&equip&&equip.key===entry.sourceBackrowKey){p.backrow[entry.persistentIndex]=null;p.grave.push(equip.id);}
+     return;
+   }
+   const item=s.players[enemy].monsters[target.index];
+   if(!moveControlledMonster(s,enemy,target.index,seat)){
+     if(equipped){p.backrow[entry.persistentIndex]=null;p.grave.push(equip.id);}
+     return;
+   }
+   item.controlReturnSeat=enemy;
+   if(equipped)item.controlEquipKey=equip.key;
+   else item.controlThroughTurn=s.turnNo;
+   item.attacked=false;delete item.attackCount;
+   log(s,`「${card.name}」：対象モンスターのコントロールを得ました。`);
    return;
  }
  if(card.type==='spell'&&ab.when==='continuous'){
@@ -1708,6 +1815,7 @@ function bindMonsterTarget(s,entry){
  let side=null,at=entry.target;
  if(ab?.target==='ownMonster'||ab?.target==='self'&&['doubleOriginalAtkEndDestroy','timeWizardCoin'].includes(ab.operation))side=entry.seat;
  else if(ab?.target==='enemyMonster')side=1-entry.seat;
+ else if(ab?.target==='eitherMonster'){side=entry.target?.seat;at=entry.target?.index;}
  else if(ab?.target==='enemyFaceDownMonster'){
   side=1-entry.seat;at=s.players[side]?.monsters?.findIndex(m=>m?.pos==='set');
  }
@@ -1715,15 +1823,16 @@ function bindMonsterTarget(s,entry){
   const attack=s.pending?.kind==='attack'?s.pending:s.pending?.afterAttack;
   if(attack){side=attack.by;at=attack.attacker;}
  }
- if(side!==null&&Number.isInteger(at)&&at>=0&&at<5){
+ if([0,1].includes(side)&&Number.isInteger(at)&&at>=0&&at<5){
   const victim=s.players[side]?.monsters?.[at];
   if(victim&&!Number.isInteger(victim.key))victim.key=++s.nextKey;
   if(Number.isInteger(victim?.key))entry.targetMonsterKey=victim.key;
  }
  // Assign an identity only to the two new targeted backrow effects. A new
  // card in the same zone must not be destroyed by an older chain link.
- if(['destroyBackrow','removeSpellBackrow','destroyThenSetBackrow','banishSetBackrow','banishBackrow','returnBackrow'].includes(ab?.operation)&&ab?.target==='enemyBackrow'&&Number.isInteger(at)&&at>=0&&at<5){
-  const item=s.players[1-entry.seat]?.backrow?.[at];
+ if(['destroyBackrow','removeSpellBackrow','destroyThenSetBackrow','banishSetBackrow','banishBackrow','returnBackrow'].includes(ab?.operation)){
+  const item=ab.target==='eitherBackrow'?eitherBackrowItem(s,at):
+    Number.isInteger(at)&&['ownBackrow','enemyBackrow'].includes(ab.target)?s.players[ab.target==='ownBackrow'?entry.seat:1-entry.seat]?.backrow?.[at]:null;
   if(item){
    if(!Number.isInteger(item.key))item.key=++s.nextKey;
    entry.targetBackrowKey=item.key;
@@ -1733,7 +1842,7 @@ function bindMonsterTarget(s,entry){
 }
 function startChain(s,entry,afterAttack=null){
  assert(!s.pending||s.pending.kind==='attack','対応処理中です');
- s.pending={kind:'chain',stack:[bindMonsterTarget(s,{...chainEntry(entry.seat,entry.cardId,entry.target,entry.discardOnResolve),...(entry.persistentZone?{persistentZone:entry.persistentZone,...entry.persistentZone==='backrow'?{persistentIndex:entry.persistentIndex}:{}}:{})})],priority:1-entry.seat,passes:0,afterAttack,attackNegated:false,attackInterrupted:false};
+ s.pending={kind:'chain',stack:[bindMonsterTarget(s,{...entry})],priority:1-entry.seat,passes:0,afterAttack,attackNegated:false,attackInterrupted:false};
  log(s,`チェーン1：「${mustCard(entry.cardId).name}」発動。相手の応答を待ちます。`);
 }
 function castSpell(s,seat,source,index,target,costIndices){
@@ -1760,6 +1869,12 @@ function castSpell(s,seat,source,index,target,costIndices){
     if(kind==='quick')assert(old.setTurn<s.turnNo,'速攻魔法はセットしたターンには発動できません');
   }
   const ab=actionAbility(c);assert(ab,'この魔法の効果は未対応です');
+  if(ab.target==='eitherBackrow'){
+    assert(source!=='backrow'||target?.seat!==seat||target.index!==index,'発動するカード自身は対象にできません');
+    assert(canOfferSpell(s,seat,c,source,index),'対象にできる魔法・罠がありません');
+  }
+  if(['stealUntilEnd','stealWithEquip'].includes(ab.operation))
+    assert(canOfferSpell(s,seat,c,source,index),'対象モンスター・空きゾーン・LPを確認してください');
   // Reject effects that have no legal target or insufficient draw/search cards
   // before paying costs, removing the spell, or opening a networked chain.
   if(!ab.before&&(ab.operation==='reviveSelected'||ab.operation==='searchNamed'||
@@ -1768,7 +1883,7 @@ function castSpell(s,seat,source,index,target,costIndices){
     assert(canOfferSpell(s,seat,c,source),'発動に必要なデッキ・墓地・モンスター・ゾーンがありません');
   // Keep the established Kuriboh/Flute error messages and cost checks.
   // Only preflight new discard/target and equip cases before opening a chain.
-  if(ab.operation==='destroy'&&ab.before?.operation==='discardOwnHand'||kind==='equip'&&ab.operation==='boost')
+ if(ab.operation==='destroy'&&(ab.before?.operation==='discardOwnHand'||ab.target==='eitherMonster')||kind==='equip'&&ab.operation==='boost')
     assert(canOfferSpell(s,seat,c,source),'発動に必要なモンスター・手札・空きゾーンがありません');
   if(ab.operation==='returnBackrow'&&ab.target==='bothAllBackrow')
     assert(canOfferSpell(s,seat,c,source),'戻す魔法・罠がフィールドにありません');
@@ -1830,6 +1945,7 @@ function castSpell(s,seat,source,index,target,costIndices){
   const ongoing=persistentSpell(c);
   let slotItem={id,faceDown:false,setTurn:s.turnNo};
   if(!fromHand)slotItem={...old,faceDown:false};
+  if(ab.operation==='stealWithEquip'&&!Number.isInteger(slotItem.key))slotItem.key=++s.nextKey;
   if(ab.operation==='preventEquipAttack')slotItem.virusEndPhases=0;
   if(kind==='equip'||(kind==='continuous'&&['ownMonster','enemyMonster'].includes(ab.target))){
     const linkOwner=ab.target==='enemyMonster'?1-seat:seat;
@@ -1858,6 +1974,7 @@ function castSpell(s,seat,source,index,target,costIndices){
   if(ongoing){
     entry.persistentZone=kind==='field'?'field':'backrow';
     if(kind!=='field')entry.persistentIndex=fromHand?p.backrow.indexOf(slotItem):index;
+    if(ab.operation==='stealWithEquip')entry.sourceBackrowKey=slotItem.key;
   }
   if(!responding){startChain(s,entry);return;}
   if(attackResponse){startChain(s,entry,{...ch});return;}
@@ -1965,21 +2082,24 @@ export function canProtectOwnTraps(s,seat,previous,excludeIndex=-1){
  if(['enemyAllBackrow','bothAllBackrow'].includes(ab.target))return own.some(active);
  if(ab.target==='enemyBackrow'&&Number.isInteger(previous.target))
   return previous.target!==excludeIndex&&!!active(own[previous.target],previous.target);
+ if(ab.target==='eitherBackrow'&&previous.target?.seat===seat&&previous.target.index>=0)
+  return !!active(own[previous.target.index],previous.target.index);
  return false;
 }
 export function redirectedSpellTargetSlot(s,seat,previous){
  if(![0,1].includes(seat)||previous?.seat!==1-seat)return -1;
  const spell=CARD[previous.cardId],ab=actionAbility(spell);
  // Persistent equips/fields already bind a link at activation; never retarget those.
- if(spell?.type!=='spell'||!['normal','quick'].includes(spellKind(spell))||!['ownMonster','enemyMonster'].includes(ab?.target))return -1;
- const side=ab.target==='ownMonster'?previous.seat:1-previous.seat;
- const at=previous.target;
+ if(spell?.type!=='spell'||!['normal','quick'].includes(spellKind(spell))||!['ownMonster','enemyMonster','eitherMonster'].includes(ab?.target))return -1;
+ const side=ab.target==='eitherMonster'?previous.target?.seat:ab.target==='ownMonster'?previous.seat:1-previous.seat;
+ const at=ab.target==='eitherMonster'?previous.target?.index:previous.target;
  if(!Number.isInteger(at)||at<0||at>=5)return -1;
  const monsters=s?.players?.[side]?.monsters;
  const original=monsters?.[at];
  if(!original||(previous.targetMonsterKey!==undefined&&original.key!==previous.targetMonsterKey))return -1;
  for(let i=0;i<5;i++){
-  if(i===at||!monsters[i]||isDragonEffectTargetBlocked(s,previous.seat,side,i))continue;
+  if(i===at||!monsters[i]||isDragonEffectTargetBlocked(s,previous.seat,side,i)||
+    (ab.operation==='stealUntilEnd'&&!canBorrowMonster(s,previous.seat,i)))continue;
   return i;
  }
  return -1;
@@ -2025,7 +2145,7 @@ export function canActivateResponseTrap(s,seat,index){
     (ab.operation==='negateEffect'&&ab.before?.operation==='discardOwnHand')){
    if(source?.type!=='spell')return false;
    if(card.responseGuard==='targetedSpell'&&
-      !['ownMonster','enemyMonster'].includes(actionAbility(source)?.target))return false;
+      !['ownMonster','enemyMonster','eitherMonster'].includes(actionAbility(source)?.target))return false;
  }
  if(ab.before?.operation==='discardOwnHand'&&
     s.players[seat].hand.length<ab.before.amount)return false;
@@ -2058,7 +2178,7 @@ function addChainTrap(s,seat,index,target,costIndices){
  if(c.responseGuard){
   const previous=ch.stack[ch.stack.length-1],spell=previous&&CARD[previous.cardId];
   assert(spell?.type==='spell','魔法カードの発動にしか対応できません');
-  if(c.responseGuard==='targetedSpell')assert(['ownMonster','enemyMonster'].includes(actionAbility(spell)?.target),'モンスター1体を対象とする魔法にしか対応できません');
+  if(c.responseGuard==='targetedSpell')assert(['ownMonster','enemyMonster','eitherMonster'].includes(actionAbility(spell)?.target),'モンスター1体を対象とする魔法にしか対応できません');
  }
  if(ab.operation==='negateEffect'&&ab.before?.operation==='discardOwnHand')
   assert(CARD[ch.stack[ch.stack.length-1]?.cardId]?.type==='spell','魔法カードの発動にしか対応できません');
@@ -2104,7 +2224,8 @@ function finishChain(s){
        const owner=s.players[entry.seat];
        if(entry.persistentZone==='field'){
          if(owner.field?.id===entry.cardId){owner.field=null;owner.grave.push(entry.cardId);}
-       }else if(Number.isInteger(entry.persistentIndex)&&owner.backrow[entry.persistentIndex]?.id===entry.cardId){
+       }else if(Number.isInteger(entry.persistentIndex)&&owner.backrow[entry.persistentIndex]?.id===entry.cardId&&
+          (entry.sourceBackrowKey===undefined||owner.backrow[entry.persistentIndex].key===entry.sourceBackrowKey)){
          owner.backrow[entry.persistentIndex]=null;owner.grave.push(entry.cardId);
        }
      }
@@ -2120,8 +2241,8 @@ function finishChain(s){
      const newIndex=redirectedSpellTargetSlot(s,entry.seat,earlier);
      if(newIndex>=0){
        const priorAbility=actionAbility(CARD[earlier.cardId]);
-       const side=priorAbility.target==='ownMonster'?earlier.seat:1-earlier.seat;
-       earlier.target=newIndex;
+       const side=priorAbility.target==='eitherMonster'?earlier.target.seat:priorAbility.target==='ownMonster'?earlier.seat:1-earlier.seat;
+       earlier.target=priorAbility.target==='eitherMonster'?{seat:side,index:newIndex}:newIndex;
        const key=s.players[side].monsters[newIndex]?.key;
        if(Number.isInteger(key))earlier.targetMonsterKey=key;
        else delete earlier.targetMonsterKey; // Firebase cannot store undefined.
@@ -2221,6 +2342,7 @@ function endTurn(s) {
       p.monsters[i]=null;
       log(s,`「${CARD[item.id].name}」はエンドフェイズに持ち主の手札へ戻りました。`);
     }
+    returnBorrowedMonsters(s,true);
   }
   // Official OCG hand-size adjustment: never discard freely during main/battle.
   // If there are more than six cards, remain in End Phase until the owner selects discards.
@@ -2246,7 +2368,14 @@ function endTurn(s) {
   const active=s.players[s.turn];
   for(const mon of active.monsters)if(mon){mon.attacked=false;delete mon.attackCount;}
   log(s,`${active.name} のターン。`);
-  if(draw(active,1,s))log(s,`${active.name} が1枚ドローしました。`);
+  if(draw(active,1,s)){
+    log(s,`${active.name} が1枚ドローしました。`);
+    for(const item of s.players[1-s.turn].monsters){
+      if(!item||item.controlReturnSeat!==s.turn)continue;
+      const equip=linkedControlEquip(s,item),amount=CARD[equip?.id]?.ability?.amount;
+      if(amount>0){active.lp+=amount;log(s,`「${CARD[equip.id].name}」：${active.name} のLPが${amount}回復しました。`);}
+    }
+  }
   checkWinner(s);
 }
 /**

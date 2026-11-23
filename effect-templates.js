@@ -65,10 +65,10 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'trap',ability:{when:'attack',operation:'setAttackerDefense',target:'attacker',amount:0}},'鎖付きブーメラン式：守備変更','et_builtin_boomerang'),
  templateFromCard({type:'spell',spellKind:'quick',ability:{when:'main',operation:'summonKuribohTokens',target:'self',amount:0}},'増殖式：クリボートークン','et_builtin_multiply'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'summonRaceFromHand',target:'self',amount:2,match:'race',query:'ドラゴン',requiredFaceUpName:'ロード・オブ・ドラゴン－ドラゴンの支配者－'}},'ドラゴンの笛式：手札から2体','et_builtin_flute'),
- templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'enemyMonster',amount:0,before:{operation:'discardOwnHand',amount:1}}},'死者への手向け式：手札を捨て破壊','et_builtin_offering'),
+ templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'eitherMonster',amount:0,before:{operation:'discardOwnHand',amount:1}}},'死者への手向け式：手札を捨て破壊','et_builtin_offering'),
  templateFromCard({type:'spell',spellKind:'equip',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:1000}},'デーモンの斧式：装備ATK＋1000','et_builtin_axe'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'removeSpellBackrow',target:'enemyBackrow',amount:0}},'魔法除去式：伏せ確認・魔法破壊','et_builtin_magicremoval'),
- templateFromCard({type:'spell',spellKind:'quick',ability:{when:'main',operation:'destroyBackrow',target:'enemyBackrow',amount:0}},'サイクロン式：魔法・罠1枚破壊','et_builtin_cyclone'),
+ templateFromCard({type:'spell',spellKind:'quick',ability:{when:'main',operation:'destroyBackrow',target:'eitherBackrow',amount:0}},'サイクロン式：魔法・罠1枚破壊','et_builtin_cyclone'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'bothMonsters',amount:0}},'ブラック・ホール式：全モンスター破壊','et_builtin_blackhole'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'reviveBothSet',target:'none',amount:0}},'浅すぎた墓穴式：双方裏守備蘇生','et_builtin_shallow'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'draw',target:'self',amount:3,then:{operation:'discardNewest',target:'self',amount:2}}},'天使の施し式：3枚引いて2枚捨てる','et_builtin_graceful'),
@@ -133,7 +133,8 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'dragonTargetGuard'}},'ロード・オブ・ドラゴン式：ドラゴンを対象保護','et_builtin_dragonlord'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroyBackrow',target:'bothAllBackrow',amount:0}},'大嵐式：魔法・罠を全破壊','et_builtin_heavystorm'),
  templateFromCard({type:'trap',ability:{when:'response',operation:'negateEffect',target:'none',amount:0},responseGuard:'targetedSpell'},'フォースフィールド式：対象魔法を無効','et_builtin_forcefield'),
- templateFromCard({type:'spell',spellKind:'equip',ability:{when:'continuous',operation:'boost',target:'ownMonster',amount:300}},'強奪・現行代替式：ATK＋300','et_builtin_snatch_proxy'),
+ templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'stealUntilEnd',target:'enemyMonster',amount:0}},'心変わり式：エンドフェイズまでコントロール取得','et_builtin_changeofheart'),
+ templateFromCard({type:'spell',spellKind:'equip',ability:{when:'continuous',operation:'stealWithEquip',target:'enemyMonster',amount:1000}},'強奪式：装備中コントロール取得','et_builtin_snatch'),
 ].filter(Boolean).map(Object.freeze));
 
 export function isValidTemplate(t){
