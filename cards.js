@@ -139,6 +139,7 @@ export function defaultPassiveConfig(code){
   if(code==='raceAuraGuard')return {...shared,amount:400,race:'戦士'};
   if(code==='destroyOpponentOnFlip'||code==='recoverOwnSpellOnFlip')return {kind:'flip',code};
   if(code==='returnOpponentOnFlip')return {kind:'flip',code,amount:2};
+  if(code==='destroyOpponentOnFlip')return {kind:'flip',code};
   if(code==='searchStatOnGrave')return {kind:'grave',code,stat:'atk',threshold:1500};
   if(code==='destroyOnAttackToDefense')return {kind:'position',code};
   if(code==='millOpponentDeck')return {kind:'flip',code,amount:5};
@@ -173,10 +174,18 @@ export function validMonsterEffect(e){
   if(e.kind==='grave'&&e.code==='weakenOpponentOnGrave')return Object.keys(e).length===2;
   if(e.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return Object.keys(e).length===3&&Array.isArray(e.names)&&e.names.length===2&&
    new Set(e.names).size===2&&e.names.every(n=>typeof n==='string'&&n.trim()===n&&n.length>=1&&n.length<=32);
-  if(e.kind==='grave')return e.code==='searchStatOnGrave'&&Object.keys(e).length===4&&
+  if(e.kind==='grave')return e.code==='searchStatOnGrave'&&
+    Object.keys(e).length===(e.restrictActivation===true?5:4)&&
+    (e.restrictActivation===undefined||e.restrictActivation===true)&&
     ['atk','def'].includes(e.stat)&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000;
   if(e.kind==='position')return e.code==='destroyOnAttackToDefense'&&Object.keys(e).length===2;
-  if(e.kind==='flip')return (['destroyOpponentOnFlip','recoverOwnSpellOnFlip','cyberJarRevealFive','morphingJarTwo'].includes(e.code)&&Object.keys(e).length===2)|| (e.code==='returnOpponentOnFlip'&&Object.keys(e).length===3&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2)|| (e.code==='millOpponentDeck'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=10)||
+  if(e.kind==='flip'&&['returnOpponentOnFlip','destroyOpponentOnFlip'].includes(e.code)){
+    const bounce=e.code==='returnOpponentOnFlip';
+    return (e.scope===undefined||Object.hasOwn(PASSIVE_SCOPES,e.scope))&&
+      Object.keys(e).length===(bounce?3:2)+(e.scope===undefined?0:1)&&
+      (!bounce||Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2);
+  }
+  if(e.kind==='flip')return (['recoverOwnSpellOnFlip','cyberJarRevealFive','morphingJarTwo'].includes(e.code)&&Object.keys(e).length===2)|| (e.code==='millOpponentDeck'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=10)||
     (e.code==='scoutDrawDiscardSpells'&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=5&&Object.keys(e).length===3);
   if(e.kind==='endPhase')return e.code==='selfReturnHand'&&Object.keys(e).length===2;
   if(['destroyAttachedEquip','doubleOriginalAtkEndDestroy','trapSuppression','rocketAssault','fusionFromExtraPay5000','dragonTargetGuard'].includes(e.code))return (['doubleOriginalAtkEndDestroy','fusionFromExtraPay5000'].includes(e.code)?e.kind==='ignition':e.kind==='continuous')&&Object.keys(e).length===2;
@@ -216,8 +225,9 @@ export function effectText(c){
   if(e?.kind==='trigger'&&e.code==='copyOpponentPrintedStats')return '召喚・反転召喚・特殊召喚時、相手の表側モンスターの元々のATK・DEFをコピー（左端を自動選択・チェーン簡略化）';
   if(e?.kind==='flip'&&e.code==='cyberJarRevealFive')return 'リバース時、フィールドの全モンスターを破壊。お互いのデッキ上から最大5枚を公開し、その中のレベル4以下の通常召喚可能なモンスターを攻撃表示で特殊召喚、残りを手札へ（表示形式の選択・個別チェーン省略）。';
   if(e?.kind==='flip'&&e.code==='morphingJarTwo')return 'リバース時、全モンスターを持ち主のデッキへ戻し、戻した数だけデッキからモンスターを公開。レベル4以下の通常召喚可能なモンスターは裏側守備で特殊召喚し、残りはデッキへ戻す（選択・個別チェーン省略）。トークンは消滅し融合モンスターはEXデッキに戻る。';
-  if(e?.kind==='flip'&&e.code==='returnOpponentOnFlip')return `リバース時、相手のモンスターを左端から最大${e.amount}体、持ち主の手札へ戻す（自動選択・チェーン簡略化）`;
-  if(e?.kind==='flip'&&e.code==='destroyOpponentOnFlip')return 'リバース時、相手のモンスター1体を破壊する（左端を自動選択・チェーン簡略化）';
+  if(e?.kind==='flip'&&e.code==='returnOpponentOnFlip')return `リバース時、${PASSIVE_SCOPES[e.scope]||'相手'}の有効なモンスターを左端から最大${e.amount}体、持ち主の手札へ戻す（相手側を優先して自動選択。チェーン応答は省略）`;
+  if(e?.kind==='flip'&&e.code==='destroyOpponentOnFlip')return `リバース時、${PASSIVE_SCOPES[e.scope]||'相手'}の有効なモンスター1体を破壊する（相手側を優先して自動選択。チェーン応答は省略）`;
+  if(e?.kind==='grave'&&e.code==='searchStatOnGrave')return `フィールドから墓地へ送られたとき、デッキの${e.stat==='def'?'DEF':'ATK'}${e.threshold}以下のモンスター1体を手札に加える（自動選択）。${e.restrictActivation?'同名のサーチはターン中1回。加えたカードと同名の発動する効果はターン終了まで使えない。':''}`;
   if(e?.kind==='flip'&&e.code==='recoverOwnSpellOnFlip')return 'リバース時、自分の墓地の魔法カード1枚を手札に戻す（最初の候補を自動選択・チェーン簡略化）';
   if(e?.kind==='position'&&e.code==='destroyOnAttackToDefense')return '攻撃表示から表側守備表示に手動変更したとき、相手のモンスター1体を破壊する（左端を自動選択。カード効果による表示変更・チェーンは未対応）';
   if(e?.kind==='flip'&&e.code==='millOpponentDeck')return `リバース時、相手のデッキの上から${e.amount}枚を墓地へ送る`;
