@@ -83,7 +83,7 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'trap',ability:{when:'attack',operation:'negateEndBattle',target:'none',amount:0}},'攻撃の無力化式：バトル終了','et_builtin_negatebattle'),
  templateFromCard({type:'trap',ability:{when:'attack',operation:'blastAttacker',target:'attacker',amount:0}},'破壊輪式：攻撃者破壊・双方にダメージ','et_builtin_ring'),
  templateFromCard({type:'trap',ability:{when:'summon',operation:'destroyOnEnemySummon',target:'enemyMonster',amount:1000}},'落とし穴式：召喚時に自動破壊','et_builtin_traphole'),
- templateFromCard({type:'trap',ability:{when:'response',operation:'negateEffect',target:'none',amount:0,before:{operation:'discardOwnHand',amount:1}}},'ジャマー式：手札を捨て魔法無効','et_builtin_jammer'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='マジック・ジャマー'),'ジャマー式：手札を捨て魔法無効','et_builtin_jammer'),
  templateFromCard({type:'trap',ability:{when:'response',operation:'redirectSpellTarget',target:'none',amount:0}},'天使の手鏡式：魔法対象変更','et_builtin_handmirror'),
  templateFromCard({type:'trap',ability:{when:'response',operation:'protectOwnTraps',target:'none',amount:0}},'偽物のわな式：罠破壊を防止','et_builtin_faketrap'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'lockPositionNextTurn',target:'opponent',amount:0}},'催眠術式：次ターン表示変更禁止','et_builtin_hypnosis'),
