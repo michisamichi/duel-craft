@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CARD, isSafeCustomCard, replaceCustomCards} from '../cards.js?v=2047';
-import {applyAction, canOfferSpell} from '../engine.js?v=2047';
-import {applyTemplate, BUILTIN_EFFECT_TEMPLATES, readTemplates, saveTemplate} from '../effect-templates.js?v=2047';
-import {isValidAbility} from '../rules.js?v=2047';
+import {CARD, isSafeCustomCard, replaceCustomCards} from '../cards.js?v=2048';
+import {applyAction, canOfferSpell} from '../engine.js?v=2048';
+import {applyTemplate, BUILTIN_EFFECT_TEMPLATES, readTemplates, saveTemplate} from '../effect-templates.js?v=2048';
+import {isValidAbility} from '../rules.js?v=2048';
 
 const byName = (name) => Object.values(CARD).find((card) => card.name === name);
 const heart = byName('心変わり');

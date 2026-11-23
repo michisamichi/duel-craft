@@ -1,7 +1,7 @@
 /** A small, declarative user effect-recipe library. No script execution, no engine extensions. */
-import {effectText,validMonsterEffect} from './cards.js?v=2047';
-import {HISTORICAL_CARDS} from './historical-data.js?v=2047';
-import {isValidAbility,abilityText} from './rules.js?v=2047';
+import {effectText,validMonsterEffect} from './cards.js?v=2048';
+import {HISTORICAL_CARDS} from './historical-data.js?v=2048';
+import {isValidAbility,abilityText} from './rules.js?v=2048';
 
 export const EFFECT_TEMPLATE_KEY='saho-effect-templates-v1';
 export const EFFECT_TEMPLATE_LIMIT=40;

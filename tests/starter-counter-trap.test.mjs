@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {CARDS,PRESETS,replaceCustomCards} from '../cards.js?v=2047';
-import {applyAction,canActivateResponseTrap,createDemo} from '../engine.js?v=2047';
-import {applyTemplate,BUILTIN_EFFECT_TEMPLATES,templateFromCard} from '../effect-templates.js?v=2047';
+import {CARDS,PRESETS,replaceCustomCards} from '../cards.js?v=2048';
+import {applyAction,canActivateResponseTrap,createDemo} from '../engine.js?v=2048';
+import {applyTemplate,BUILTIN_EFFECT_TEMPLATES,templateFromCard} from '../effect-templates.js?v=2048';
 
 test('Magic Jammer template keeps its spell guard through saving and an actual chain', () => {
   const template = BUILTIN_EFFECT_TEMPLATES.find(t=>t.id==='et_builtin_jammer');

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {CARD,CARDS,PRESETS,replaceCustomCards,validMonsterEffect} from '../cards.js?v=2047';
-import {applyAction,canOfferMonsterIgnition,createDemo,monsterEffectActivationBlocked,normalizeRoom} from '../engine.js?v=2047';
-import {applyTemplate,BUILTIN_EFFECT_TEMPLATES,readTemplates,saveTemplate,templateDescription} from '../effect-templates.js?v=2047';
+import {CARD,CARDS,PRESETS,replaceCustomCards,validMonsterEffect} from '../cards.js?v=2048';
+import {applyAction,canOfferMonsterIgnition,createDemo,monsterEffectActivationBlocked,normalizeRoom} from '../engine.js?v=2048';
+import {applyTemplate,BUILTIN_EFFECT_TEMPLATES,readTemplates,saveTemplate,templateDescription} from '../effect-templates.js?v=2048';
 
 const id = name => CARDS.find(card=>card.name===name).id;
 const sangan = id('クリッター'), witch = id('黒き森のウィッチ');

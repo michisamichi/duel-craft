@@ -1,6 +1,6 @@
-import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2047';
-import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
-export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2048';
+import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2048';
+export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2048';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},

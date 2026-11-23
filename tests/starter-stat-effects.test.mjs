@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {CARD,CARDS,PRESETS,replaceCustomCards,isSafeCustomCard,validMonsterEffect} from '../cards.js?v=2047';
-import {applyAction,createDemo,normalizeRoom,effectiveAtk,effectiveDef} from '../engine.js?v=2047';
-import {BUILTIN_EFFECT_TEMPLATES,applyTemplate,readTemplates,saveTemplate} from '../effect-templates.js?v=2047';
-import {makeBackup,parseBackup,applyBackup} from '../backup.js?v=2047';
+import {CARD,CARDS,PRESETS,replaceCustomCards,isSafeCustomCard,validMonsterEffect} from '../cards.js?v=2048';
+import {applyAction,createDemo,normalizeRoom,effectiveAtk,effectiveDef} from '../engine.js?v=2048';
+import {BUILTIN_EFFECT_TEMPLATES,applyTemplate,readTemplates,saveTemplate} from '../effect-templates.js?v=2048';
+import {makeBackup,parseBackup,applyBackup} from '../backup.js?v=2048';
 
 const id = name => CARDS.find(card => card.name === name).id;
 const monster = (id, key, pos = 'atk') => ({id,key,pos,bornTurn:1,bonus:0,defBonus:0});
@@ -73,7 +73,7 @@ test('翻弄するエルフの剣士 uses the attacking controller in redirected
   b.backrow[0] = {id:id('マジックアーム・シールド'),faceDown:true,setTurn:1,key:5};
   let next = play(s,0,{type:'attack',index:0,target:0});
   next = play(next,1,{type:'activateTrap',index:0});
-  while(next.pending?.kind==='chain')next=play(next,next.pending.priority,{type:'chainPass'});
+  for(let i=0;i<2&&next.pending?.kind==='chain';i++)next=play(next,next.pending.priority,{type:'chainPass'});
   assert.equal(next.pending,null);
   assert.equal(next.players[0].monsters[1]?.id,a.monsters[1].id);
   assert.equal(next.players[1].lp,b.lp-350);

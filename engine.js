@@ -1,5 +1,5 @@
-import {SHEEP_TOKEN_ID,KURIBOH_TOKEN_ID,CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind, normalizeRace, normalizeAttribute} from './cards.js?v=2047';
-import {normalizeRuleSettings,BEFORE_META,fusionMaterialsMatch} from './rules.js?v=2047';
+import {SHEEP_TOKEN_ID,KURIBOH_TOKEN_ID,CARD, expandDeck, shuffle, validDeck, spellKind, persistentSpell, summonKind, normalizeRace, normalizeAttribute} from './cards.js?v=2048';
+import {normalizeRuleSettings,BEFORE_META,fusionMaterialsMatch} from './rules.js?v=2048';
 
 export const PHASES = {draw:'ドロー',main1:'メイン1',battle:'バトル',main2:'メイン2',end:'エンド'};
 const blank5 = () => [null,null,null,null,null];

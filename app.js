@@ -1,16 +1,16 @@
-import {makeRoomCode,normalizeRoomCode,isRoomCode} from './room-code.js?v=2047';
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,PASSIVE_SCALE_CODES,PASSIVE_SCOPES,COUNT_STAT_ZONES,COUNT_MONSTER_KINDS,defaultPassiveConfig,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS,ATTRIBUTE_NAMES,RACE_NAMES,HISTORICAL_PRESETS,normalizeAttribute} from './cards.js?v=2047';
-import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=2047';
-import {makeBackup,parseBackup,applyBackup} from './backup.js?v=2047';
-import {EFFECT_TEMPLATE_KEY,BUILTIN_EFFECT_TEMPLATES,readTemplates,saveTemplate,deleteTemplate,canApplyTemplate,applyTemplate,templateDescription} from './effect-templates.js?v=2047';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef,isAttackTargetLegal,canManuallyChangePosition,remainingAttacks,specialHandTributeSlots,canDirectAttackWithMonsters,isAttackSealedByEquip,trapsSuppressed,canActivateMainTrap,canExtraNormalSummon,summonTributeNeed,validSummonTributes,hasDoubleLightTribute,canProtectOwnTraps,redirectedSpellTargetSlot,attackerAllySlot,canActivateAttackTrap,canActivateResponseTrap,canOfferSpell,canBorrowMonster,isDragonEffectTargetBlocked,canOfferMonsterIgnition,monsterEffectActivationBlocked} from './engine.js?v=2047';
-import {LIMITS,cardLimit,cardCost,deckCost,fusionMaterialsMatch,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,BEFORE_META,abilityCostOptions,abilityTargets,followUpTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=2047';
-import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=2047';
-import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=2047';
-import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=2047';
-import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=2047';
-import {playBoardCue,clearBoardCue} from './board-effects.js?v=2047';
-import {createRoomSnapshotGate,actionScopeIsCurrent,matchesOriginalRoom} from './online-guards.js?v=2047';
+import {makeRoomCode,normalizeRoomCode,isRoomCode} from './room-code.js?v=2048';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,PASSIVE_SCALE_CODES,PASSIVE_SCOPES,COUNT_STAT_ZONES,COUNT_MONSTER_KINDS,defaultPassiveConfig,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS,ATTRIBUTE_NAMES,RACE_NAMES,HISTORICAL_PRESETS,normalizeAttribute} from './cards.js?v=2048';
+import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=2048';
+import {makeBackup,parseBackup,applyBackup} from './backup.js?v=2048';
+import {EFFECT_TEMPLATE_KEY,BUILTIN_EFFECT_TEMPLATES,readTemplates,saveTemplate,deleteTemplate,canApplyTemplate,applyTemplate,templateDescription} from './effect-templates.js?v=2048';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef,isAttackTargetLegal,canManuallyChangePosition,remainingAttacks,specialHandTributeSlots,canDirectAttackWithMonsters,isAttackSealedByEquip,trapsSuppressed,canActivateMainTrap,canExtraNormalSummon,summonTributeNeed,validSummonTributes,hasDoubleLightTribute,canProtectOwnTraps,redirectedSpellTargetSlot,attackerAllySlot,canActivateAttackTrap,canActivateResponseTrap,canOfferSpell,canBorrowMonster,isDragonEffectTargetBlocked,canOfferMonsterIgnition,monsterEffectActivationBlocked} from './engine.js?v=2048';
+import {LIMITS,cardLimit,cardCost,deckCost,fusionMaterialsMatch,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,BEFORE_META,abilityCostOptions,abilityTargets,followUpTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=2048';
+import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=2048';
+import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=2048';
+import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=2048';
+import {VISUAL_CHOICES,SOUND_CHOICES,readFxSettings,writeFxSettings,unlockAudio,playCue,setBgmPlaying} from './fx.js?v=2048';
+import {playBoardCue,clearBoardCue} from './board-effects.js?v=2048';
+import {createRoomSnapshotGate,actionScopeIsCurrent,matchesOriginalRoom} from './online-guards.js?v=2048';
 
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -169,7 +169,7 @@ function renderHome(){
     ui.activeTab==='settings'?settingsPage():
     `<section class="sv-home sv-duel-home" aria-label="デュエル">
       <div class="sv-hero sv-hero-compact">
-        <img src="./sahoverse-icon-192.png?v=2047" width="66" height="66" alt="" class="sv-crest">
+        <img src="./sahoverse-icon-192.png?v=2048" width="66" height="66" alt="" class="sv-crest">
         <div class="sv-hero-text"><div class="sv-hero-title">SAHOVERSE</div><div class="sv-hero-sub">CARD DUEL</div></div>
       </div>
       <div class="sv-idle-kicker">BATTLE ARENA <span aria-hidden="true">/ 01</span></div>
@@ -261,7 +261,7 @@ async function importBackup(file){
     if(!storageAvailable)throw Error('端末保存が制限されています。Safariから開いてください');
     applyBackup(window.localStorage,imported);
     toast('復元しました。画面を再読み込みします');
-    location.href=location.pathname+'?v=2047';
+    location.href=location.pathname+'?v=2048';
   }catch(e){toast('復元できません：'+e.message);}
 }
 async function reconnectLastRoom(code,fromInvite=false){

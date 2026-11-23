@@ -333,6 +333,44 @@ def jammer_editor(page):
     card = page.evaluate("""Object.values(JSON.parse(localStorage.getItem('browser-mock:cardLibrary/cards'))).find(card=>card.name==='検証用魔法無効')""")
     assert card['responseGuard']=='spell' and card['ability']['before']=={'operation':'discardOwnHand','amount':1}
 
+
+def native_editor(page):
+    page.goto('https://saho.test')
+    open_cards(page)
+    for suffix,kind,code,name_suffix,updates in [
+        ('baphomet','trigger','searchDeckOnSummon','召喚',{'cardSearchName':'別の幻獣','cardSearchSummonTiming':'normalOnly'}),
+        ('chimera','grave','reviveMaterialOnDestroy','蘇生',{'cardNativeName1':'新しい素材','cardRevivalPosition':'def'}),
+        ('copycat','trigger','copyOpponentPrintedStats','攻守',{'cardFaceUpScope':'own'}),
+        ('gilfer','grave','weakenOpponentOnGrave','墓地',{'cardFaceUpScope':'both','cardWeakenAmount':'315'}),
+        ('kuriboh','hand','preventBattleDamage','手札防御',{}),
+        ('valkyrion','hand','specialByThreeNames','指定名素材',{'cardNativeName2':'磁石戦士ベータ'}),
+    ]:
+        action(page,'newCard').click()
+        card_name='検証'+name_suffix
+        page.locator('#cardName').fill(card_name)
+        page.locator('#cardSubtype').select_option('effect')
+        choose_template(page,'et_builtin_'+suffix)
+        expect(page.locator('#cardEffectKind')).to_have_value(kind)
+        expect(page.locator('#cardEffectCode')).to_have_value(code)
+        for element,value in updates.items():
+            control=page.locator('#'+element)
+            if control.evaluate('e=>e.tagName')=='SELECT':
+                control.select_option(value)
+            else:
+                control.fill(value)
+        action(page,'saveCard').click()
+        expect(page.locator('#toast')).to_contain_text('共有カードを保存しました')
+        card=page.evaluate("""name=>Object.values(JSON.parse(localStorage.getItem('browser-mock:cardLibrary/cards'))).find(card=>card.name===name)""",card_name)
+        assert card['monsterEffect']['kind']==kind and card['monsterEffect']['code']==code, card
+    page.reload()
+    open_cards(page)
+    for card_name,expected in [('検証指定名素材',{'cardNativeName2':'磁石戦士ベータ','cardEffectKind':'hand'}),('検証蘇生',{'cardNativeName1':'新しい素材','cardRevivalPosition':'def'}),('検証墓地',{'cardFaceUpScope':'both','cardWeakenAmount':'315'})]:
+        page.locator('.card-manage-item[data-cardname="'+card_name+'"] [data-action="editCard"]').click()
+        for element,value in expected.items():
+            expect(page.locator('#'+element)).to_have_value(value)
+        action(page,'cardList').click()
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(
         executable_path=os.environ.get('SAHOVERSE_CHROMIUM'),
@@ -356,6 +394,7 @@ with sync_playwright() as p:
         virus_cost(page)
         offering_cost(page)
         jammer_editor(page)
+        native_editor(page)
         assert not page_errors, page_errors
-        print(label, 'passed baseline practice duel, template save, card save/reload/re-edit, adjustable count filters, canceling revive, stale and duplicate actions, Virus and Offering costs, and Magic Jammer template', flush=True)
+        print(label, 'passed baseline practice duel, template save, card save/reload/re-edit, adjustable count filters, canceling revive, stale and duplicate actions, Virus and Offering costs, Magic Jammer, and native monster templates', flush=True)
         page.close()

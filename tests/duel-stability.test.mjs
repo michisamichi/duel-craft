@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {CARD, CARDS, PRESETS} from '../cards.js?v=2047';
-import {applyAction, createDemo, canActivateMainTrap, canOfferSpell} from '../engine.js?v=2047';
-import {actionScopeIsCurrent, createRoomSnapshotGate, matchesOriginalRoom} from '../online-guards.js?v=2047';
+import {CARD, CARDS, PRESETS} from '../cards.js?v=2048';
+import {applyAction, createDemo, canActivateMainTrap, canOfferSpell} from '../engine.js?v=2048';
+import {actionScopeIsCurrent, createRoomSnapshotGate, matchesOriginalRoom} from '../online-guards.js?v=2048';
 
 const duel = phase => {
   const game = createDemo({counts1: PRESETS.red.counts, counts2: PRESETS.blue.counts});
