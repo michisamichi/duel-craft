@@ -1,6 +1,6 @@
-import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2022';
-import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2022';
-export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2022';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2047';
+import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
+export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2047';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
 export const CARDS = [
   {id:'m01',name:'紅蓮の剣士',type:'monster',level:4,atk:1800,def:1100,emoji:'⚔️',desc:'炎の剣で戦う勇敢な戦士。'},
@@ -91,7 +91,7 @@ export const MONSTER_EFFECTS = {
   ignition: {fusionFromExtraPay5000:'5000LPを支払い、EXデッキ先頭の融合モンスター1体を特殊召喚（簡易）',doubleOriginalAtkEndDestroy:'自身の元々のATKをエンドフェイズまで2倍にし、そのエンドフェイズに自壊（簡易）',burn500:'相手に500ダメージ',heal500:'自分のLPを500回復',draw1:'1枚ドロー',destroy1:'相手のモンスター1体を破壊',atk500:'自分の攻撃力＋500（ターン終了まで）'},
   trigger: {copyOpponentPrintedStats:'召喚・反転召喚・特殊召喚時：相手の表側モンスターの元々のATK・DEFをコピー（左端自動選択）',searchDeckOnSummon:'召喚・反転召喚時：デッキから条件に合うカードを手札へ加える',draw1:'召喚成功時に1枚ドロー',heal500:'召喚成功時にLP500回復',burn500:'召喚成功時に相手に500ダメージ',atk500:'召喚成功時に攻撃力＋500（ターン終了まで）'},
   battle: {recruitOnBattleDestroy:'戦闘で破壊され墓地へ送られたとき：指定属性・指定ATK以下のモンスターをデッキから特殊召喚（簡易）'},
-  grave: {weakenOpponentOnGrave:'フィールドから墓地へ送られた時、相手モンスター1体のATK－500（簡易）',reviveMaterialOnDestroy:'フィールドで破壊された時、指定名のモンスターを墓地から蘇生（簡易）',searchStatOnGrave:'フィールドから墓地へ送られた時：指定ATK/DEF以下のモンスターをデッキから1体手札に加える（自動選択・簡易）'},
+  grave: {weakenOpponentOnGrave:'フィールドから墓地へ送られた時、相手モンスター1体のATK－500（場を離れるまで・簡易）',reviveMaterialOnDestroy:'フィールドで破壊された時、指定名のモンスターを墓地から蘇生（簡易）',searchStatOnGrave:'フィールドから墓地へ送られた時：指定ATK/DEF以下のモンスターをデッキから1体手札に加える（自動選択・簡易）'},
   flip: {cyberJarRevealFive:'リバース時：双方のモンスターを破壊し各5枚公開、レベル4以下を特殊召喚（簡易）',morphingJarTwo:'リバース時：双方のモンスターをデッキへ戻して、戻した数だけモンスターを公開しレベル4以下を裏側守備で特殊召喚（簡易）',returnOpponentOnFlip:'リバース時：相手モンスターを最大2体手札へ戻す（左端から自動選択・簡易）',destroyOpponentOnFlip:'リバース時：相手のモンスター1体を破壊（自動選択・簡易）',recoverOwnSpellOnFlip:'リバース時：墓地の魔法1枚を回収（自動選択・簡易）',millOpponentDeck:'リバース時：相手のデッキ上から指定枚数を墓地へ送る',scoutDrawDiscardSpells:'リバース時：相手が指定枚数ドローし、その中の魔法カードを墓地へ捨てる'},
   position: {destroyOnAttackToDefense:'攻撃表示から守備表示に手動変更したとき：相手のモンスター1体を破壊（自動選択・簡易）'},
   endPhase: {selfReturnHand:'自分エンドフェイズ：表側の自身を持ち主の手札に戻す'},
@@ -181,7 +181,7 @@ export function effectText(c){
   if(c.ability)return abilityText(c.ability);
   if(e?.kind==='hand'&&e.code==='preventBattleDamage')return '相手の攻撃への対応中に手札から捨て、自分へのその戦闘のダメージを0にする（専用ボタンで発動）。';
   if(e?.kind==='hand'&&e.code==='specialByThreeNames')return `自分フィールドの「${e.names.join('」「')}」を各1体リリースして手札から特殊召喚する（手動選択省略）。`;
-  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return 'フィールドから墓地へ送られた時、相手の左端の表側モンスターのATKをターン終了まで500下げる（装備リンク省略）。';
+  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return 'フィールドから墓地へ送られた時、相手の左端の表側モンスターのATKを場を離れるまで500下げる（装備リンク省略）。';
   if(e?.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return `フィールドで破壊された時、墓地の「${e.names.join('」か「')}」1体を攻撃表示で特殊召喚（左端自動選択）。`;
   if(e?.kind==='summonRule'&&e.code==='soloHandNoTribute')return '手札がこのカード1枚だけの場合、リリースなしで通常召喚・セットできる（条件を満たした場合はリリースなしを優先）。';
   if(e?.kind==='summonRule'&&e.code==='doubleLightTribute')return '光属性・レベル7以上のモンスターをアドバンス召喚・セットする場合、このカード1体を2体分のリリースにできる。';
@@ -245,6 +245,7 @@ export function isSafeCustomCard(c){
   if(c.attribute!==undefined&&c.attribute!==''&&!ATTRIBUTE_NAMES.includes(c.attribute)&&!['dark','light','earth','water','fire','wind','divine'].includes(c.attribute))return false;
   if(c.race!==undefined&&c.race!==''&&!RACE_NAMES.includes(c.race)&&!['dragon','warrior','spellcaster','machine','fiend','fairy','beast','beast-warrior','winged-beast','aqua','insect','rock','plant','zombie','reptile','pyro','fish','thunder','dinosaur','sea-serpent','psychic','wyrm','cyberse','illusion','divine-beast'].includes(c.race))return false;
   if(c.ability!==undefined&&!isValidAbility(c.ability,c.type,c.spellKind||'normal'))return false;
+  if(c.responseGuard!==undefined&&!(c.type==='trap'&&['spell','targetedSpell'].includes(c.responseGuard)&&c.ability?.when==='response'&&c.ability?.operation==='negateEffect'))return false;
   if(c.type==='spell'&&c.spellKind!==undefined&&!Object.hasOwn(SPELL_KINDS,c.spellKind))return false;
   if(c.type==='spell'&&c.spellKind==='ritual'&&c.ritualFor!==undefined&&c.ritualFor!==''&&!/^([a-z][0-9]{2}|u_[0-9a-f]{16,32})$/.test(c.ritualFor))return false;
   if(c.fx && (typeof c.fx!=='object'||!['auto','flame','lightning','slash','aqua','shadow','star','heal','ritual','fusion','none'].includes(c.fx.visual)||!['auto','slash','spark','boom','chime','water','heal','none'].includes(c.fx.sound)))return false;
