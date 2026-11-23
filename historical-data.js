@@ -335,9 +335,9 @@ const HISTORICAL_MONSTER_ABILITIES={
 const NATIVE_MONSTER_EFFECTS={
  'ロード・オブ・ドラゴン－ドラゴンの支配者－':{kind:'continuous',code:'dragonTargetGuard',status:'simplified',desc:'このカードが表側表示でいる間、相手はフィールドのドラゴン族モンスターを効果の対象にできない（対象を取らない効果には適用しない）。'},
  'クリボー':{kind:'hand',code:'preventBattleDamage',status:'simplified',desc:'相手の攻撃に対応し、このカードを手札から捨てると、その戦闘で自分が受ける戦闘ダメージを0にする（ダメージ計算時の細かなチェーン裁定は省略）。'},
- '暗黒魔族ギルファー・デーモン':{kind:'grave',code:'weakenOpponentOnGrave',status:'simplified',desc:'フィールドから墓地へ送られた時、相手の表側モンスターの左端1体のATKを場を離れるまで500下げる（装備カード化・装備解除は省略）。'},
+ '暗黒魔族ギルファー・デーモン':{kind:'grave',code:'weakenOpponentOnGrave',params:{scope:'opponent',amount:500},status:'simplified',desc:'フィールドから墓地へ送られた時、相手の有効な表側モンスター1体を自動で選び、場を離れるか裏側表示になるまでATKを500下げる。装備カード化、他の領域からの墓地送り、任意発動・チェーン応答は省略。'},
  '磁石の戦士マグネット・バルキリオン':{kind:'hand',code:'specialByThreeNames',params:{names:['磁石の戦士α','磁石の戦士β','磁石の戦士γ']},status:'simplified',desc:'自分フィールドのα・β・γを各1体ずつリリースし、手札から特殊召喚（分離効果・墓地からの特殊召喚は省略）。'},
- '有翼幻獣キマイラ':{kind:'grave',code:'reviveMaterialOnDestroy',params:{names:['幻獣王ガゼル','バフォメット']},status:'simplified',desc:'フィールドで破壊され墓地へ送られた時、自分の墓地のガゼルかバフォメットを左端に攻撃表示で特殊召喚（対象選択・チェーン省略）。'},
+ '有翼幻獣キマイラ':{kind:'grave',code:'reviveMaterialOnDestroy',params:{names:['幻獣王ガゼル','バフォメット'],position:'atk'},status:'simplified',desc:'フィールドで破壊され墓地へ送られた時、自分の墓地のガゼルかバフォメットを左端に攻撃表示で特殊召喚。候補・表示形式の選択とチェーン応答は省略。'},
 
  'ロケット戦士':{kind:'continuous',code:'rocketAssault',status:'simplified',desc:'自分のバトルフェイズに攻撃する場合、このカードは戦闘破壊されず自分への戦闘ダメージは0。戦闘後、相手のモンスターが場に残っていればそのATKをターン終了まで500下げる（チェーン処理は簡略化）。'},
  'デビル・フランケン':{kind:'ignition',code:'fusionFromExtraPay5000',status:'simplified',desc:'自分メインフェイズに5000LPを支払い、EXデッキの融合モンスター1体を攻撃表示で特殊召喚。LP5000以下・空きゾーンなし・融合候補なしの場合は発動不可（自動選択・召喚裁定は簡略化）。'},
@@ -346,10 +346,10 @@ const NATIVE_MONSTER_EFFECTS={
  '人造人間－サイコ・ショッカー':{kind:'continuous',code:'trapSuppression',status:'simplified',desc:'このカードが表側表示で存在する限り、お互いの罠カードを新たに発動できず、解決時に存在する罠カードの効果を無効化する（複雑な永続罠の再評価・特殊なチェーン裁定は省略）。'},
  '巨大ネズミ':{kind:'battle',code:'recruitOnBattleDestroy',params:{attribute:'地',threshold:1500},status:'simplified',desc:'戦闘で破壊され墓地へ送られたとき、デッキ内の地属性・元々のATK1500以下を1体特殊召喚（自動選択）。デッキ候補なし・ゾーン満杯なら安全に終了。'},
  'キラー・トマト':{kind:'battle',code:'recruitOnBattleDestroy',params:{attribute:'闇',threshold:1500},status:'simplified',desc:'戦闘で破壊され墓地へ送られたとき、デッキ内の闇属性・元々のATK1500以下のモンスターを攻撃表示で1体特殊召喚（最初の候補を自動選択。チェーン省略）。'},
- 'ものマネ幻想師':{kind:'trigger',code:'copyOpponentPrintedStats',status:'simplified',desc:'召喚・反転召喚・特殊召喚時、相手の表側モンスター1体の元々の攻撃力・守備力をコピー（左端を自動選択。チェーン省略）。'},
+ 'ものマネ幻想師':{kind:'trigger',code:'copyOpponentPrintedStats',params:{scope:'opponent'},status:'simplified',desc:'召喚・反転召喚・特殊召喚時、相手の有効な表側モンスター1体の元々の攻撃力・守備力をコピー。左端を自動選択し、チェーン応答は省略。'},
  'センジュ・ゴッド':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'ritualMonster'},status:'simplified',desc:'召喚・反転召喚時、デッキの儀式モンスター1体を手札に加える（候補の選択とチェーンは簡略化）。'},
  'ソニックバード':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'ritualSpell'},status:'simplified',desc:'召喚・反転召喚時、デッキの儀式魔法1枚を手札に加える（候補の選択とチェーンは簡略化）。'},
- 'バフォメット':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'named',name:'幻獣王ガゼル'},status:'simplified',desc:'召喚・反転召喚時、デッキに「幻獣王ガゼル」があれば先頭候補を自動で1枚サーチ。候補がなければ何もしない（チェーンは簡略化）。'},
+ 'バフォメット':{kind:'trigger',code:'searchDeckOnSummon',params:{filter:'named',name:'幻獣王ガゼル',normalOrFlipOnly:true},status:'simplified',desc:'通常召喚・反転召喚時、デッキに「幻獣王ガゼル」があれば先頭候補を自動で1枚サーチ。特殊召喚時は発動しない。候補の選択・チェーン応答は省略。'},
  'サイバーポッド':{kind:'flip',code:'cyberJarRevealFive',status:'simplified',desc:'リバース時に双方のフィールドのモンスターを破壊し、各デッキの上から最大5枚を公開。レベル4以下の通常召喚可能なモンスターを攻撃表示で特殊召喚し、その他を手札に加える（表示形式の選択・個別チェーンは省略）。'},
  'カオスポッド':{kind:'flip',code:'morphingJarTwo',status:'simplified',desc:'リバース時に双方のモンスターを持ち主のデッキに戻し、各自が戻したモンスターの数だけモンスターをデッキから公開する。レベル4以下の通常召喚可能なモンスターは裏側守備表示で特殊召喚し、残りはデッキへ戻す（選択・シャッフルの詳細裁定・個別チェーンは省略）。トークンは消滅し、融合モンスターはEXデッキへ戻す。'},
  '鉄の騎士 ギア・フリード':{

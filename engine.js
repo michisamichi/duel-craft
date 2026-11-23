@@ -377,12 +377,14 @@ function activateMonsterAbility(s,seat,item,kind){
   const p=s.players[seat],enemy=s.players[1-seat];
   switch(e.code){
     case 'copyOpponentPrintedStats':{
-      const copied=enemy.monsters.find(m=>m&&m.pos!=='set');
-      if(!copied){log(s,`「${c.name}」：相手の表側モンスターがないためコピーしません。`);return;}
+      const copied=firstLegalFaceUpMonster(s,seat,e.scope,item);
+      if(!copied){log(s,`「${c.name}」：有効な表側モンスターがないためコピーしません。`);return;}
       const printed=CARD[copied.id];
       if(!printed){log(s,`「${c.name}」：コピー対象が見つかりません。`);return;}
-      item.copiedAtk=printed.atk;item.copiedDef=printed.def;
-      log(s,`「${c.name}」：${printed.name}の元々のATK${printed.atk}・DEF${printed.def}をコピーしました（自動選択）。`);
+      const swapped=copied.swappedOriginalStatsTurn===s.turnNo;
+      item.copiedAtk=copied.doubleOriginalAtkTurn===s.turnNo?2*printed.atk:swapped?printed.def:printed.atk;
+      item.copiedDef=swapped?printed.atk:printed.def;
+      log(s,`「${c.name}」：${printed.name}の元々のATK${item.copiedAtk}・DEF${item.copiedDef}をコピーしました（自動選択）。`);
       return;
     }
     case 'searchDeckOnSummon':{
@@ -514,6 +516,15 @@ function returnMonsterToOwner(s,item,controller,zone){
   else if(zone==='hand')owner.hand.push(item.id);
   else {owner.deck.push(item.id);owner.deck=shuffle(owner.deck);}
 }
+function firstLegalFaceUpMonster(s,seat,scope,exclude=null){
+  const sides=scope==='both'?[1-seat,seat]:[scope==='own'?seat:1-seat];
+  for(const side of sides){
+    const match=s.players[side]?.monsters.find((m,index)=>m&&m!==exclude&&m.pos!=='set'&&
+      !isDragonEffectTargetBlocked(s,seat,side,index));
+    if(match)return match;
+  }
+  return null;
+}
 function sendToGrave(p,zone,index,s=null,destroyed=false) {
   const item=p[zone][index];
   if(!item)return;
@@ -527,9 +538,11 @@ function sendToGrave(p,zone,index,s=null,destroyed=false) {
   const ownerSeat=s.players.indexOf(owner);
   if(e?.kind!=='grave'||monsterEffectActivationBlocked(s,ownerSeat,item.id))return;
   if(e.code==='weakenOpponentOnGrave'){
-    const enemy=s.players[1-s.players.indexOf(owner)];
-    const target=enemy?.monsters?.find(m=>m&&m.pos!=='set');
-    if(target){target.permanentAtkDelta=Math.max(-5000,(target.permanentAtkDelta||0)-500);log(s,`「${CARD[item.id].name}」：相手モンスターのATKを場を離れるまで500下げました。`);}
+    const target=firstLegalFaceUpMonster(s,ownerSeat,e.scope),amount=e.amount??500;
+    if(target){
+      target.permanentAtkDelta=Math.max(-5000,(target.permanentAtkDelta||0)-amount);
+      log(s,`「${CARD[item.id].name}」：対象モンスターのATKを${amount}下げました。`);
+    }
     return;
   }
   if(e.code==='reviveMaterialOnDestroy'){
@@ -539,8 +552,10 @@ function sendToGrave(p,zone,index,s=null,destroyed=false) {
     const at=owner.grave.findIndex(id=>e.names.includes(CARD[id]?.name)&&summonKind(CARD[id])==='normal');
     if(at<0)return;
     const id=owner.grave.splice(at,1)[0];
-    owner.monsters[slot]={key:++s.nextKey,id,ownerSeat:s.players.indexOf(owner),pos:'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+    const revived={key:++s.nextKey,id,ownerSeat,pos:e.position==='def'?'def':'atk',bornTurn:s.turnNo,attacked:false,changedTurn:s.turnNo,bonus:0};
+    owner.monsters[slot]=revived;
     log(s,`「${CARD[item.id].name}」：墓地の「${CARD[id].name}」を特殊召喚しました。`);
+    if(CARD[id]?.monsterEffect?.code==='copyOpponentPrintedStats')activateMonsterAbility(s,ownerSeat,revived,'trigger');
     return;
   }
   if(e.code!=='searchStatOnGrave')return;
@@ -1592,7 +1607,7 @@ function executeAbility(s,entry,chain,stageOverride=null){
    p.monsters[slot]=summoned;
    log(s,`「${card.name}」：手札の「${CARD[id].name}」を特殊召喚しました。`);
    // Follow the pre-existing deterministic native summon trigger route.
-   if(CARD[id]?.monsterEffect?.kind==='trigger'&&['searchDeckOnSummon','copyOpponentPrintedStats'].includes(CARD[id].monsterEffect.code))
+   if(CARD[id]?.monsterEffect?.kind==='trigger'&&['searchDeckOnSummon','copyOpponentPrintedStats'].includes(CARD[id].monsterEffect.code)&&!CARD[id].monsterEffect.normalOrFlipOnly)
      activateMonsterAbility(s,seat,summoned,'trigger');
    break;
   }
@@ -1757,6 +1772,7 @@ function executeAbility(s,entry,chain,stageOverride=null){
    if(slot<0){log(s,'攻撃対象が変わったため裏側守備への変更は不発になりました。');break;}
    const defender=s.players[seat].monsters[slot];
    defender.pos='set';defender.changedTurn=s.turnNo;
+   delete defender.permanentAtkDelta;delete defender.copiedAtk;delete defender.copiedDef;
    chain.attackNegated=true;
    log(s,`「${CARD[defender.id]?.name||'モンスター'}」を裏側守備表示にし、攻撃を無効にしました。`);
    break;

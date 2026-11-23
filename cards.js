@@ -90,10 +90,10 @@ export const MONSTER_EFFECTS = {
   hand: {preventBattleDamage:'手札から捨てて戦闘ダメージを0にする（簡易）',specialByThreeNames:'自分フィールドの指定名3体をリリースして手札から特殊召喚（簡易）'},
   summonRule: {soloHandNoTribute:'手札が自身1枚ならリリースなしで通常召喚できる',doubleLightTribute:'光属性のレベル7以上の召喚時、このカードは2体分のリリースになる'},
   ignition: {fusionFromExtraPay5000:'5000LPを支払い、EXデッキ先頭の融合モンスター1体を特殊召喚（簡易）',doubleOriginalAtkEndDestroy:'自身の元々のATKをエンドフェイズまで2倍にし、そのエンドフェイズに自壊（簡易）',burn500:'相手に500ダメージ',heal500:'自分のLPを500回復',draw1:'1枚ドロー',destroy1:'相手のモンスター1体を破壊',atk500:'自分の攻撃力＋500（ターン終了まで）'},
-  trigger: {copyOpponentPrintedStats:'召喚・反転召喚・特殊召喚時：相手の表側モンスターの元々のATK・DEFをコピー（左端自動選択）',searchDeckOnSummon:'召喚・反転召喚時：デッキから条件に合うカードを手札へ加える',draw1:'召喚成功時に1枚ドロー',heal500:'召喚成功時にLP500回復',burn500:'召喚成功時に相手に500ダメージ',atk500:'召喚成功時に攻撃力＋500（ターン終了まで）'},
+  trigger: {copyOpponentPrintedStats:'召喚・反転召喚・特殊召喚時：表側モンスターの元々のATK・DEFをコピー（自動選択）',searchDeckOnSummon:'召喚時：デッキから条件に合うカードを手札へ加える',draw1:'召喚成功時に1枚ドロー',heal500:'召喚成功時にLP500回復',burn500:'召喚成功時に相手に500ダメージ',atk500:'召喚成功時に攻撃力＋500（ターン終了まで）'},
   battle: {recruitOnBattleDestroy:'戦闘で破壊され墓地へ送られたとき：指定属性・指定ATK以下のモンスターをデッキから特殊召喚（簡易）'},
-  grave: {weakenOpponentOnGrave:'フィールドから墓地へ送られた時、相手モンスター1体のATK－500（場を離れるまで・簡易）',reviveMaterialOnDestroy:'フィールドで破壊された時、指定名のモンスターを墓地から蘇生（簡易）',searchStatOnGrave:'フィールドから墓地へ送られた時：指定ATK/DEF以下のモンスターをデッキから1体手札に加える（自動選択・簡易）'},
-  flip: {cyberJarRevealFive:'リバース時：双方のモンスターを破壊し各5枚公開、レベル4以下を特殊召喚（簡易）',morphingJarTwo:'リバース時：双方のモンスターをデッキへ戻して、戻した数だけモンスターを公開しレベル4以下を裏側守備で特殊召喚（簡易）',returnOpponentOnFlip:'リバース時：相手モンスターを最大2体手札へ戻す（左端から自動選択・簡易）',destroyOpponentOnFlip:'リバース時：相手のモンスター1体を破壊（自動選択・簡易）',recoverOwnSpellOnFlip:'リバース時：墓地の魔法1枚を回収（自動選択・簡易）',millOpponentDeck:'リバース時：相手のデッキ上から指定枚数を墓地へ送る',scoutDrawDiscardSpells:'リバース時：相手が指定枚数ドローし、その中の魔法カードを墓地へ捨てる'},
+  grave: {weakenOpponentOnGrave:'フィールドから墓地へ送られた時、表側モンスター1体のATKを下げる（簡易）',reviveMaterialOnDestroy:'フィールドで破壊された時、指定名のモンスターを墓地から蘇生（簡易）',searchStatOnGrave:'フィールドから墓地へ送られた時：指定ATK/DEF以下のモンスターをデッキから1体手札に加える（自動選択・簡易）'},
+  flip: {cyberJarRevealFive:'リバース時：双方のモンスターを破壊し各5枚公開、レベル4以下を特殊召喚（簡易）',morphingJarTwo:'リバース時：双方のモンスターをデッキへ戻して、戻した数だけモンスターを公開しレベル4以下を裏側守備で特殊召喚（簡易）',returnOpponentOnFlip:'リバース時：モンスターを最大2体手札へ戻す（自動選択・簡易）',destroyOpponentOnFlip:'リバース時：モンスター1体を破壊（自動選択・簡易）',recoverOwnSpellOnFlip:'リバース時：墓地の魔法1枚を回収（自動選択・簡易）',millOpponentDeck:'リバース時：相手のデッキ上から指定枚数を墓地へ送る',scoutDrawDiscardSpells:'リバース時：相手が指定枚数ドローし、その中の魔法カードを墓地へ捨てる'},
   position: {destroyOnAttackToDefense:'攻撃表示から守備表示に手動変更したとき：相手のモンスター1体を破壊（自動選択・簡易）'},
   endPhase: {selfReturnHand:'自分エンドフェイズ：表側の自身を持ち主の手札に戻す'},
 };
@@ -139,7 +139,6 @@ export function defaultPassiveConfig(code){
   if(code==='raceAuraGuard')return {...shared,amount:400,race:'戦士'};
   if(code==='destroyOpponentOnFlip'||code==='recoverOwnSpellOnFlip')return {kind:'flip',code};
   if(code==='returnOpponentOnFlip')return {kind:'flip',code,amount:2};
-  if(code==='destroyOpponentOnFlip')return {kind:'flip',code};
   if(code==='searchStatOnGrave')return {kind:'grave',code,stat:'atk',threshold:1500};
   if(code==='destroyOnAttackToDefense')return {kind:'position',code};
   if(code==='millOpponentDeck')return {kind:'flip',code,amount:5};
@@ -161,18 +160,22 @@ export function validMonsterEffect(e){
   if(!e||typeof e!=='object'||!Object.hasOwn(MONSTER_EFFECTS,e.kind)||!Object.hasOwn(MONSTER_EFFECTS[e.kind],e.code))return false;
   if(e.code==='countStatScale')return validCountStatScale(e);
   if(['soloHandNoTribute','doubleLightTribute'].includes(e.code))return e.kind==='summonRule'&&Object.keys(e).length===2;
-  if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&Object.keys(e).length===2;
+  if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&
+    Object.keys(e).length===(e.scope===undefined?2:3)&&(e.scope===undefined||Object.hasOwn(PASSIVE_SCOPES,e.scope));
   if(e.kind==='battle')return e.code==='recruitOnBattleDestroy'&&Object.keys(e).length===4&&
     ATTRIBUTE_NAMES.includes(normalizeAttribute(e.attribute))&&Number.isInteger(e.threshold)&&e.threshold>=0&&e.threshold<=5000;
   if(e.code==='searchDeckOnSummon')return e.kind==='trigger'&&
     ['ritualMonster','ritualSpell','named'].includes(e.filter)&&
-    (e.filter==='named'?typeof e.name==='string'&&e.name.trim()===e.name&&e.name.length>=1&&e.name.length<=32&&Object.keys(e).length===4:
-      e.name===undefined&&Object.keys(e).length===3);
+    (e.filter==='named'?typeof e.name==='string'&&e.name.trim()===e.name&&e.name.length>=1&&e.name.length<=32&&
+      (e.normalOrFlipOnly===undefined||e.normalOrFlipOnly===true)&&Object.keys(e).length===(e.normalOrFlipOnly===true?5:4):
+      e.name===undefined&&e.normalOrFlipOnly===undefined&&Object.keys(e).length===3);
   if(e.kind==='hand')return (e.code==='preventBattleDamage'&&Object.keys(e).length===2)||
    (e.code==='specialByThreeNames'&&Object.keys(e).length===3&&Array.isArray(e.names)&&e.names.length===3&&
     new Set(e.names).size===3&&e.names.every(n=>typeof n==='string'&&n.trim()===n&&n.length>=1&&n.length<=32));
-  if(e.kind==='grave'&&e.code==='weakenOpponentOnGrave')return Object.keys(e).length===2;
-  if(e.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return Object.keys(e).length===3&&Array.isArray(e.names)&&e.names.length===2&&
+  if(e.kind==='grave'&&e.code==='weakenOpponentOnGrave')return Object.keys(e).length===2||
+    Object.keys(e).length===4&&Object.hasOwn(PASSIVE_SCOPES,e.scope)&&Number.isInteger(e.amount)&&e.amount>=1&&e.amount<=2000;
+  if(e.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return Object.keys(e).length===(e.position===undefined?3:4)&&
+   (e.position===undefined||['atk','def'].includes(e.position))&&Array.isArray(e.names)&&e.names.length===2&&
    new Set(e.names).size===2&&e.names.every(n=>typeof n==='string'&&n.trim()===n&&n.length>=1&&n.length<=32);
   if(e.kind==='grave')return e.code==='searchStatOnGrave'&&
     Object.keys(e).length===(e.restrictActivation===true?5:4)&&
@@ -212,17 +215,17 @@ export function effectText(c){
   if(c.ability)return abilityText(c.ability);
   if(e?.kind==='hand'&&e.code==='preventBattleDamage')return '相手の攻撃への対応中に手札から捨て、自分へのその戦闘のダメージを0にする（専用ボタンで発動）。';
   if(e?.kind==='hand'&&e.code==='specialByThreeNames')return `自分フィールドの「${e.names.join('」「')}」を各1体リリースして手札から特殊召喚する（手動選択省略）。`;
-  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return 'フィールドから墓地へ送られた時、相手の左端の表側モンスターのATKを場を離れるまで500下げる（装備リンク省略）。';
-  if(e?.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return `フィールドで破壊された時、墓地の「${e.names.join('」か「')}」1体を攻撃表示で特殊召喚（左端自動選択）。`;
+  if(e?.kind==='grave'&&e.code==='weakenOpponentOnGrave')return `フィールドから墓地へ送られた時、${PASSIVE_SCOPES[e.scope]||'相手'}の表側モンスター1体のATKを${e.amount??500}下げる。場を離れるか裏側表示になるまで有効（自動選択・装備カード化省略）。`;
+  if(e?.kind==='grave'&&e.code==='reviveMaterialOnDestroy')return `フィールドで破壊された時、墓地の「${e.names.join('」か「')}」1体を${e.position==='def'?'表側守備':'攻撃'}表示で特殊召喚（自動選択）。`;
   if(e?.kind==='summonRule'&&e.code==='soloHandNoTribute')return '手札がこのカード1枚だけの場合、リリースなしで通常召喚・セットできる（条件を満たした場合はリリースなしを優先）。';
   if(e?.kind==='summonRule'&&e.code==='doubleLightTribute')return '光属性・レベル7以上のモンスターをアドバンス召喚・セットする場合、このカード1体を2体分のリリースにできる。';
   if(e?.kind==='trigger'&&e.code==='searchDeckOnSummon'){
     const target=e.filter==='ritualMonster'?'儀式モンスター':e.filter==='ritualSpell'?'儀式魔法':`「${e.name||''}」`;
-    return `召喚・反転召喚したとき、自分のデッキから${target}1枚を手札に加える（自動で最初の候補を選ぶ簡易処理）`;
+    const extra=e.filter==='named'&&!e.normalOrFlipOnly?'、または指定名効果で手札から特殊召喚したとき':'';
+    return `通常召喚・反転召喚したとき${extra}、自分のデッキから${target}1枚を手札に加える（自動選択）。`;
   }
-  if(e?.kind==='grave'&&e.code==='searchStatOnGrave')return `フィールドから墓地へ送られたとき、デッキから${e.stat==='def'?'DEF':'ATK'}${e.threshold}以下のモンスター1体を手札に加える（最初を自動選択。チェーン・サーチ後の制限は保留）`;
   if(e?.kind==='battle'&&e.code==='recruitOnBattleDestroy')return `戦闘で破壊され墓地へ送られたとき、自分のデッキの${normalizeAttribute(e.attribute)}属性・元々のATK${e.threshold}以下のモンスター1体を攻撃表示で特殊召喚（自動選択・チェーン簡略化）`;
-  if(e?.kind==='trigger'&&e.code==='copyOpponentPrintedStats')return '召喚・反転召喚・特殊召喚時、相手の表側モンスターの元々のATK・DEFをコピー（左端を自動選択・チェーン簡略化）';
+  if(e?.kind==='trigger'&&e.code==='copyOpponentPrintedStats')return `通常召喚・反転召喚・特殊召喚時、${PASSIVE_SCOPES[e.scope]||'相手'}の表側モンスターの元々のATK・DEFをコピー（自動選択・チェーン応答は省略）`;
   if(e?.kind==='flip'&&e.code==='cyberJarRevealFive')return 'リバース時、フィールドの全モンスターを破壊。お互いのデッキ上から最大5枚を公開し、その中のレベル4以下の通常召喚可能なモンスターを攻撃表示で特殊召喚、残りを手札へ（表示形式の選択・個別チェーン省略）。';
   if(e?.kind==='flip'&&e.code==='morphingJarTwo')return 'リバース時、全モンスターを持ち主のデッキへ戻し、戻した数だけデッキからモンスターを公開。レベル4以下の通常召喚可能なモンスターは裏側守備で特殊召喚し、残りはデッキへ戻す（選択・個別チェーン省略）。トークンは消滅し融合モンスターはEXデッキに戻る。';
   if(e?.kind==='flip'&&e.code==='returnOpponentOnFlip')return `リバース時、${PASSIVE_SCOPES[e.scope]||'相手'}の有効なモンスターを左端から最大${e.amount}体、持ち主の手札へ戻す（相手側を優先して自動選択。チェーン応答は省略）`;

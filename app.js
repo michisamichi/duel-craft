@@ -577,12 +577,14 @@ const availableOperations=(when,card=null)=>{
 function passiveScaleFields(effect){
  if(effect.code==='specialByThreeNames'||effect.code==='reviveMaterialOnDestroy'){
   const count=effect.code==='specialByThreeNames'?3:2;
-  return `<div class="sv-passive-editor"><p class="tiny muted">指定名のカードを完全一致で判定します。効果は追加の選択待ちなしに処理します。</p>${Array.from({length:count},(_,i)=>`<label class="field-label" for="cardNativeName${i+1}">モンスター名${i+1}</label><input id="cardNativeName${i+1}" class="input" maxlength="32" value="${esc(effect.names?.[i]||'')}">`).join('')}</div>`;
+  const position=effect.code==='reviveMaterialOnDestroy'?`<label class="field-label" for="cardRevivalPosition">特殊召喚の表示形式</label><select id="cardRevivalPosition" class="input">${selectOptions({atk:'表側攻撃表示',def:'表側守備表示'},effect.position||'atk')}</select>`:'';
+  return `<div class="sv-passive-editor"><p class="tiny muted">指定名のカードを完全一致で判定し、自動で選択します。</p>${Array.from({length:count},(_,i)=>`<label class="field-label" for="cardNativeName${i+1}">モンスター名${i+1}</label><input id="cardNativeName${i+1}" class="input" maxlength="32" value="${esc(effect.names?.[i]||'')}">`).join('')}${position}</div>`;
  }
- if(['preventBattleDamage','weakenOpponentOnGrave'].includes(effect.code))return '<p class="tiny muted">条件を満たした時だけ自動処理（クリボーは手札から発動）。チェーンの細かな裁定は省略します。</p>';
+ if(effect.code==='preventBattleDamage')return '<p class="tiny muted">相手の攻撃に対応して手札から発動します。</p>';
+ if(effect.code==='weakenOpponentOnGrave')return `<div class="sv-passive-editor"><label class="field-label" for="cardWeakenAmount">ATK減少値</label><input id="cardWeakenAmount" class="input" type="number" inputmode="numeric" min="1" max="2000" step="1" value="${esc(effect.amount??500)}"></div>`;
 
  if(effect.code==='recruitOnBattleDestroy')return `<div class="sv-passive-editor"><div class="form-duo"><div><label class="field-label" for="cardRecruitAttribute">特殊召喚するモンスターの属性</label><select class="input" id="cardRecruitAttribute">${selectOptions(Object.fromEntries(ATTRIBUTE_NAMES.map(x=>[x,x+'属性'])),effect.attribute||'地')}</select></div><div><label class="field-label" for="cardRecruitThreshold">元々のATK上限</label><input class="input" id="cardRecruitThreshold" type="number" min="0" max="5000" step="1" inputmode="numeric" value="${esc(effect.threshold??1500)}"></div></div><p class="tiny muted">戦闘破壊で墓地へ送られた時のみ。デッキの最初の候補を自動選択。空きゾーンがない場合は不発。</p></div>`;
- if(effect.code==='searchDeckOnSummon')return effect.filter==='named'?`<div class="sv-passive-editor"><label class="field-label" for="cardSearchName">デッキから探すカード名（完全一致）</label><input id="cardSearchName" class="input" maxlength="32" value="${esc(effect.name||'')}" placeholder="例：幻獣王ガゼル"></div>`:'';
+ if(effect.code==='searchDeckOnSummon')return effect.filter==='named'?`<div class="sv-passive-editor"><div class="form-duo"><div><label class="field-label" for="cardSearchName">デッキから探すカード名（完全一致）</label><input id="cardSearchName" class="input" maxlength="32" value="${esc(effect.name||'')}" placeholder="例：幻獣王ガゼル"></div><div><label class="field-label" for="cardSearchSummonTiming">召喚の条件</label><select id="cardSearchSummonTiming" class="input">${selectOptions({normalOnly:'通常召喚・反転召喚',includingNamed:'通常・反転召喚と指定名効果による手札からの特殊召喚'},effect.normalOrFlipOnly?'normalOnly':'includingNamed')}</select></div></div></div>`:'';
  if(effect.code==='multiAttack')return `<div class="sv-passive-editor"><label class="field-label" for="cardMultiAttackCount">1回のバトルフェイズで攻撃できる回数</label><input class="input" id="cardMultiAttackCount" type="number" inputmode="numeric" min="2" max="5" step="1" value="${esc(effect.count??2)}"><p class="tiny muted">攻撃が無効になった場合も1回として数えます。守備表示では攻撃できません。</p></div>`;
  if(effect.code==='scoutDrawDiscardSpells')return `<div class="sv-passive-editor"><label class="field-label" for="cardScoutDrawAmount">リバース時に相手がドローする枚数</label><input class="input" id="cardScoutDrawAmount" type="number" inputmode="numeric" min="1" max="5" step="1" value="${esc(effect.amount??3)}"><p class="tiny muted">その中の魔法カードだけ墓地へ送ります。ドローの公開演出・チェーン応答は簡略化します。</p></div>`;
  if(effect.code==='returnOpponentOnFlip')return `<div class="sv-passive-editor"><label class="field-label" for="cardFlipBounceCount">手札に戻す最大枚数</label><input class="input" id="cardFlipBounceCount" type="number" inputmode="numeric" min="1" max="2" step="1" value="${esc(effect.amount??2)}"><p class="tiny muted">有効な対象を左端から自動選択します。お互いの場を選ぶ場合、相手の場を優先します。</p></div>`;
@@ -628,6 +630,7 @@ function nativeRecipeTarget(e,card){
    return `<select class="input" id="cardPassiveScope" aria-label="数えるカードの側">${selectOptions(PASSIVE_SCOPES,e.scope||'both')}</select>`;
  if(e?.code==='recruitOnBattleDestroy')return `<select class="input" id="cardRecruitTarget" disabled><option>自分のデッキの指定属性・ATK以下</option></select>`;
  if(['returnOpponentOnFlip','destroyOpponentOnFlip'].includes(e?.code))return `<select class="input" id="cardFlipScope" aria-label="対象にできる場">${selectOptions(PASSIVE_SCOPES,e.scope||'opponent')}</select>`;
+ if(['weakenOpponentOnGrave','copyOpponentPrintedStats'].includes(e?.code))return `<select class="input" id="cardFaceUpScope" aria-label="対象にできる場">${selectOptions(PASSIVE_SCOPES,e.scope||'opponent')}</select>`;
  if(e?.code==='searchStatOnGrave')return `<select class="input" id="cardGraveSearchStat">${selectOptions({atk:'自分のデッキのATK指定値以下',def:'自分のデッキのDEF指定値以下'},e.stat||'atk')}</select>`;
  if(e?.code==='searchDeckOnSummon')
    return `<select class="input" id="cardSearchFilter">${selectOptions({ritualMonster:'自分のデッキの儀式モンスター',ritualSpell:'自分のデッキの儀式魔法',named:'自分のデッキの指定名カード'},e.filter||'ritualMonster')}</select>`;
@@ -685,10 +688,10 @@ function draftEffectFields(d){
  <p class="small muted mt8 sv-effect-preview" aria-live="polite" style="white-space:pre-line">${esc(abilityText({when,operation:op,target,amount,...(['searchNamed','summonNamedFromHand'].includes(op)?{match:d.ability?.match||'exact',query:d.ability?.query||''}:{}),...(op==='summonRaceFromHand'?{match:'race',query:d.ability?.query||'ドラゴン',...(d.ability?.requiredFaceUpName?{requiredFaceUpName:d.ability.requiredFaceUpName}:{})}:{}),...(op==='millFirstType'?{match:d.ability?.match||'monster'}:{}),...(d.ability?.before?{before:d.ability.before}:{}),...(d.ability?.then?{then:d.ability.then}:{})}))}</p>
  ${op==='reviveSelected'?'<div class="sv-operation-help">発動時に自分・相手の墓地からモンスターを1体選びます。自分のモンスターゾーンに空きが必要です。</div>':''}
  <p class="tiny muted">整数を直接入力。自分へのダメージ・相手の回復も可能です。通常の攻守変化はターン終了で戻り、永続効果は継続します。対象がいない効果は不発です。</p>`:
- `<div class="sv-recipe-grid sv-recipe-four">${d.type==='monster'?`<div><label class="field-label" for="cardEffectKind">発動条件</label><select class="input" id="cardEffectKind">${selectOptions({summonRule:'召喚・リリースの例外ルール',continuous:'表側の間・戦闘中など',ignition:'自分メインフェイズで',trigger:'召喚・反転召喚したとき（対応効果のみ）',flip:'リバースしたとき',position:'攻撃表示から守備表示に手動変更したとき',endPhase:'自分エンドフェイズに',grave:'フィールドから墓地へ送られたとき',battle:'戦闘で破壊され墓地へ送られたとき'},d.monsterEffect?.kind||'ignition')}</select></div>`:`<div><label class="field-label">発動条件</label><select class="input" disabled><option>${d.type==='spell'?'魔法を発動したとき':'相手が攻撃したとき'}</option></select></div>`}
+ `<div class="sv-recipe-grid sv-recipe-four">${d.type==='monster'?`<div><label class="field-label" for="cardEffectKind">発動条件</label><select class="input" id="cardEffectKind">${selectOptions({hand:'手札にあるとき',summonRule:'召喚・リリースの例外ルール',continuous:'表側の間・戦闘中など',ignition:'自分メインフェイズで',trigger:'召喚したとき（対応効果のみ）',flip:'リバースしたとき',position:'攻撃表示から守備表示に手動変更したとき',endPhase:'自分エンドフェイズに',grave:'フィールドから墓地へ送られたとき',battle:'戦闘で破壊され墓地へ送られたとき'},d.monsterEffect?.kind||'ignition')}</select></div>`:`<div><label class="field-label">発動条件</label><select class="input" disabled><option>${d.type==='spell'?'魔法を発動したとき':'相手が攻撃したとき'}</option></select></div>`}
  <div><label class="field-label">対象</label>${nativeRecipeTarget(d.monsterEffect,d)}</div>
  <div><label class="field-label" for="cardEffectCode">効果</label><select class="input" id="cardEffectCode">${selectOptions(d.type==='monster'?MONSTER_EFFECTS[d.monsterEffect?.kind||'ignition']:d.type==='spell'?MAGIC_EFFECTS:TRAP_EFFECTS,d.type==='monster'?d.monsterEffect?.code:d.effect)}</select></div><div><label class="field-label">数値</label><span class="input sv-fixed-number" aria-label="数値は効果ごとの詳細設定で指定">${d.monsterEffect?.amount??d.monsterEffect?.count??d.monsterEffect?.threshold??'指定不要・詳細で設定'}</span></div></div>`}
- ${d.type==='monster'&&(PASSIVE_SCALE_CODES.includes(d.monsterEffect?.code)||['millOpponentDeck','scoutDrawDiscardSpells','multiAttack','searchDeckOnSummon','returnOpponentOnFlip','searchStatOnGrave'].includes(d.monsterEffect?.code))?passiveScaleFields(d.monsterEffect):''}
+ ${d.type==='monster'&&(PASSIVE_SCALE_CODES.includes(d.monsterEffect?.code)||['millOpponentDeck','scoutDrawDiscardSpells','multiAttack','searchDeckOnSummon','returnOpponentOnFlip','searchStatOnGrave','reviveMaterialOnDestroy','weakenOpponentOnGrave','specialByThreeNames'].includes(d.monsterEffect?.code))?passiveScaleFields(d.monsterEffect):''}
  ${d.type==='monster'&&d.monsterEffect?`<p class="small muted mt8 sv-effect-preview" aria-live="polite">${esc(effectText({monsterEffect:d.monsterEffect}))}</p>`:''}
  <p class="tiny muted mt8">永続補正は場・墓地の状況に応じ自動更新され、戦闘時補正はダメージ計算に反映します。儀式・融合魔法は専用の効果を使います。</p></div>`;
 }
@@ -889,6 +892,7 @@ function readCardForm(){
         d.monsterEffect={...preset,...(previous?.code===code?previous:{})};
         if(['specialByThreeNames','reviveMaterialOnDestroy'].includes(code)){
           d.monsterEffect.names=Array.from({length:code==='specialByThreeNames'?3:2},(_,i)=>value(`cardNativeName${i+1}`,d.monsterEffect.names?.[i]||'').trim());
+          if(code==='reviveMaterialOnDestroy')d.monsterEffect.position=value('cardRevivalPosition',d.monsterEffect.position||'atk');
         }else if(code==='multiAttack'){
           d.monsterEffect.count=Number(value('cardMultiAttackCount',d.monsterEffect.count));
         }else if(['returnOpponentOnFlip','destroyOpponentOnFlip'].includes(code)){
@@ -904,12 +908,21 @@ function readCardForm(){
           d.monsterEffect.threshold=Number(value('cardGraveSearchThreshold',d.monsterEffect.threshold));
           if(value('cardGraveSearchLimit',d.monsterEffect.restrictActivation?'restricted':'none')==='restricted')d.monsterEffect.restrictActivation=true;
           else delete d.monsterEffect.restrictActivation;
-        }else if(['selfReturnHand','postAttackDefenseLock','destroyAttachedEquip','trapSuppression','soloHandNoTribute','doubleLightTribute','doubleOriginalAtkEndDestroy','destroyOpponentOnFlip','recoverOwnSpellOnFlip','destroyOnAttackToDefense','copyOpponentPrintedStats','preventBattleDamage','weakenOpponentOnGrave'].includes(code)){
+        }else if(['weakenOpponentOnGrave','copyOpponentPrintedStats'].includes(code)){
+          d.monsterEffect.scope=value('cardFaceUpScope',d.monsterEffect.scope||'opponent');
+          if(code==='weakenOpponentOnGrave')d.monsterEffect.amount=Number(value('cardWeakenAmount',d.monsterEffect.amount??500));
+        }else if(['selfReturnHand','postAttackDefenseLock','destroyAttachedEquip','trapSuppression','soloHandNoTribute','doubleLightTribute','doubleOriginalAtkEndDestroy','recoverOwnSpellOnFlip','destroyOnAttackToDefense','preventBattleDamage'].includes(code)){
           // No numeric inputs for automatic end-phase or post-attack behavior.
         }else if(code==='searchDeckOnSummon'){
           d.monsterEffect.filter=value('cardSearchFilter',d.monsterEffect.filter||'ritualMonster');
-          if(d.monsterEffect.filter==='named')d.monsterEffect.name=value('cardSearchName',d.monsterEffect.name||'').trim();
-          else delete d.monsterEffect.name;
+          if(d.monsterEffect.filter==='named'){
+            d.monsterEffect.name=value('cardSearchName',d.monsterEffect.name||'').trim();
+            const timing=value('cardSearchSummonTiming',previous?.filter==='named'&&!previous.normalOrFlipOnly?'includingNamed':'normalOnly');
+            if(timing==='normalOnly')d.monsterEffect.normalOrFlipOnly=true;
+            else delete d.monsterEffect.normalOrFlipOnly;
+          }else{
+            delete d.monsterEffect.name;delete d.monsterEffect.normalOrFlipOnly;
+          }
         }else if(code==='millOpponentDeck'){
           d.monsterEffect.amount=Number(value('cardFlipMillAmount',d.monsterEffect.amount));
         }else if(code==='scoutDrawDiscardSpells'){
@@ -2864,7 +2877,7 @@ $('view').addEventListener('change',async e=>{
    return;
  }
  if(e.target.id==='effectTemplateSelect'&&ui.cardDraft){const note=document.querySelector('.sv-template-description');if(note)note.textContent='選択中：'+(e.target.selectedOptions[0]?.dataset.description||'');return;}
- if(['cardFlipScope','cardGraveSearchLimit'].includes(e.target.id)&&ui.cardDraft){
+ if(['cardFlipScope','cardGraveSearchLimit','cardFaceUpScope','cardWeakenAmount','cardRevivalPosition','cardSearchSummonTiming','cardNativeName1','cardNativeName2','cardNativeName3'].includes(e.target.id)&&ui.cardDraft){
    readCardForm();
    const note=document.querySelector('.sv-effect-preview');if(note)note.textContent=effectText(ui.cardDraft);
    return;
