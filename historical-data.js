@@ -385,15 +385,15 @@ const NATIVE_MONSTER_EFFECTS={
    desc:'リバース時に相手のデッキ上から最大5枚を墓地へ送る。5枚未満なら残り枚数だけ送る（チェーン応答は簡略化）。'
  },
  'ブラック・マジシャン・ガール':{
-   code:'darkMagicianGrave300',
+   code:'countStatScale',params:{scope:'both',zones:['grave'],stat:'atk',amount:300,names:['ブラック・マジシャン','マジシャン・オブ・ブラックカオス']},
    desc:'お互いの墓地の「ブラック・マジシャン」「マジシャン・オブ・ブラックカオス」1枚につき攻撃力300アップ。'
  },
  'バスター・ブレイダー':{
-   code:'enemyDragon500',
+   code:'countStatScale',params:{scope:'opponent',zones:['field','grave'],stat:'atk',amount:500,race:'ドラゴン'},
    desc:'相手フィールドの表側表示・相手墓地のドラゴン族モンスター1体につき攻撃力500アップ。'
  },
  '太陽の戦士':{
-   code:'darkBattle500',
+   code:'battleAttributeScale',params:{attribute:'闇',amount:500},
    desc:'闇属性モンスターとの戦闘中、ダメージ計算で攻撃力500アップ。'
  },
  '翻弄するエルフの剣士':{

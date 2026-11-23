@@ -1,5 +1,5 @@
 import {makeRoomCode,normalizeRoomCode,isRoomCode} from './room-code.js?v=2047';
-import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,PASSIVE_SCALE_CODES,PASSIVE_SCOPES,defaultPassiveConfig,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS,ATTRIBUTE_NAMES,RACE_NAMES,HISTORICAL_PRESETS} from './cards.js?v=2047';
+import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCards,isSafeCustomCard,effectText,MONSTER_EFFECTS,PASSIVE_SCALE_CODES,PASSIVE_SCOPES,COUNT_STAT_ZONES,COUNT_MONSTER_KINDS,defaultPassiveConfig,ORIGINAL_IDS,RARITIES,SPELL_KINDS,spellKind,persistentSpell,summonKind,SUMMON_KINDS,ATTRIBUTE_NAMES,RACE_NAMES,HISTORICAL_PRESETS} from './cards.js?v=2047';
 import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=2047';
 import {makeBackup,parseBackup,applyBackup} from './backup.js?v=2047';
 import {EFFECT_TEMPLATE_KEY,BUILTIN_EFFECT_TEMPLATES,readTemplates,saveTemplate,deleteTemplate,canApplyTemplate,applyTemplate,templateDescription} from './effect-templates.js?v=2047';
@@ -593,6 +593,26 @@ function passiveScaleFields(effect){
  const amount=Number.isInteger(effect.amount)?effect.amount:(defaultPassiveConfig(effect.code)?.amount||500);
  const amountLabel=effect.code==='battleAttributeScale'?'戦闘時のATK上昇値':'1枚・1体あたりのATK上昇値';
  const amountField=`<div><label class="field-label" for="cardPassiveAmount">${amountLabel}</label><input class="input" id="cardPassiveAmount" type="number" inputmode="numeric" min="50" max="2000" step="1" value="${esc(amount)}"></div>`;
+ if(effect.code==='countStatScale'){
+  const options=(values,suffix)=>({'':'指定なし',...Object.fromEntries(values.map(v=>[v,v+suffix]))});
+  const field=(id,label,choices,selected)=>`<div><label class="field-label" for="${id}">${label}</label><select class="input" id="${id}">${selectOptions(choices,selected??'')}</select></div>`;
+  const zones=effect.zones||['grave'];
+  const kinds=Object.fromEntries(Object.entries(COUNT_MONSTER_KINDS).filter(([key])=>key!=='token'||zones.includes('field')));
+  return `<div class="sv-passive-editor">
+    <div class="form-duo">${amountField}${field('cardCountStat','上昇する能力', {atk:'ATK',def:'DEF'},effect.stat)}</div>
+    <fieldset><legend class="field-label">数える場所（複数選択可）</legend><div class="row wrap">
+      ${Object.entries(COUNT_STAT_ZONES).map(([key,label])=>`<label><input type="checkbox" id="cardCountZone-${key}" ${zones.includes(key)?'checked':''} ${zones.length===1&&zones.includes(key)?'disabled':''}> ${label}</label>`).join('')}
+    </div></fieldset>
+    <div class="form-duo">
+      ${field('cardCountAttribute','属性',options(ATTRIBUTE_NAMES,'属性'),effect.attribute)}
+      ${field('cardCountRace','種族',options(RACE_NAMES,'族'),effect.race)}
+      ${field('cardCountLevel','レベル',options(Array.from({length:12},(_,i)=>String(i+1)),''),effect.level==null?'':String(effect.level))}
+      ${field('cardCountMonsterKind','モンスターの種類',{'':'指定なし',...kinds},effect.monsterKind)}
+    </div>
+    ${Array.from({length:3},(_,i)=>`<label class="field-label" for="cardCountName${i+1}">カード名${i+1}（任意）</label><input class="input" id="cardCountName${i+1}" maxlength="32" value="${esc(effect.names?.[i]||'')}">`).join('')}
+    <p class="tiny muted">カード名はいずれかに完全一致。属性など、ほかの条件はすべて満たす必要があります。</p>
+  </div>`;
+ }
  const scopeField=''; // Scope is now chosen in the common ② 対象 selector.
  if(effect.code==='graveNamedScale')return `<div class="sv-passive-editor"><div class="form-duo">${amountField}${scopeField}</div><div class="form-duo"><div><label class="field-label" for="cardPassiveName1">数えるカード名①</label><input class="input" id="cardPassiveName1" maxlength="32" value="${esc(effect.names?.[0]||'')}"></div><div><label class="field-label" for="cardPassiveName2">カード名②（任意）</label><input class="input" id="cardPassiveName2" maxlength="32" value="${esc(effect.names?.[1]||'')}"></div></div><p class="tiny muted">名前は完全一致で判定します。同名カードは墓地にある枚数分を数えます。</p></div>`;
  if(effect.code==='raceFieldGraveScale')return `<div class="sv-passive-editor"><div class="form-duo">${amountField}${scopeField}</div><label class="field-label" for="cardPassiveRace">数える種族（表側の場・墓地）</label><select class="input" id="cardPassiveRace">${selectOptions(Object.fromEntries(RACE_NAMES.map(x=>[x,x+'族'])),effect.race||'ドラゴン')}</select><p class="tiny muted">裏側表示モンスターは数えません。</p></div>`;
@@ -603,8 +623,8 @@ function passiveScaleFields(effect){
 // Only compatible combinations are selectable; fixed-target effects remain visibly fixed.
 function nativeRecipeTarget(e,card){
  if(card?.type==='spell'||card?.type==='trap'){const targets={draw2:'自分のデッキ',heal1000:'自分のLP',destroy:'相手のモンスター',boost500:'自分のモンスター',burn800:'相手のLP',negate:'相手の攻撃',counterdestroy:'攻撃モンスター',counterburn:'相手の攻撃'};return `<select class="input" disabled aria-label="対象はこの効果で固定"><option>${esc(targets[card.effect]||'効果によって固定')}</option></select>`;}
- if(['graveNamedScale','raceFieldGraveScale','attributeFieldAura'].includes(e?.code))
-   return `<select class="input" id="cardPassiveScope">${selectOptions(PASSIVE_SCOPES,e.scope||'both')}</select>`;
+ if(['countStatScale','graveNamedScale','raceFieldGraveScale','attributeFieldAura'].includes(e?.code))
+   return `<select class="input" id="cardPassiveScope" aria-label="数えるカードの側">${selectOptions(PASSIVE_SCOPES,e.scope||'both')}</select>`;
  if(e?.code==='recruitOnBattleDestroy')return `<select class="input" id="cardRecruitTarget" disabled><option>自分のデッキの指定属性・ATK以下</option></select>`;
  if(e?.code==='searchStatOnGrave')return `<select class="input" id="cardGraveSearchStat">${selectOptions({atk:'自分のデッキのATK指定値以下',def:'自分のデッキのDEF指定値以下'},e.stat||'atk')}</select>`;
  if(e?.code==='searchDeckOnSummon')
@@ -884,6 +904,22 @@ function readCardForm(){
           d.monsterEffect.amount=Number(value('cardScoutDrawAmount',d.monsterEffect.amount));
         }else if(code==='battleImmuneAtkThreshold'){
           d.monsterEffect.threshold=Number(value('cardPassiveThreshold',d.monsterEffect.threshold));
+        }else if(code==='countStatScale'){
+          const effect=d.monsterEffect;
+          effect.amount=Number(value('cardPassiveAmount',effect.amount));
+          effect.scope=value('cardPassiveScope',effect.scope);
+          effect.stat=value('cardCountStat',effect.stat);
+          effect.zones=Object.keys(COUNT_STAT_ZONES).filter(zone=>$('cardCountZone-'+zone)?.checked??effect.zones.includes(zone));
+          const names=Array.from({length:3},(_,i)=>value(`cardCountName${i+1}`,effect.names?.[i]||'').trim()).filter(Boolean);
+          if(names.length)effect.names=[...new Set(names)];
+          else delete effect.names;
+          const filters={attribute:value('cardCountAttribute',effect.attribute||''),race:value('cardCountRace',effect.race||''),
+            level:Number(value('cardCountLevel',effect.level||'')),monsterKind:value('cardCountMonsterKind',effect.monsterKind||'')};
+          if(!effect.zones.includes('field')&&filters.monsterKind==='token')filters.monsterKind='';
+          for(const [key,setting] of Object.entries(filters)){
+            if(setting)effect[key]=setting;
+            else delete effect[key];
+          }
         }else if(code==='raceAuraGuard'){
           d.monsterEffect.amount=Number(value('cardPassiveAmount',d.monsterEffect.amount));
           d.monsterEffect.race=value('cardPassiveRace',d.monsterEffect.race);
@@ -2672,6 +2708,10 @@ $('view').addEventListener('input',e=>{
  if(e.target.id==='deckSearch'){updateCardRows('deck');return;}
  if(e.target.id==='deckName'&&ui.deckDraft){ui.deckDraft.name=e.target.value;saveSealedDraft();saveDeckDraft();return;}
  if(e.target.id==='cardSearch'){updateManagedCards();return;}
+ if(ui.cardDraft&&/^cardCountName[1-3]$/.test(e.target.id)){
+   readCardForm();
+   const note=document.querySelector('.sv-effect-preview');if(note)note.textContent=effectText(ui.cardDraft);
+ }
  if(ui.cardDraft&&['cardNamedQuery','cardName','cardLevel','cardAtk','cardDef','cardCost','cardEmoji','cardDesc','cardAbilityAmount','cardBeforeAmount','cardPassiveAmount','cardPassiveThreshold','cardPassiveNegativeAmount','cardPassiveName1','cardPassiveName2','cardFlipMillAmount','cardMultiAttackCount','cardFlipBounceCount','cardGraveSearchThreshold'].includes(e.target.id)){
    readCardForm();
    const preview=document.querySelector('.card-demo');if(preview)preview.innerHTML=cardHtmlPreview(ui.cardDraft);
@@ -2783,6 +2823,14 @@ $('view').addEventListener('change',async e=>{
      if(['negateAttack','negateEffect'].includes(op))delete ui.cardDraft.ability.then;
    }
    saveCardDraft();render();return;
+ }
+ if(e.target.id.startsWith('cardCount')&&ui.cardDraft){
+   readCardForm();
+   if(e.target.id.startsWith('cardCountZone-'))render();
+   else {
+     const note=document.querySelector('.sv-effect-preview');if(note)note.textContent=effectText(ui.cardDraft);
+   }
+   return;
  }
  if(e.target.id==='effectTemplateSelect'&&ui.cardDraft){const note=document.querySelector('.sv-template-description');if(note)note.textContent='選択中：'+(e.target.selectedOptions[0]?.dataset.description||'');return;}
  if(['cardAttribute','cardRace'].includes(e.target.id)&&ui.cardDraft){readCardForm();const preview=document.querySelector('.card-demo');if(preview)preview.innerHTML=cardHtmlPreview(ui.cardDraft);return;}

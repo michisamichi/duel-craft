@@ -73,6 +73,7 @@ export const MONSTER_EFFECTS = {
     darkMagicianGrave300:'お互いの墓地の「ブラック・マジシャン」「マジシャン・オブ・ブラックカオス」1枚につき攻撃力＋300',
     enemyDragon500:'相手の表側表示フィールド・墓地のドラゴン族モンスター1体につき攻撃力＋500',
     darkBattle500:'闇属性モンスターとのダメージ計算中のみ攻撃力＋500',
+    countStatScale:'公開ゾーンの条件に合うモンスターの数で攻守を強化',
     graveNamedScale:'指定名のカードが墓地にある数だけATKアップ（カスタム）',
     raceFieldGraveScale:'指定種族がフィールド・墓地にある数だけATKアップ（カスタム）',
     battleAttributeScale:'指定属性との戦闘時だけATKアップ（カスタム）',
@@ -98,8 +99,27 @@ export const MONSTER_EFFECTS = {
 };
 // Configurable passive effects share the same stat/damage routes as historical effects.
 // No per-turn caches, timers or synchronization fields are needed.
-export const PASSIVE_SCALE_CODES=['graveNamedScale','raceFieldGraveScale','battleAttributeScale','battleImmuneAtkThreshold','attributeFieldAura','raceAuraGuard'];
+export const PASSIVE_SCALE_CODES=['countStatScale','graveNamedScale','raceFieldGraveScale','battleAttributeScale','battleImmuneAtkThreshold','attributeFieldAura','raceAuraGuard'];
 export const PASSIVE_SCOPES={own:'自分',opponent:'相手',both:'お互い'};
+export const COUNT_STAT_ZONES={field:'表側フィールド',grave:'墓地',banished:'除外'};
+export const COUNT_MONSTER_KINDS={normal:'通常モンスター',effect:'効果モンスター',ritual:'儀式モンスター',fusion:'融合モンスター',token:'トークン'};
+const COUNT_STAT_KEYS=new Set(['kind','code','scope','zones','stat','amount','names','attribute','race','level','monsterKind']);
+
+function validCountStatScale(e){
+  const {scope,zones,stat,amount,names,attribute,race,level,monsterKind}=e;
+  return e.kind==='continuous'&&Object.keys(e).every(key=>COUNT_STAT_KEYS.has(key))&&
+    Object.hasOwn(PASSIVE_SCOPES,scope)&&['atk','def'].includes(stat)&&
+    Number.isInteger(amount)&&amount>=50&&amount<=2000&&
+    Array.isArray(zones)&&zones.length>0&&zones.length<=3&&new Set(zones).size===zones.length&&
+    zones.every(zone=>Object.hasOwn(COUNT_STAT_ZONES,zone))&&
+    (names===undefined||Array.isArray(names)&&names.length>=1&&names.length<=3&&new Set(names).size===names.length&&
+      names.every(name=>typeof name==='string'&&name.trim()===name&&name.length>=1&&name.length<=32))&&
+    (attribute===undefined||ATTRIBUTE_NAMES.includes(normalizeAttribute(attribute)))&&
+    (race===undefined||RACE_NAMES.includes(normalizeRace(race)))&&
+    (level===undefined||Number.isInteger(level)&&level>=1&&level<=12)&&
+    (monsterKind===undefined||Object.hasOwn(COUNT_MONSTER_KINDS,monsterKind))&&
+    (monsterKind!=='token'||zones.includes('field'));
+}
 const PASSIVE_RACES_EN={dragon:'ドラゴン',warrior:'戦士',spellcaster:'魔法使い',machine:'機械',fiend:'悪魔',fairy:'天使',beast:'獣','beast-warrior':'獣戦士','winged-beast':'鳥獣',aqua:'水',insect:'昆虫',rock:'岩石',plant:'植物',zombie:'アンデット',reptile:'爬虫類',pyro:'炎',fish:'魚',thunder:'雷',dinosaur:'恐竜','sea-serpent':'海竜',psychic:'サイキック',wyrm:'幻竜',cyberse:'サイバース',illusion:'幻想魔','divine-beast':'幻神獣'};
 export const normalizeRace=r=>PASSIVE_RACES_EN[r]||r;
 const PASSIVE_ATTRIBUTES_EN={dark:'闇',light:'光',earth:'地',water:'水',fire:'炎',wind:'風',divine:'神'};
@@ -110,6 +130,7 @@ export function defaultPassiveConfig(code){
   if(code==='specialByThreeNames')return {kind:'hand',code,names:['磁石の戦士α','磁石の戦士β','磁石の戦士γ']};
   if(code==='weakenOpponentOnGrave')return {kind:'grave',code};
   if(code==='reviveMaterialOnDestroy')return {kind:'grave',code,names:['幻獣王ガゼル','バフォメット']};
+  if(code==='countStatScale')return {...shared,amount:300,stat:'atk',scope:'both',zones:['grave']};
   if(code==='graveNamedScale')return {...shared,amount:300,names:['ブラック・マジシャン'],scope:'both'};
   if(code==='raceFieldGraveScale')return {...shared,race:'ドラゴン',scope:'opponent'};
   if(code==='battleAttributeScale')return {...shared,attribute:'闇'};
@@ -136,7 +157,8 @@ export function defaultPassiveConfig(code){
   return null;
 }
 export function validMonsterEffect(e){
-  if(!e||typeof e!=='object'||!MONSTER_EFFECTS[e.kind]?.[e.code])return false;
+  if(!e||typeof e!=='object'||!Object.hasOwn(MONSTER_EFFECTS,e.kind)||!Object.hasOwn(MONSTER_EFFECTS[e.kind],e.code))return false;
+  if(e.code==='countStatScale')return validCountStatScale(e);
   if(['soloHandNoTribute','doubleLightTribute'].includes(e.code))return e.kind==='summonRule'&&Object.keys(e).length===2;
   if(e.code==='copyOpponentPrintedStats')return e.kind==='trigger'&&Object.keys(e).length===2;
   if(e.kind==='battle')return e.code==='recruitOnBattleDestroy'&&Object.keys(e).length===4&&
@@ -210,6 +232,13 @@ export function effectText(c){
   if(e?.kind==='continuous'&&e.code==='postAttackDefenseLock')return '攻撃した場合、バトルフェイズ終了時に守備表示になり、次の自分ターン終了時まで手動で表示形式を変更できない（カード効果による変更は可能）';
   if(e?.kind==='continuous'&&e.code==='multiAttack')return `1度のバトルフェイズ中に${e.count}回まで攻撃できる`;
   if(e?.kind==='continuous'){
+    if(e.code==='countStatScale'){
+      const conditions=[
+        e.names?.map(name=>`「${name}」`).join('または'),e.attribute&&`${normalizeAttribute(e.attribute)}属性`,
+        e.race&&`${normalizeRace(e.race)}族`,e.level&&`レベル${e.level}`,COUNT_MONSTER_KINDS[e.monsterKind]
+      ].filter(Boolean);
+      return `${PASSIVE_SCOPES[e.scope]}の${(e.zones||[]).map(zone=>COUNT_STAT_ZONES[zone]).join('・')}にある${conditions.length?`${conditions.join('／')}に該当する`:''}モンスター1体につき、自身の${e.stat==='def'?'DEF':'ATK'}＋${e.amount}`;
+    }
     if(e.code==='graveNamedScale')return `${PASSIVE_SCOPES[e.scope]||'お互い'}の墓地の「${(e.names||[]).join('」「')}」1枚につきATK＋${e.amount}`;
     if(e.code==='raceFieldGraveScale')return `${PASSIVE_SCOPES[e.scope]||'相手'}の表側表示フィールド・墓地の${normalizeRace(e.race)}族1体につきATK＋${e.amount}`;
     if(e.code==='battleAttributeScale')return `${normalizeAttribute(e.attribute)}属性モンスターとのダメージ計算中だけATK＋${e.amount}`;

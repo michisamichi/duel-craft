@@ -1,5 +1,6 @@
 /** A small, declarative user effect-recipe library. No script execution, no engine extensions. */
-import {validMonsterEffect} from './cards.js?v=2047';
+import {effectText,validMonsterEffect} from './cards.js?v=2047';
+import {HISTORICAL_CARDS} from './historical-data.js?v=2047';
 import {isValidAbility,abilityText} from './rules.js?v=2047';
 
 export const EFFECT_TEMPLATE_KEY='saho-effect-templates-v1';
@@ -102,15 +103,15 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'millOpponentDeck',amount:5}},'ニードルワーム式：リバースで5枚墓地へ','et_builtin_needle'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'scoutDrawDiscardSpells',amount:3}},'悪魔の偵察者式：相手3枚ドロー魔法捨て','et_builtin_scout'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'returnBackrow',target:'bothAllBackrow',amount:0}},'ハリケーン式：場の魔法・罠を全返却','et_builtin_hurricane'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'darkMagicianGrave300'}},'ブラック・マジシャン・ガール式：墓地ATK上昇','et_builtin_bmg'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='ブラック・マジシャン・ガール'),'ブラック・マジシャン・ガール式：墓地ATK上昇','et_builtin_bmg'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'summonRule',code:'soloHandNoTribute'}},'疾風の暗黒騎士ガイア式：手札1枚ならリリース不要','et_builtin_gaia'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'battleImmuneAtkThreshold',threshold:1900}},'翻弄するエルフの剣士式：高ATK戦闘で破壊されない','et_builtin_celtic'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'enemyDragon500'}},'バスター・ブレイダー式：相手ドラゴンの数でATK上昇','et_builtin_buster'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='バスター・ブレイダー'),'バスター・ブレイダー式：相手ドラゴンの数でATK上昇','et_builtin_buster'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'hand',code:'specialByThreeNames',names:['磁石の戦士α','磁石の戦士β','磁石の戦士γ']}},'磁石の戦士マグネット・バルキリオン式：指定名3体をリリースして','et_builtin_valkyrion'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'hand',code:'preventBattleDamage'}},'クリボー式：手札から戦闘ダメージ0','et_builtin_kuriboh'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'cyberJarRevealFive'}},'サイバーポッド式：リバースでモンスター破壊と公開','et_builtin_cyberjar'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'grave',code:'reviveMaterialOnDestroy',names:['幻獣王ガゼル','バフォメット']}},'有翼幻獣キマイラ式：破壊時に指定素材を蘇生','et_builtin_chimera'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'darkBattle500'}},'太陽の戦士式：闇属性との戦闘時ATK上昇','et_builtin_sunwarrior'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='太陽の戦士'),'太陽の戦士式：闇属性との戦闘時ATK上昇','et_builtin_sunwarrior'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'raceAuraGuard',race:'戦士',amount:400}},'コマンド・ナイト式：戦士強化と攻撃対象制限','et_builtin_command'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'continuous',code:'trapSuppression'}},'人造人間－サイコ・ショッカー式：表側の間罠無効','et_builtin_jinzo'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'trigger',code:'copyOpponentPrintedStats'}},'ものマネ幻想師式：召喚時に元々のATK・DEFコピー','et_builtin_copycat'),
@@ -194,6 +195,7 @@ export function templateDescription(t){
  if(!isValidTemplate(t))return '';
  if(t.ability)return abilityText(t.ability)+(t.responseGuard==='targetedSpell'?'（モンスター1体を対象とする魔法限定）':t.responseGuard==='spell'?'（魔法限定）':'');
  const e=t.monsterEffect;
+ if(e.code==='countStatScale'||e.code==='battleAttributeScale')return effectText(t);
  const n=e.amount!==undefined?`（${e.amount}）`:e.threshold!==undefined?`（ATK ${e.threshold}以上）`:'';
  const base={destroyAttachedEquip:'装備されたカードを破壊',multiAttack:'1度のバトルフェイズで複数回攻撃',copyOpponentPrintedStats:'召喚時相手の元々の攻撃力と守備力をコピー',millFirstType:'戦闘ダメージ時指定種別のデッキ破棄',directEarthWaterFire:'条件付き直接攻撃',fusionMaterialSubstitute:'融合素材の代用',morphingJarTwo:'リバース時双方のモンスターをデッキへ戻す',cyberJarRevealFive:'リバース時双方の場を破壊しデッキ5枚公開',darkBattle500:'闇属性との戦闘中にATK上昇',enemyDragon500:'相手のドラゴン族の数に応じてATK上昇',darkMagicianGrave300:'墓地のブラック・マジシャン系の数に応じてATK上昇',preventBattleDamage:'手札から捨て、戦闘ダメージ0',specialByThreeNames:'指定名3体をリリースして手札から特殊召喚',weakenOpponentOnGrave:'墓地へ送られたとき相手ATK－500（場を離れるまで）',reviveMaterialOnDestroy:'効果・戦闘破壊時に墓地の指定名モンスターを蘇生',rocketAssault:'攻撃時の戦闘破壊・ダメージ防止＋相手ATK－500',fusionFromExtraPay5000:'5000LPを払いEXデッキから融合モンスターを特殊召喚',soloHandNoTribute:'手札が自身1枚ならリリース不要',doubleLightTribute:'光属性の上級召喚時に2体分のリリース',graveNamedScale:'墓地の指定名でATK変化',raceFieldGraveScale:'場・墓地の指定種族でATK変化',battleAttributeScale:'特定属性との戦闘時にATK変化',battleImmuneAtkThreshold:'戦闘破壊耐性',attributeFieldAura:'属性別の全体ATK変化',raceAuraGuard:'種族強化＋攻撃対象制限',returnOpponentOnFlip:'リバース時に相手モンスターを手札へ戻す',searchStatOnGrave:'フィールドから墓地へ送られた際に指定ATK/DEF以下をサーチ',millOpponentDeck:'リバース時のデッキ破棄',selfReturnHand:'自分エンドフェイズに自身を手札へ戻す',postAttackDefenseLock:'攻撃後に守備表示＋次の自分ターン終了まで手動変更不可',trapSuppression:'表側表示で罠の発動・効果を封じる',dragonTargetGuard:'表側表示で相手がドラゴン族を効果対象にできない'};
  return (base[e.code]||`${e.kind}・${e.code}`)+n;

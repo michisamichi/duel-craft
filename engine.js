@@ -7,60 +7,49 @@ const fail = msg => {throw new Error(msg)};
 const assert = (cond,msg) => {if(!cond) fail(msg)};
 const opponent = seat => 1-seat;
 const mustCard = id => {assert(!!CARD[id],'不明なカードです');return CARD[id];};
-// Native historical bonuses are derived at read time; no per-turn cache or
-// synchronized stat fields are needed. Hidden opposing monsters are excluded.
-function historicalAtkBonus(item,state,seat){
- const effect=CARD[item?.id]?.monsterEffect;
- const code=effect?.code;
- if(!state||seat!==0&&seat!==1)return 0;
- if(code==='graveNamedScale'){
-  let count=0;
-  for(let owner=0;owner<2;owner++){
-   if(effect.scope!=='both'&&owner!==(effect.scope==='own'?seat:1-seat))continue;
-   for(const id of state.players[owner]?.grave||[]){
-    if(effect.names.includes(CARD[id]?.name))count++;
+// Older custom cards and saved templates use the original fixed codes.
+const LEGACY_COUNT_SCALES={
+ graveNamedScale:{zones:['grave'],stat:'atk'},
+ raceFieldGraveScale:{zones:['field','grave'],stat:'atk'},
+ darkMagicianGrave300:{zones:['grave'],stat:'atk',scope:'both',amount:300,names:['ブラック・マジシャン','マジシャン・オブ・ブラックカオス']},
+ enemyDragon500:{zones:['field','grave'],stat:'atk',scope:'opponent',amount:500,race:'ドラゴン'}
+};
+
+function countScaleBonus(effect,state,seat,stat){
+ if(!state||(seat!==0&&seat!==1))return 0;
+ const defaults=LEGACY_COUNT_SCALES[effect.code];
+ const rule=effect.code==='countStatScale'?effect:defaults?{
+  ...defaults,
+  scope:defaults.scope??effect.scope,
+  amount:defaults.amount??effect.amount,
+  names:effect.code==='graveNamedScale'?effect.names:defaults.names,
+  race:effect.code==='raceFieldGraveScale'?effect.race:defaults.race
+ }:null;
+ if(!rule||rule.stat!==stat)return 0;
+ const {scope,zones,names,level,monsterKind,amount}=rule;
+ const race=normalizeRace(rule.race),attribute=normalizeAttribute(rule.attribute);
+ const matches=id=>{
+  const card=CARD[id];
+  if(!card||(effect.code!=='graveNamedScale'&&card.type!=='monster')||names&&!names.includes(card.name)||race&&normalizeRace(card.race)!==race||
+     attribute&&normalizeAttribute(card.attribute)!==attribute||level!==undefined&&card.level!==level)return false;
+  if(monsterKind==='token')return !!card.isToken;
+  if(monsterKind==='fusion'||monsterKind==='ritual')return summonKind(card)===monsterKind;
+  return !monsterKind||!card.isToken&&summonKind(card)==='normal'&&(card.subtype||'normal')===monsterKind;
+ };
+ let count=0;
+ for(let owner=0;owner<2;owner++){
+  if(scope!=='both'&&owner!==(scope==='own'?seat:1-seat))continue;
+  const player=state.players[owner];
+  if(!player)continue;
+  for(const zone of zones){
+   if(zone==='field'){
+    for(const item of player.monsters||[])if(item&&item.pos!=='set'&&matches(item.id))count++;
+   }else{
+    for(const id of player[zone]||[])if(matches(id))count++;
    }
   }
-  return count*effect.amount;
  }
- if(code==='raceFieldGraveScale'){
-  let count=0;
-  for(let owner=0;owner<2;owner++){
-   if(effect.scope!=='both'&&owner!==(effect.scope==='own'?seat:1-seat))continue;
-   const p=state.players[owner];if(!p)continue;
-   for(const m of p.monsters||[]){
-    if(m&&m.pos!=='set'&&normalizeRace(CARD[m.id]?.race)===normalizeRace(effect.race))count++;
-   }
-   for(const id of p.grave||[]){
-    if(normalizeRace(CARD[id]?.race)===normalizeRace(effect.race))count++;
-   }
-  }
-  return count*effect.amount;
- }
- if(code==='darkMagicianGrave300'){
-  let count=0;
-  for(const p of state.players){
-   if(!p)continue;
-   for(const id of p.grave||[]){
-    const name=CARD[id]?.name;
-    if(name==='ブラック・マジシャン'||name==='マジシャン・オブ・ブラックカオス')count++;
-   }
-  }
-  return 300*count;
- }
- if(code==='enemyDragon500'){
-  const opponent=state.players[1-seat];
-  if(!opponent)return 0;
-  let count=0;
-  for(const m of opponent.monsters||[]){
-   if(m&&m.pos!=='set'&&(CARD[m.id]?.race==='ドラゴン'||CARD[m.id]?.race==='dragon'))count++;
-  }
-  for(const id of opponent.grave||[]){
-   if(CARD[id]?.race==='ドラゴン'||CARD[id]?.race==='dragon')count++;
-  }
-  return 500*count;
- }
- return 0;
+ return count*amount;
 }
 // This is a damage-step-only modifier. Do not show it in ordinary field ATK.
 function combatAtk(item,state,seat,other){
@@ -252,11 +241,11 @@ function resolveFlipEffect(s,seat,item){
  if(sent.length)opponent.grave.push(...sent);
  log(s,`「${c.name}」のリバース効果：${opponent.name}のデッキから${sent.length}枚を墓地へ送りました。`);
 }
-function protectedFromBattle(victim,state,victimSeat,opposing){
+function protectedFromBattle(victim,state,opposing,opposingSeat){
   const e=CARD[victim?.id]?.monsterEffect;
   return victim?.pos!=='set'&&e?.kind==='continuous'&&
     e.code==='battleImmuneAtkThreshold'&&Number.isInteger(e.threshold)&&
-    combatAtk(opposing,state,1-victimSeat,victim)>=e.threshold;
+    combatAtk(opposing,state,opposingSeat,victim)>=e.threshold;
 }
 // A linked equip prevents only the linked monster from declaring a new attack.
 // Derive permission directly from active cards; no extra turn flags needed.
@@ -289,9 +278,9 @@ function continuousStatBonus(item,state,seat,stat){
  const own=card.ability?.when==='continuous'?card.ability:null;
  if(own&&own.operation===plus)result+=own.amount;
  if(own&&own.operation===minus)result-=own.amount;
- if(card.subtype==='effect'&&card.monsterEffect?.kind==='continuous'&&stat==='atk'){
-   result+=card.monsterEffect.code==='atk300'?300:card.monsterEffect.code==='atk500'?500:0;
-   result+=historicalAtkBonus(item,state,seat);
+ if(card.subtype==='effect'&&card.monsterEffect?.kind==='continuous'){
+   if(stat==='atk')result+=card.monsterEffect.code==='atk300'?300:card.monsterEffect.code==='atk500'?500:0;
+   result+=countScaleBonus(card.monsterEffect,state,seat,stat);
  }
  if(!state||seat===null)return result;
  let relativeEquipApplied=false;
@@ -362,13 +351,13 @@ function continuousStatBonus(item,state,seat,stat){
 }
 export function effectiveAtk(item,state=null,seat=null){
  const c=CARD[item?.id];if(!c)return 0;
-  const swapped=item.swappedOriginalStatsTurn===state?.turnNo;
+  const swapped=state!=null&&item.swappedOriginalStatsTurn===state.turnNo;
   const original=swapped?c.def:(Number.isInteger(item.copiedAtk)?item.copiedAtk:c.atk);
-  const base=item.doubleOriginalAtkTurn===state?.turnNo?2*c.atk:original;
+  const base=state!=null&&item.doubleOriginalAtkTurn===state.turnNo?2*c.atk:original;
  return Math.max(0,base+(item.bonus||0)+(Number.isSafeInteger(item.permanentAtkDelta)?Math.max(-5000,Math.min(5000,item.permanentAtkDelta)):0)+continuousStatBonus(item,state,seat,'atk'));
 }
 export function effectiveDef(item,state=null,seat=null){
-  const c=CARD[item?.id];return c?Math.max(0,(item.swappedOriginalStatsTurn===state?.turnNo?c.atk:(Number.isInteger(item.copiedDef)?item.copiedDef:c.def))+(item.defBonus||0)+continuousStatBonus(item,state,seat,'def')):0;
+  const c=CARD[item?.id];return c?Math.max(0,(state!=null&&item.swappedOriginalStatsTurn===state.turnNo?c.atk:(Number.isInteger(item.copiedDef)?item.copiedDef:c.def))+(item.defBonus||0)+continuousStatBonus(item,state,seat,'def')):0;
 }
 function activateMonsterAbility(s,seat,item,kind){
   const c=mustCard(item.id), e=c.monsterEffect;
@@ -771,21 +760,21 @@ function resolveAttack(s) {
     const allyInAttack=ally.pos==='atk';
     const allyPower=allyInAttack?combatAtk(ally,s,a.by,attacker):effectiveDef(ally,s,a.by);
     if(attackerAtk>allyPower){
-      if(!protectedFromBattle(ally,s,a.by,attacker))destroyedInBattle(atkP,slot);
+      if(!protectedFromBattle(ally,s,attacker,a.by))destroyedInBattle(atkP,slot);
       if(allyInAttack||hasPiercingEquip(s,attacker,a.by)){
        dealtDamage=a.preventBattleDamageSeat===1-a.by?0:attackerAtk-allyPower;
        defP.lp=Math.max(0,defP.lp-dealtDamage);
       }
     }else if(attackerAtk<allyPower){
-      if(allyInAttack&&!rocketAssault&&!protectedFromBattle(attacker,s,a.by,ally))destroyedInBattle(atkP,a.attacker);
+      if(allyInAttack&&!rocketAssault&&!protectedFromBattle(attacker,s,ally,a.by))destroyedInBattle(atkP,a.attacker);
       if(!rocketAssault){
        dealtDamage=a.preventBattleDamageSeat===a.by?0:allyPower-attackerAtk;
        atkP.lp=Math.max(0,atkP.lp-dealtDamage);
        damageSourceSeat=1-a.by;damageSource=ally;
       }
     }else if(allyInAttack&&attackerAtk>0){
-      if(!rocketAssault&&!protectedFromBattle(attacker,s,a.by,ally))destroyedInBattle(atkP,a.attacker);
-      if(!protectedFromBattle(ally,s,a.by,attacker))destroyedInBattle(atkP,slot);
+      if(!rocketAssault&&!protectedFromBattle(attacker,s,ally,a.by))destroyedInBattle(atkP,a.attacker);
+      if(!protectedFromBattle(ally,s,attacker,a.by))destroyedInBattle(atkP,slot);
     }
     log(s,`マジックアーム・シールド：攻撃対象を${name}へ変更して戦闘処理しました（コントロール移動は省略）。`);
   }else if(a.target===-1 || a.target===null) {
@@ -806,7 +795,7 @@ function resolveAttack(s) {
     const atk=combatAtk(attacker,s,a.by,defender);
     const power=isAtk?combatAtk(defender,s,1-a.by,attacker):effectiveDef(defender,s,1-a.by);
     if(atk>power){
-      const survives=protectedFromBattle(defender,s,1-a.by,attacker);
+      const survives=protectedFromBattle(defender,s,attacker,a.by);
       if(!survives)destroyedInBattle(defP,a.target);
       if(isAtk||hasPiercingEquip(s,attacker,a.by)){
         dealtDamage=a.preventBattleDamageSeat===1-a.by?0:atk-power;defP.lp=Math.max(0,defP.lp-dealtDamage);
@@ -815,7 +804,7 @@ function resolveAttack(s) {
       log(s,survives?`${dc.name} は戦闘では破壊されません。${isAtk?` ${dealtDamage}ダメージ。`:''}`:
         `${mustCard(attacker.id).name} が ${dc.name} を破壊！${isAtk?` ${dealtDamage}ダメージ。`:''}`);
     } else if(atk<power) {
-      const survives=isAtk&&(rocketAssault||protectedFromBattle(attacker,s,a.by,defender));
+      const survives=isAtk&&(rocketAssault||protectedFromBattle(attacker,s,defender,1-a.by));
       if(isAtk&&!survives)destroyedInBattle(atkP,a.attacker);
       if(!rocketAssault){
         atkP.lp=Math.max(0,atkP.lp-(power-atk));
@@ -825,8 +814,8 @@ function resolveAttack(s) {
     } else {
       // Official battle rule: 0 ATK against 0 ATK does not destroy either monster.
       if(isAtk&&atk>0){
-        const attackerSafe=rocketAssault||protectedFromBattle(attacker,s,a.by,defender);
-        const defenderSafe=protectedFromBattle(defender,s,1-a.by,attacker);
+        const attackerSafe=rocketAssault||protectedFromBattle(attacker,s,defender,1-a.by);
+        const defenderSafe=protectedFromBattle(defender,s,attacker,a.by);
         if(!attackerSafe)destroyedInBattle(atkP,a.attacker);
         if(!defenderSafe)destroyedInBattle(defP,a.target);
         log(s,attackerSafe||defenderSafe?'同じ攻撃力での戦闘。破壊耐性を適用しました。':'攻撃力が同じため、両方のモンスターが破壊されました。');
