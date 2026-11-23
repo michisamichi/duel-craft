@@ -3,8 +3,8 @@ import {CARDS,CARD,PRESETS,copyPreset,validDeck,validExtraDeck,replaceCustomCard
 import {readDeckStore,writeDeckStore,newDeck,encodeDeckShare,decodeDeckShare,MAX_SAVED_DECKS,totalCards} from './decks.js?v=2047';
 import {makeBackup,parseBackup,applyBackup} from './backup.js?v=2047';
 import {EFFECT_TEMPLATE_KEY,BUILTIN_EFFECT_TEMPLATES,readTemplates,saveTemplate,deleteTemplate,canApplyTemplate,applyTemplate,templateDescription} from './effect-templates.js?v=2047';
-import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef,isAttackTargetLegal,canManuallyChangePosition,remainingAttacks,specialHandTributeSlots,canDirectAttackWithMonsters,isAttackSealedByEquip,trapsSuppressed,canActivateMainTrap,canExtraNormalSummon,summonTributeNeed,validSummonTributes,hasDoubleLightTribute,canProtectOwnTraps,redirectedSpellTargetSlot,attackerAllySlot,canActivateAttackTrap,canActivateResponseTrap,canOfferSpell,canOfferMonsterIgnition} from './engine.js?v=2047';
-import {LIMITS,cardLimit,cardCost,deckCost,fusionMaterialsMatch,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,BEFORE_META,abilityTargets,followUpTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=2047';
+import {PHASES,createRoom,joinRoom,createDemo,applyAction,normalizeRoom,effectiveAtk,effectiveDef,isAttackTargetLegal,canManuallyChangePosition,remainingAttacks,specialHandTributeSlots,canDirectAttackWithMonsters,isAttackSealedByEquip,trapsSuppressed,canActivateMainTrap,canExtraNormalSummon,summonTributeNeed,validSummonTributes,hasDoubleLightTribute,canProtectOwnTraps,redirectedSpellTargetSlot,attackerAllySlot,canActivateAttackTrap,canActivateResponseTrap,canOfferSpell,canOfferMonsterIgnition,monsterEffectActivationBlocked} from './engine.js?v=2047';
+import {LIMITS,cardLimit,cardCost,deckCost,fusionMaterialsMatch,TRIGGERS,TARGETS,OPERATIONS,ABILITY_META,BEFORE_META,abilityCostOptions,abilityTargets,followUpTargets,abilityText,normalizeRuleSettings,readRuleSettings,writeRuleSettings} from './rules.js?v=2047';
 import {createDraftRoom,joinDraftRoom,applyDraftPick,normalizeDraftRoom} from './draft.js?v=2047';
 import {readPackStore,savePackStore,newPack,normalizePack,openPack,collect} from './packs.js?v=2047';
 import {SEALED_STORAGE_KEY,sealedPoolFromPacks,normalizeSealedSession,allowedSealedCopies,sealedCapacity} from './sealed.js?v=2047';
@@ -584,8 +584,8 @@ function passiveScaleFields(effect){
  if(effect.code==='searchDeckOnSummon')return effect.filter==='named'?`<div class="sv-passive-editor"><label class="field-label" for="cardSearchName">デッキから探すカード名（完全一致）</label><input id="cardSearchName" class="input" maxlength="32" value="${esc(effect.name||'')}" placeholder="例：幻獣王ガゼル"></div>`:'';
  if(effect.code==='multiAttack')return `<div class="sv-passive-editor"><label class="field-label" for="cardMultiAttackCount">1回のバトルフェイズで攻撃できる回数</label><input class="input" id="cardMultiAttackCount" type="number" inputmode="numeric" min="2" max="5" step="1" value="${esc(effect.count??2)}"><p class="tiny muted">攻撃が無効になった場合も1回として数えます。守備表示では攻撃できません。</p></div>`;
  if(effect.code==='scoutDrawDiscardSpells')return `<div class="sv-passive-editor"><label class="field-label" for="cardScoutDrawAmount">リバース時に相手がドローする枚数</label><input class="input" id="cardScoutDrawAmount" type="number" inputmode="numeric" min="1" max="5" step="1" value="${esc(effect.amount??3)}"><p class="tiny muted">その中の魔法カードだけ墓地へ送ります。ドローの公開演出・チェーン応答は簡略化します。</p></div>`;
- if(effect.code==='returnOpponentOnFlip')return `<div class="sv-passive-editor"><label class="field-label" for="cardFlipBounceCount">手札に戻す最大枚数</label><input class="input" id="cardFlipBounceCount" type="number" inputmode="numeric" min="1" max="2" step="1" value="${esc(effect.amount??2)}"><p class="tiny muted">相手の左端のモンスターから自動選択。待機やチェーン処理は追加しません。</p></div>`;
- if(effect.code==='searchStatOnGrave')return `<div class="sv-passive-editor"><label class="field-label" for="cardGraveSearchThreshold">サーチ条件（ATK/DEFがこの数値以下）</label><input class="input" id="cardGraveSearchThreshold" type="number" inputmode="numeric" min="0" max="5000" step="1" value="${esc(effect.threshold??1500)}"><p class="tiny muted">自分のデッキから最初の候補1体を手札に加える簡易処理。検索後の発動制限は保留。</p></div>`;
+ if(effect.code==='returnOpponentOnFlip')return `<div class="sv-passive-editor"><label class="field-label" for="cardFlipBounceCount">手札に戻す最大枚数</label><input class="input" id="cardFlipBounceCount" type="number" inputmode="numeric" min="1" max="2" step="1" value="${esc(effect.amount??2)}"><p class="tiny muted">有効な対象を左端から自動選択します。お互いの場を選ぶ場合、相手の場を優先します。</p></div>`;
+ if(effect.code==='searchStatOnGrave')return `<div class="sv-passive-editor"><div class="form-duo"><div><label class="field-label" for="cardGraveSearchThreshold">サーチ条件（ATK/DEFがこの数値以下）</label><input class="input" id="cardGraveSearchThreshold" type="number" inputmode="numeric" min="0" max="5000" step="1" value="${esc(effect.threshold??1500)}"></div><div><label class="field-label" for="cardGraveSearchLimit">ターン中の発動制限</label><select class="input" id="cardGraveSearchLimit">${selectOptions({none:'制限なし',restricted:'同名のサーチは1回・加えたカードと同名の効果を封じる'},effect.restrictActivation?'restricted':'none')}</select></div></div><p class="tiny muted">自分のデッキから最初の候補1体を手札に加えます。</p></div>`;
  if(effect.code==='millOpponentDeck')return `<div class="sv-passive-editor"><label class="field-label" for="cardFlipMillAmount">リバース時に墓地へ送る枚数</label><input class="input" id="cardFlipMillAmount" type="number" inputmode="numeric" min="1" max="10" step="1" value="${esc(effect.amount??5)}"><p class="tiny muted">反転召喚・戦闘による表側化で発動。チェーンによる応答は簡略化します。</p></div>`;
  if(effect.code==='battleImmuneAtkThreshold')return `<div class="sv-passive-editor"><label class="field-label" for="cardPassiveThreshold">戦闘相手のATKがこの数値以上なら破壊されない</label><input class="input" id="cardPassiveThreshold" type="number" inputmode="numeric" min="100" max="5000" step="1" value="${esc(effect.threshold??1900)}"><p class="tiny muted">戦闘ダメージはそのまま受けます。効果による破壊は防ぎません。</p></div>`;
  if(effect.code==='raceAuraGuard')return `<div class="sv-passive-editor"><div class="form-duo"><div><label class="field-label" for="cardPassiveRace">ATK上昇対象の種族</label><select class="input" id="cardPassiveRace">${selectOptions(Object.fromEntries(RACE_NAMES.map(x=>[x,x+'族'])),effect.race||'戦士')}</select></div><div><label class="field-label" for="cardPassiveAmount">ATK上昇値</label><input class="input" id="cardPassiveAmount" type="number" inputmode="numeric" min="50" max="2000" value="${esc(effect.amount??400)}"></div></div><p class="tiny muted">自身が表側の間、自分の指定種族を強化します。仲間のモンスターが1体以上存在すると、このカードを相手が攻撃対象に選べなくなります。</p></div>`;
@@ -626,6 +626,7 @@ function nativeRecipeTarget(e,card){
  if(['countStatScale','graveNamedScale','raceFieldGraveScale','attributeFieldAura'].includes(e?.code))
    return `<select class="input" id="cardPassiveScope" aria-label="数えるカードの側">${selectOptions(PASSIVE_SCOPES,e.scope||'both')}</select>`;
  if(e?.code==='recruitOnBattleDestroy')return `<select class="input" id="cardRecruitTarget" disabled><option>自分のデッキの指定属性・ATK以下</option></select>`;
+ if(['returnOpponentOnFlip','destroyOpponentOnFlip'].includes(e?.code))return `<select class="input" id="cardFlipScope" aria-label="対象にできる場">${selectOptions(PASSIVE_SCOPES,e.scope||'opponent')}</select>`;
  if(e?.code==='searchStatOnGrave')return `<select class="input" id="cardGraveSearchStat">${selectOptions({atk:'自分のデッキのATK指定値以下',def:'自分のデッキのDEF指定値以下'},e.stat||'atk')}</select>`;
  if(e?.code==='searchDeckOnSummon')
    return `<select class="input" id="cardSearchFilter">${selectOptions({ritualMonster:'自分のデッキの儀式モンスター',ritualSpell:'自分のデッキの儀式魔法',named:'自分のデッキの指定名カード'},e.filter||'ritualMonster')}</select>`;
@@ -884,14 +885,19 @@ function readCardForm(){
           d.monsterEffect.names=Array.from({length:code==='specialByThreeNames'?3:2},(_,i)=>value(`cardNativeName${i+1}`,d.monsterEffect.names?.[i]||'').trim());
         }else if(code==='multiAttack'){
           d.monsterEffect.count=Number(value('cardMultiAttackCount',d.monsterEffect.count));
-        }else if(code==='returnOpponentOnFlip'){
-          d.monsterEffect.amount=Number(value('cardFlipBounceCount',d.monsterEffect.amount));
+        }else if(['returnOpponentOnFlip','destroyOpponentOnFlip'].includes(code)){
+          const scope=value('cardFlipScope',d.monsterEffect.scope||'opponent');
+          if(scope!=='opponent')d.monsterEffect.scope=scope;
+          else delete d.monsterEffect.scope;
+          if(code==='returnOpponentOnFlip')d.monsterEffect.amount=Number(value('cardFlipBounceCount',d.monsterEffect.amount));
         }else if(code==='recruitOnBattleDestroy'){
           d.monsterEffect.attribute=value('cardRecruitAttribute',d.monsterEffect.attribute||'地');
           d.monsterEffect.threshold=Number(value('cardRecruitThreshold',d.monsterEffect.threshold));
         }else if(code==='searchStatOnGrave'){
           d.monsterEffect.stat=value('cardGraveSearchStat',d.monsterEffect.stat||'atk');
           d.monsterEffect.threshold=Number(value('cardGraveSearchThreshold',d.monsterEffect.threshold));
+          if(value('cardGraveSearchLimit',d.monsterEffect.restrictActivation?'restricted':'none')==='restricted')d.monsterEffect.restrictActivation=true;
+          else delete d.monsterEffect.restrictActivation;
         }else if(['selfReturnHand','postAttackDefenseLock','destroyAttachedEquip','trapSuppression','soloHandNoTribute','doubleLightTribute','doubleOriginalAtkEndDestroy','destroyOpponentOnFlip','recoverOwnSpellOnFlip','destroyOnAttackToDefense','copyOpponentPrintedStats','preventBattleDamage','weakenOpponentOnGrave'].includes(code)){
           // No numeric inputs for automatic end-phase or post-attack behavior.
         }else if(code==='searchDeckOnSummon'){
@@ -1290,7 +1296,7 @@ function renderPending(){
    <p class="sv-response-help">相手が罠・速攻魔法を使用するか選択しています。</p>
    ${ui.demo?btn('相手側に切り替える','switchSeat','btn secondary wide mt8'):''}</section>`;
   const p=activePlayer();
-  const guards=s.pending.preventBattleDamageSeat===ui.seat?[]:p.hand.map((id,i)=>({id,i})).filter(x=>CARD[x.id]?.monsterEffect?.kind==='hand'&&CARD[x.id].monsterEffect.code==='preventBattleDamage');
+  const guards=s.pending.preventBattleDamageSeat===ui.seat?[]:p.hand.map((id,i)=>({id,i})).filter(x=>CARD[x.id]?.monsterEffect?.kind==='hand'&&CARD[x.id].monsterEffect.code==='preventBattleDamage'&&!monsterEffectActivationBlocked(s,ui.seat,x.id));
   const traps=trapsSuppressed(s)?[]:p.backrow.map((v,i)=>({v,i})).filter(({v,i})=>v&&v.faceDown===true&&CARD[v.id]?.type==='trap'&&v.setTurn<s.turnNo&&(CARD[v.id]?.ability?.when==='attack'||!CARD[v.id]?.ability)&&
     (CARD[v.id]?.ability?.operation!=='redirectToAttackerAlly'||attackerAllySlot(s,ui.seat,s.pending)>=0)&&
     (CARD[v.id]?.ability?.when!=='attack'||canActivateAttackTrap(s,ui.seat,i)));
@@ -2833,6 +2839,11 @@ $('view').addEventListener('change',async e=>{
    return;
  }
  if(e.target.id==='effectTemplateSelect'&&ui.cardDraft){const note=document.querySelector('.sv-template-description');if(note)note.textContent='選択中：'+(e.target.selectedOptions[0]?.dataset.description||'');return;}
+ if(['cardFlipScope','cardGraveSearchLimit'].includes(e.target.id)&&ui.cardDraft){
+   readCardForm();
+   const note=document.querySelector('.sv-effect-preview');if(note)note.textContent=effectText(ui.cardDraft);
+   return;
+ }
  if(['cardAttribute','cardRace'].includes(e.target.id)&&ui.cardDraft){readCardForm();const preview=document.querySelector('.card-demo');if(preview)preview.innerHTML=cardHtmlPreview(ui.cardDraft);return;}
  if(['cardSummonRace','cardSummonRequired','cardMillType','cardNamedMatch','cardNamedQuery','cardPassiveAmount','cardPassiveName1','cardPassiveName2','cardPassiveScope','cardPassiveRace','cardPassiveAttribute','cardPassiveThreshold','cardPassiveNegativeAttribute','cardPassiveNegativeAmount','cardFlipMillAmount','cardScoutDrawAmount','cardSearchName','cardMultiAttackCount','cardFlipBounceCount','cardGraveSearchThreshold','cardAbilityTarget','cardAbilityAmount','cardThenTarget','cardThenAmount','cardLimit','cardCost','fusionMat1','fusionMat2','ritualFor'].includes(e.target.id)&&ui.cardDraft){readCardForm();if(e.target.id.startsWith('cardPassive')||['cardSummonRace','cardSummonRequired','cardMillType','cardNamedMatch','cardNamedQuery','cardFlipMillAmount','cardScoutDrawAmount','cardSearchName','cardMultiAttackCount','cardFlipBounceCount','cardGraveSearchThreshold','cardAbilityTarget','cardAbilityAmount','cardThenTarget','cardThenAmount'].includes(e.target.id)){const note=document.querySelector('.sv-effect-preview');if(note)note.textContent=ui.cardDraft.ability?abilityText(ui.cardDraft.ability):effectText(ui.cardDraft);}return;}
  if(e.target.id==='cardRarity'&&ui.cardDraft){readCardForm();const preview=document.querySelector('.card-demo');if(preview)preview.innerHTML=cardHtmlPreview(ui.cardDraft);return;}

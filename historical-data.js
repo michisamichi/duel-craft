@@ -362,12 +362,12 @@ const NATIVE_MONSTER_EFFECTS={
    kind:'flip',code:'scoutDrawDiscardSpells',params:{amount:3},status:'simplified',
    desc:'リバース時、相手が3枚ドローし、その中の魔法カードのみ墓地へ送る。デッキ不足時はドローによる敗北判定に従う（公開演出・チェーンは簡略化）。'
  },
- '人喰い虫':{kind:'flip',code:'destroyOpponentOnFlip',status:'simplified',desc:'リバース時、相手の左端のモンスター1体を破壊（対象不在なら安全終了。対象選択とチェーンは簡略化）。'},
+ '人喰い虫':{kind:'flip',code:'destroyOpponentOnFlip',params:{scope:'both'},status:'simplified',desc:'リバース時、フィールドのモンスター1体を破壊する。相手側、自分側の順で左端の有効な対象を自動選択し、他にいなければ場に残っている自身も対象になる。チェーン応答は省略。'},
  '聖なる魔術師':{kind:'flip',code:'recoverOwnSpellOnFlip',status:'simplified',desc:'リバース時、自分の墓地の魔法カード1枚を手札に戻す（最初の候補を自動選択。対象選択とチェーンは簡略化）。'},
  'ドリーム・ピエロ':{kind:'position',code:'destroyOnAttackToDefense',status:'simplified',desc:'攻撃表示から表側守備表示に手動変更した場合、相手のモンスター1体を破壊する（左端を自動選択。カード効果による表示変更とチェーンは保留）。'},
- 'ペンギン・ソルジャー':{kind:'flip',code:'returnOpponentOnFlip',params:{amount:2},status:'simplified',desc:'リバース時、相手モンスターを左端から最大2体、持ち主の手札へ戻す。装備カードは解除（対象選択・自分のカードを戻す選択・チェーンは保留）。'},
- 'クリッター':{kind:'grave',code:'searchStatOnGrave',params:{stat:'atk',threshold:1500},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからATK1500以下のモンスターを1体手札へ加える（最初の候補を自動選択。チェーン・検索後の発動制限は保留）。'},
- '黒き森のウィッチ':{kind:'grave',code:'searchStatOnGrave',params:{stat:'def',threshold:1500},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからDEF1500以下のモンスターを1体手札へ加える（最初の候補を自動選択。チェーン・検索後の発動制限は保留）。'},
+ 'ペンギン・ソルジャー':{kind:'flip',code:'returnOpponentOnFlip',params:{amount:2,scope:'opponent'},status:'simplified',desc:'リバース時、相手の有効な対象を左端から最大2体、持ち主の手札へ戻す。装備カードは解除。対象の任意選択・自分のモンスターの指定・チェーン応答は省略。'},
+ 'クリッター':{kind:'grave',code:'searchStatOnGrave',params:{stat:'atk',threshold:1500,restrictActivation:true},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからATK1500以下のモンスターを自動で1体手札に加える。同名のサーチはターン中1回。加えたカードと同名の発動する効果は、そのターン中使えない。チェーン応答は省略。'},
+ '黒き森のウィッチ':{kind:'grave',code:'searchStatOnGrave',params:{stat:'def',threshold:1500,restrictActivation:true},status:'simplified',desc:'フィールドから墓地へ送られたとき、持ち主のデッキからDEF1500以下のモンスターを自動で1体手札に加える。同名のサーチはターン中1回。加えたカードと同名の発動する効果は、そのターン中使えない。チェーン応答は省略。'},
  '隼の騎士':{
    kind:'continuous',code:'multiAttack',params:{count:2},status:'exact',
    desc:'このカードは1度のバトルフェイズ中に2回攻撃できる。'

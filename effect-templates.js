@@ -95,11 +95,11 @@ export const BUILTIN_EFFECT_TEMPLATES=Object.freeze([
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'destroy',target:'enemyLowestAtk',amount:0}},'地割れ式：相手の最低ATKを破壊','et_builtin_fissure'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'searchNamed',target:'self',amount:1,match:'exact',query:'融合'}},'融合賢者式：指定カードをサーチ','et_builtin_sage'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'draw',target:'self',amount:2}},'強欲な壺式：カードを2枚ドロー','et_builtin_pot'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'grave',code:'searchStatOnGrave',stat:'atk',threshold:1500}},'クリッター式：墓地でATK1500以下サーチ','et_builtin_sangan'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'grave',code:'searchStatOnGrave',stat:'def',threshold:1500}},'ウィッチ式：墓地でDEF1500以下サーチ','et_builtin_witch'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='クリッター'),'クリッター式：墓地でATK1500以下サーチ','et_builtin_sangan'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='黒き森のウィッチ'),'ウィッチ式：墓地でDEF1500以下サーチ','et_builtin_witch'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'battle',code:'recruitOnBattleDestroy',attribute:'地',threshold:1500}},'巨大ネズミ式：戦闘破壊で地属性を募集','et_builtin_giantrat'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'returnOpponentOnFlip',amount:2}},'ペンギン式：リバースで最大2体手札へ','et_builtin_penguin'),
- templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'destroyOpponentOnFlip'}},'人喰い虫式：リバースで1体破壊','et_builtin_maneater'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='ペンギン・ソルジャー'),'ペンギン式：リバースで最大2体手札へ','et_builtin_penguin'),
+ templateFromCard(HISTORICAL_CARDS.find(card=>card.name==='人喰い虫'),'人喰い虫式：リバースで1体破壊','et_builtin_maneater'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'millOpponentDeck',amount:5}},'ニードルワーム式：リバースで5枚墓地へ','et_builtin_needle'),
  templateFromCard({type:'monster',subtype:'effect',monsterEffect:{kind:'flip',code:'scoutDrawDiscardSpells',amount:3}},'悪魔の偵察者式：相手3枚ドロー魔法捨て','et_builtin_scout'),
  templateFromCard({type:'spell',spellKind:'normal',ability:{when:'main',operation:'returnBackrow',target:'bothAllBackrow',amount:0}},'ハリケーン式：場の魔法・罠を全返却','et_builtin_hurricane'),
@@ -195,7 +195,7 @@ export function templateDescription(t){
  if(!isValidTemplate(t))return '';
  if(t.ability)return abilityText(t.ability)+(t.responseGuard==='targetedSpell'?'（モンスター1体を対象とする魔法限定）':t.responseGuard==='spell'?'（魔法限定）':'');
  const e=t.monsterEffect;
- if(e.code==='countStatScale'||e.code==='battleAttributeScale')return effectText(t);
+ if(['countStatScale','battleAttributeScale','searchStatOnGrave','returnOpponentOnFlip','destroyOpponentOnFlip'].includes(e.code))return effectText(t);
  const n=e.amount!==undefined?`（${e.amount}）`:e.threshold!==undefined?`（ATK ${e.threshold}以上）`:'';
  const base={destroyAttachedEquip:'装備されたカードを破壊',multiAttack:'1度のバトルフェイズで複数回攻撃',copyOpponentPrintedStats:'召喚時相手の元々の攻撃力と守備力をコピー',millFirstType:'戦闘ダメージ時指定種別のデッキ破棄',directEarthWaterFire:'条件付き直接攻撃',fusionMaterialSubstitute:'融合素材の代用',morphingJarTwo:'リバース時双方のモンスターをデッキへ戻す',cyberJarRevealFive:'リバース時双方の場を破壊しデッキ5枚公開',darkBattle500:'闇属性との戦闘中にATK上昇',enemyDragon500:'相手のドラゴン族の数に応じてATK上昇',darkMagicianGrave300:'墓地のブラック・マジシャン系の数に応じてATK上昇',preventBattleDamage:'手札から捨て、戦闘ダメージ0',specialByThreeNames:'指定名3体をリリースして手札から特殊召喚',weakenOpponentOnGrave:'墓地へ送られたとき相手ATK－500（場を離れるまで）',reviveMaterialOnDestroy:'効果・戦闘破壊時に墓地の指定名モンスターを蘇生',rocketAssault:'攻撃時の戦闘破壊・ダメージ防止＋相手ATK－500',fusionFromExtraPay5000:'5000LPを払いEXデッキから融合モンスターを特殊召喚',soloHandNoTribute:'手札が自身1枚ならリリース不要',doubleLightTribute:'光属性の上級召喚時に2体分のリリース',graveNamedScale:'墓地の指定名でATK変化',raceFieldGraveScale:'場・墓地の指定種族でATK変化',battleAttributeScale:'特定属性との戦闘時にATK変化',battleImmuneAtkThreshold:'戦闘破壊耐性',attributeFieldAura:'属性別の全体ATK変化',raceAuraGuard:'種族強化＋攻撃対象制限',returnOpponentOnFlip:'リバース時に相手モンスターを手札へ戻す',searchStatOnGrave:'フィールドから墓地へ送られた際に指定ATK/DEF以下をサーチ',millOpponentDeck:'リバース時のデッキ破棄',selfReturnHand:'自分エンドフェイズに自身を手札へ戻す',postAttackDefenseLock:'攻撃後に守備表示＋次の自分ターン終了まで手動変更不可',trapSuppression:'表側表示で罠の発動・効果を封じる',dragonTargetGuard:'表側表示で相手がドラゴン族を効果対象にできない'};
  return (base[e.code]||`${e.kind}・${e.code}`)+n;
