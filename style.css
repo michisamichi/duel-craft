@@ -4055,3 +4055,14 @@ body.sv-idle-mode .sv-tab-page{max-width:900px}
 .sv-sequence-stage>b{display:block;margin:12px 0 6px}
 @media(max-width:780px){.sv-recipe-four{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.sv-recipe-four,.sv-recipe-three{grid-template-columns:1fr}}
+
+/* SAHOVERSE 1.9.194: opening initiative banner */
+.sv-opening-notice{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.6rem;padding:.65rem .8rem;margin:.45rem 0;border:1px solid rgba(116,184,248,.5);border-radius:12px;background:linear-gradient(120deg,rgba(30,53,88,.9),rgba(32,31,62,.88));color:#f0f6ff;font-size:.92rem}.sv-opening-notice b{font-size:1.12rem;color:#ffe097}.sv-opening-notice .tiny{opacity:.75}
+
+/* Progressive, compact branching editor */
+.sv-branch-panel{margin:.65rem 0;padding:.7rem;border-left:2px solid rgba(111,177,235,.7);border-radius:0 10px 10px 0;background:rgba(53,89,127,.10)}.sv-branch-panel>p{margin:.3rem 0 .6rem}.sv-coin-branch{margin:.6rem 0 0 .5rem;padding:.55rem;border-left:1px solid rgba(130,164,210,.45)}.sv-coin-branch>strong{display:block;margin-bottom:.35rem}
+
+/* v1.9.195: progressive effect-tree substeps (no dependencies, layout-only). */
+.sv-effect-tree-step{border-left:2px solid var(--accent, #64748b);padding-left:10px;margin-top:10px;}
+.sv-effect-tree-branch{margin-top:10px;max-width:100%;}
+.sv-effect-tree-branch input,.sv-effect-tree-branch select{min-width:0;}

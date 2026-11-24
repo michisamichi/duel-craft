@@ -10,20 +10,22 @@ export function cardCost(card){
   return 2;
 }
 export function deckCost(counts,cardIndex){return Object.entries(counts||{}).reduce((total,[id,count])=>total+cardCost(cardIndex[id])*Number(count||0),0);}
-export const TRIGGERS={main:'自分メインで発動',summon:'召喚したとき',battleDamage:'戦闘ダメージを与えたとき',continuous:'表側の間ずっと',attack:'相手の攻撃に対応',response:'相手の効果にチェーン'};
+export const TRIGGERS={main:'自分メインで発動',summon:'召喚したとき',flip:'リバースしたとき',grave:'フィールドから墓地に送られたとき',destroyed:'フィールドで破壊されたとき',battleDamage:'戦闘ダメージを与えたとき',continuous:'表側の間ずっと',attack:'相手の攻撃に対応',response:'相手の効果にチェーン'};
 export const TARGETS={none:'対象なし',self:'自分',opponent:'相手',ownMonster:'自分のモンスター1体',enemyMonster:'相手のモンスター1体',attacker:'攻撃しているモンスター',ownAllMonsters:'自分のモンスター全体',enemyAllMonsters:'相手のモンスター全体',enemyAttackMonsters:'相手の攻撃表示モンスター全体',enemyLowestAtk:'相手の表側モンスター（ATK最低・左端優先）',enemyFaceDownMonster:'相手の裏側守備モンスター（左端優先）',bothMonsters:'お互いのモンスター全体',ownBackrow:'自分の魔法・罠1枚',enemyBackrow:'相手の魔法・罠1枚',ownAllBackrow:'自分の魔法・罠すべて',enemyAllBackrow:'相手の魔法・罠すべて',bothAllBackrow:'お互いの魔法・罠すべて（フィールド魔法を含む）',eitherGraveMonster:'自分・相手の墓地のモンスター1体'};
 // Display order is the priority order in the editor. Each operation has a working engine implementation.
 export const ABILITY_META={
  draw:{label:'カードをドロー',scope:'player',amount:1,min:1,max:10},
- searchMonster:{label:'山札で最初のモンスターを手札へ加える',scope:'player',amount:1,min:1,max:5},
- searchSpell:{label:'山札で最初の魔法を手札へ加える',scope:'player',amount:1,min:1,max:5},
+ searchMonster:{label:'デッキから条件に合うモンスターを手札へ',scope:'player',amount:1,min:1,max:5},
+ summonMonsterHand:{label:'手札から条件に合うモンスターを特殊召喚（末尾優先）',scope:'player',amount:1,min:1,max:2},
+ summonMonsterDeck:{label:'デッキから条件に合うモンスターを特殊召喚',scope:'player',amount:1,min:1,max:2},
+ searchSpell:{label:'デッキから魔法を手札へ加える',scope:'player',amount:1,min:1,max:5},
  searchNamed:{label:'デッキから指定名のカードを手札へ加える',scope:'player',amount:1,min:1,max:3},
  summonNamedFromHand:{label:'手札の指定名モンスター1体を特殊召喚',scope:'player',amount:0},
  summonRaceFromHand:{label:'手札の指定種族モンスターを特殊召喚',scope:'player',amount:2,min:1,max:2},
  summonSheepTokens:{label:'羊トークンを守備表示で特殊召喚（1～4体）',scope:'player',amount:4,min:1,max:4},
  summonKuribohTokens:{label:'表側の「クリボー」をリリースしてクリボートークンを可能な限り特殊召喚',scope:'player',amount:0},
  extraNormalSummon:{label:'通常召喚済みでも500LPで追加通常召喚（永続罠）',scope:'player',amount:500,min:500,max:500},
- searchTrap:{label:'山札で最初の罠を手札へ加える',scope:'player',amount:1,min:1,max:5},
+ searchTrap:{label:'デッキから罠を手札へ加える',scope:'player',amount:1,min:1,max:5},
  destroy:{label:'モンスターを破壊',scope:'monster',amount:0},
  banish:{label:'モンスターを除外',scope:'monster',amount:0},
  damage:{label:'LPにダメージ',scope:'player',amount:500,min:1,max:99999},
@@ -45,6 +47,9 @@ export const ABILITY_META={
  weaken:{label:'攻撃力をダウン',scope:'monster',amount:500,min:1,max:10000},
  boostDef:{label:'守備力をアップ',scope:'monster',amount:500,min:1,max:10000},
  diceStats:{label:'擬似サイコロ（1～6）×100で味方ATK/DEF上昇・敵ATK/DEF低下',scope:'monster',amount:0},
+ boostBoth:{label:'表側モンスターのATK・DEFを同時にアップ（ターン終了まで）',scope:'monster',amount:500,min:1,max:10000},
+ changeStats:{label:'表側モンスターの攻撃力・守備力を個別に増減（ターン終了まで）',scope:'monster',amount:500,min:-10000,max:10000},
+ weakenBoth:{label:'表側モンスターのATK・DEFを同時にダウン（ターン終了まで）',scope:'monster',amount:500,min:1,max:10000},
  weakenDef:{label:'守備力をダウン',scope:'monster',amount:500,min:1,max:10000},
  returnHand:{label:'モンスターを手札に戻す',scope:'monster',amount:0},
  returnDeck:{label:'モンスターをデッキに戻す',scope:'monster',amount:0},
@@ -58,6 +63,8 @@ export const ABILITY_META={
  preventEquipAttack:{label:'装備中の相手モンスターの攻撃を禁止',scope:'monster',amount:0},
  tributeOtherToAttack:{label:'攻撃時、ほかの自分のモンスター1体をリリース',scope:'player',amount:0},
  timeWizardCoin:{label:'擬似コイントスで片方の全モンスター破壊',scope:'player',amount:0},
+ conditionBranch:{label:'条件成立・不成立で異なる効果を実行',scope:'none',amount:0},
+ coinBranch:{label:'コイントスで表・裏それぞれの効果を実行',scope:'none',amount:0},
  selfSpecialFromHand:{label:'手札からこのモンスターを特殊召喚',scope:'player',amount:0},
  selfSpecialFromHandGiveRevive:{label:'手札から特殊召喚＋相手墓地から1体自動蘇生',scope:'player',amount:0},
  lockWhileSourceFaceUp:{label:'このモンスターが表側の間、相手1体の攻撃を禁止',scope:'monster',amount:0},
@@ -76,6 +83,8 @@ export const ABILITY_META={
  banishSetBackrow:{label:'セットされた魔法・罠1枚を除外',scope:'backrow',amount:0},
  returnBackrow:{label:'魔法・罠を手札に戻す',scope:'backrow',amount:0},
  discardRandom:{label:'手札をランダムに捨てる',scope:'player',amount:1,min:1,max:10},
+ banishOwnHand:{label:'自分の手札を除外（末尾優先）',scope:'player',amount:1,min:1,max:5},
+ returnOwnHandToDeck:{label:'自分の手札をデッキに戻す（末尾優先）',scope:'player',amount:1,min:1,max:5},
  discardNewest:{label:'手札の末尾から指定枚数を捨てる（自動選択）',scope:'player',amount:1,min:1,max:10},
  returnRandomHandDeck:{label:'手札をランダムにデッキへ戻す',scope:'player',amount:1,min:1,max:10},
  mill:{label:'デッキ上から墓地へ送る',scope:'player',amount:2,min:1,max:10},
@@ -106,7 +115,7 @@ export const ABILITY_META={
 // Single-card targets may be reused only when the preceding stage selected that same side/zone.
 export function followUpTargets(operation,firstTarget,when='main',type='monster',spellKind='normal'){
  const op=ABILITY_META[operation];
- if(!op||when==='battleDamage'||['reflectAttack','redirectAttack','concealDefender','negateAttack','negateEndBattle','blastAttacker','negateEffect','protectOwnTraps','redirectSpellTarget','crushVirus','revealSetMonsters','reviveSelected','sealEnemyAttacks','steal','searchNamed','summonNamedFromHand','replaceHands','swapPrintedStats','recoverNormalAtk','earthAura','pierce','diceStats','millFirstType','summonRaceFromHand','summonSheepTokens','summonKuribohTokens','extraNormalSummon','reviveBothSet','destroyGiveOwn','borrowOpponentSpell','lockPositionNextTurn','setAttackerDefense','negateAndLockAttacker','negateWeakenAttacker','preventEquipAttack','tributeOtherToAttack','timeWizardCoin','selfSpecialFromHand','selfSpecialFromHandGiveRevive','lockWhileSourceFaceUp','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire'].includes(operation))return [];
+ if(!op||['summonMonsterHand','banishOwnHand','returnOwnHandToDeck'].includes(operation)&&(when!=='main'||!['monster','spell'].includes(type)||type==='spell'&&!['normal','quick'].includes(spellKind))||when==='battleDamage'||['reflectAttack','redirectAttack','concealDefender','negateAttack','negateEndBattle','blastAttacker','negateEffect','protectOwnTraps','redirectSpellTarget','crushVirus','revealSetMonsters','reviveSelected','sealEnemyAttacks','steal','searchNamed','summonNamedFromHand','replaceHands','swapPrintedStats','recoverNormalAtk','earthAura','pierce','diceStats','millFirstType','summonRaceFromHand','summonSheepTokens','summonKuribohTokens','extraNormalSummon','reviveBothSet','destroyGiveOwn','borrowOpponentSpell','lockPositionNextTurn','setAttackerDefense','negateAndLockAttacker','negateWeakenAttacker','preventEquipAttack','tributeOtherToAttack','timeWizardCoin','conditionBranch','selfSpecialFromHand','selfSpecialFromHandGiveRevive','lockWhileSourceFaceUp','lpRelativeEquip','fusionMaterialSubstitute','directEarthWaterFire'].includes(operation))return [];
  const permitted=abilityTargets(operation,when,type,spellKind);
  const automatic=new Set(['none','self','opponent','ownAllMonsters','enemyAllMonsters','enemyAttackMonsters','bothMonsters','ownAllBackrow','enemyAllBackrow','bothAllBackrow','enemyLowestAtk','enemyFaceDownMonster']);
  return permitted.filter(target=>automatic.has(target)||target===firstTarget&&['ownMonster','enemyMonster','ownBackrow','enemyBackrow','attacker'].includes(target));
@@ -126,7 +135,7 @@ export const BEFORE_META={
  recycleOwnGrave:{label:'自分の墓地からデッキへ戻す（新しい順）',zone:'grave',amount:1,max:60},
  payLP:{label:'自分のLPを支払う',zone:'lp',amount:500,max:99999}
 };
-export const beforeText=a=>{const m=BEFORE_META[a?.operation];return m?`${m.label}（${a.amount}${m.zone==='lp'?'LP':m.zone==='monsters'?'体':'枚'}）`:'';};
+export const beforeText=a=>{const m=BEFORE_META[a?.operation];return m?`${m.label}（${a.amount}${m.zone==='lp'?'LP':m.zone==='monsters'?'体':'枚'}）${monsterFilterText(a.filter)}`:'';};
 export const OPERATIONS=Object.fromEntries(Object.entries(ABILITY_META).map(([k,v])=>[k,v.label]));
 // Legacy reference: the first member now means the recommended initial value, not the only allowed value.
 export const EFFECT_VALUES=Object.fromEntries(Object.entries(ABILITY_META).map(([k,v])=>[k,[v.amount]]));
@@ -134,6 +143,7 @@ export function abilityTargets(operation,when='main',type='monster',spellKind='n
  const meta=ABILITY_META[operation];if(!meta)return ['none'];
  if(meta.scope==='none')return ['none'];
  if(['removeSpellBackrow','destroyThenSetBackrow','banishSetBackrow'].includes(operation))return ['enemyBackrow'];
+ if(operation==='changeStats')return when==='main'&&(type==='monster'||type==='spell'&&['normal','quick'].includes(spellKind))?['ownAllMonsters','enemyAllMonsters','bothMonsters']:[];
  if(operation==='swapPrintedStats'||operation==='earthAura')return ['bothMonsters'];
  if(operation==='diceStats')return when==='attack'&&type==='trap'?['enemyAllMonsters']:['ownAllMonsters'];
  if(operation==='pierce')return ['ownMonster'];
@@ -144,8 +154,9 @@ export function abilityTargets(operation,when='main',type='monster',spellKind='n
  if(['fusionMaterialSubstitute','directEarthWaterFire','tributeOtherToAttack','timeWizardCoin','selfSpecialFromHand','selfSpecialFromHandGiveRevive'].includes(operation))return ['self'];
  if(operation==='preventEquipAttack')return ['enemyMonster'];
  if(meta.scope==='grave')return ['eitherGraveMonster'];
- if(operation==='summonNamedFromHand'||operation==='extraNormalSummon')return ['self'];
- if(operation==='millFirstType')return ['opponent'];
+ if(when==='flip'&&FLIP_FIELD_FILTER_OPERATIONS.includes(operation))return ['enemyAllMonsters','ownAllMonsters','bothMonsters'];
+ if(['summonNamedFromHand','summonMonsterHand','summonMonsterDeck','banishOwnHand','returnOwnHandToDeck','extraNormalSummon'].includes(operation))return ['self'];
+ if(operation==='millFirstType'||operation==='mill'&&when==='battleDamage')return ['opponent'];
  if(operation==='lockWhileSourceFaceUp')return ['enemyMonster'];
  if(operation==='summonRaceFromHand'||operation==='summonSheepTokens'||operation==='summonKuribohTokens')return ['self'];
  if(meta.scope==='player')return ['self','opponent'];
@@ -155,6 +166,7 @@ export function abilityTargets(operation,when='main',type='monster',spellKind='n
   if(spellKind==='field')return ['ownAllMonsters','enemyAllMonsters','bothMonsters'];
   if(spellKind==='equip')return ['ownMonster','enemyMonster'];
  }
+ if(['boostBoth','weakenBoth'].includes(operation))return when==='continuous'?[]:['ownAllMonsters','enemyAllMonsters','bothMonsters'];
  if(operation==='destroy')return ['enemyMonster','ownMonster','enemyLowestAtk','enemyAllMonsters','enemyAttackMonsters','ownAllMonsters','bothMonsters'];
  if(operation==='banish')return ['enemyMonster','ownMonster','enemyFaceDownMonster','enemyAllMonsters','ownAllMonsters','bothMonsters'];
  const first=['boost','boostDef','setAtk','setDef'].includes(operation)?'ownMonster':'enemyMonster';
@@ -169,8 +181,155 @@ export function fusionMaterialsMatch(required,actual,isSubstitute){
  if(required.length===3)return false; // Three-material fusions require all three printed names.
  return actual.some((id,i)=>isSubstitute(id)&&required.includes(actual[1-i]));
 }
+// The only optional deck selector vocabulary. Omitted means no condition.
+export const DECK_FILTER_ATTRIBUTES=['闇','光','地','水','炎','風','神'];
+export const DECK_FILTER_RACES=['ドラゴン','戦士','魔法使い','機械','悪魔','天使','獣','獣戦士','鳥獣','水','昆虫','岩石','植物','アンデット','爬虫類','炎','魚','雷','恐竜','海竜','サイキック','幻竜','サイバース','幻想魔','幻神獣'];
+export const COIN_BRANCH_OPERATIONS=['draw','heal','damage','mill','searchMonster','graveRecover','graveRevive','destroy','banish','boost','weaken','graveBanish','graveRecycle','banishedRecover','banishDeck','searchSpell','searchTrap','discardNewest','summonMonsterHand','banishOwnHand','returnOwnHandToDeck','sendGrave','returnHand','destroyBackrow','banishBackrow','returnBackrow','summonMonsterDeck','returnDeck','boostDef','weakenDef','boostBoth','weakenBoth','changeStats'];
+const DECK_FILTER_KEYS=['atkMin','atkMax','defMin','defMax','levelMin','levelMax','attribute','race','nameContains','cardType','subtype','maxCount','order','spellKind','summonKind','summonPosition','deckPlacement','fieldPosition'];
+export const FILTERABLE_OPERATIONS=['searchMonster','summonMonsterDeck','graveRevive','graveRecover','graveBanish','graveRecycle','banishedRecover','mill','banishDeck','searchSpell','searchTrap','discardNewest','summonMonsterHand','banishOwnHand','returnOwnHandToDeck'];
+export const FIELD_FILTER_OPERATIONS=['destroy','banish','sendGrave','returnHand','returnDeck','boost','weaken','boostDef','weakenDef','setAtk','setDef','changePosition','lockAttack','lockEffect','boostBoth','weakenBoth','changeStats'];
+export const FLIP_FIELD_FILTER_OPERATIONS=['returnHand','returnDeck','banish','boost','weaken','boostDef','weakenDef','lockAttack','lockEffect','boostBoth','weakenBoth'];
+export const FIELD_FILTER_TARGETS=['ownAllMonsters','enemyAllMonsters','enemyAttackMonsters','bothMonsters'];
+const MIXED_ZONE_FILTERS=['graveRecover','graveBanish','graveRecycle','banishedRecover','mill','banishDeck'];
+export const MOVE_COUNT_BACKROW=['destroyBackrow','banishBackrow','returnBackrow'];
+export const BACKROW_BATCH_TARGETS=['ownAllBackrow','enemyAllBackrow','bothAllBackrow'];
+function validOperationFilter(stage,when=stage.when||'main'){
+ if(MOVE_COUNT_BACKROW.includes(stage.operation)){
+  const f=stage.filter;return BACKROW_BATCH_TARGETS.includes(stage.target)&&['main','attack','response','summon'].includes(when)&&!!f&&typeof f==='object'&&!Array.isArray(f)&&Object.keys(f).length>0&&Object.keys(f).every(k=>['fieldPosition','maxCount','cardType','spellKind','nameContains'].includes(k))&&
+   (f.fieldPosition===undefined||['faceup','set'].includes(f.fieldPosition))&&(f.maxCount===undefined||Number.isInteger(f.maxCount)&&f.maxCount>=1&&f.maxCount<=12)&&
+   (f.cardType===undefined||['spell','trap'].includes(f.cardType))&&(f.spellKind===undefined||f.cardType==='spell'&&['normal','quick','continuous','equip','field','ritual','fusion'].includes(f.spellKind))&&
+   (f.nameContains===undefined||typeof f.nameContains==='string'&&f.nameContains.length>0&&f.nameContains.length<=32&&f.nameContains===f.nameContains.trim())&&
+   (f.fieldPosition!=='set'||f.cardType===undefined&&f.spellKind===undefined&&f.nameContains===undefined);
+ }
+ if(!validDeckFilter(stage.filter))return false;
+ if(stage.filter.fieldPosition!==undefined){
+  if(!FIELD_FILTER_OPERATIONS.includes(stage.operation)||!FIELD_FILTER_TARGETS.includes(stage.target))return false;
+  if(stage.target==='enemyAttackMonsters'&& !['atk','faceup'].includes(stage.filter.fieldPosition))return false;
+  if(stage.filter.fieldPosition==='set'&&!['destroy','banish','sendGrave','returnHand','returnDeck'].includes(stage.operation))return false;
+ }
+ if(stage.filter.summonPosition!==undefined&&!['summonMonsterHand','summonMonsterDeck','graveRevive'].includes(stage.operation))return false;
+ if(stage.filter.deckPlacement!==undefined&&stage.operation!=='returnOwnHandToDeck')return false;
+ if(['discardNewest','banishOwnHand','returnOwnHandToDeck'].includes(stage.operation))return stage.target==='self'&&stage.filter.maxCount===undefined&&stage.filter.order===undefined;
+ if(['summonMonsterDeck','summonMonsterHand'].includes(stage.operation)&&stage.filter.summonKind&&stage.filter.summonKind!=='normal')return false;
+ if(['searchSpell','searchTrap'].includes(stage.operation))return stage.filter.cardType===(stage.operation==='searchSpell'?'spell':'trap');
+ if(FIELD_FILTER_OPERATIONS.includes(stage.operation))return FIELD_FILTER_TARGETS.includes(stage.target)&&(['main','attack','response','summon'].includes(when)||when==='flip'&&FLIP_FIELD_FILTER_OPERATIONS.includes(stage.operation))&&(!stage.filter.cardType||stage.filter.cardType==='monster');
+ return FILTERABLE_OPERATIONS.includes(stage.operation)&&stage.filter.maxCount===undefined&&stage.filter.order===undefined&&(!stage.filter.cardType||stage.filter.cardType==='monster'||MIXED_ZONE_FILTERS.includes(stage.operation));
+}
+export function validDeckFilter(f){
+ return !!f&&typeof f==='object'&&!Array.isArray(f)&&Object.keys(f).length>0&&
+  Object.keys(f).every(k=>DECK_FILTER_KEYS.includes(k))&&
+  ['atkMin','atkMax','defMin','defMax'].every(k=>f[k]===undefined||Number.isInteger(f[k])&&f[k]>=0&&f[k]<=5000)&&
+  ['levelMin','levelMax'].every(k=>f[k]===undefined||Number.isInteger(f[k])&&f[k]>=1&&f[k]<=12)&&
+  (f.atkMin===undefined||f.atkMax===undefined||f.atkMin<=f.atkMax)&&
+  (f.defMin===undefined||f.defMax===undefined||f.defMin<=f.defMax)&&
+  (f.levelMin===undefined||f.levelMax===undefined||f.levelMin<=f.levelMax)&&
+  (f.maxCount===undefined||Number.isInteger(f.maxCount)&&f.maxCount>=1&&f.maxCount<=10)&&
+  (f.order===undefined||f.maxCount!==undefined&&['left','atkLow','atkHigh','defLow','defHigh'].includes(f.order))&&
+  (f.cardType===undefined||['monster','spell','trap'].includes(f.cardType))&&
+  (f.subtype===undefined||['normal','effect'].includes(f.subtype))&&
+  (!f.cardType||f.cardType==='monster'||Object.keys(f).every(k=>['cardType','nameContains','spellKind','deckPlacement'].includes(k)))&&
+  (f.fieldPosition===undefined||['atk','def','faceup','set'].includes(f.fieldPosition)&&(!f.cardType||f.cardType==='monster')&&
+   (f.fieldPosition!=='set'||Object.keys(f).every(k=>['fieldPosition','cardType','maxCount','order'].includes(k))&&(!f.order||f.order==='left')))&&
+  (f.deckPlacement===undefined||['top','bottom'].includes(f.deckPlacement))&&
+  (f.summonPosition===undefined||['atk','def'].includes(f.summonPosition)&&(!f.cardType||f.cardType==='monster'))&&
+  (f.summonKind===undefined||(!f.cardType||f.cardType==='monster')&&['normal','ritual','fusion'].includes(f.summonKind))&&
+  (f.spellKind===undefined||f.cardType==='spell'&&['normal','quick','continuous','equip','field','ritual','fusion'].includes(f.spellKind))&&
+  (f.attribute===undefined||DECK_FILTER_ATTRIBUTES.includes(f.attribute))&&
+  (f.race===undefined||DECK_FILTER_RACES.includes(f.race))&&
+  (f.nameContains===undefined||typeof f.nameContains==='string'&&f.nameContains.length>0&&f.nameContains.length<=32&&f.nameContains===f.nameContains.trim());
+}
+export function matchesDeckFilter(card,filter){
+ if(card?.type!==(filter?.cardType||'monster'))return false;
+ if(!filter)return true;
+ return (filter.summonKind===undefined||(card.summonKind||'normal')===filter.summonKind)&&
+  (filter.spellKind===undefined||(card.spellKind||'normal')===filter.spellKind)&&
+  (filter.subtype===undefined||(card.subtype||'normal')===filter.subtype&&(!['ritual','fusion'].includes(card.summonKind)||filter.subtype!=='normal'))&&
+  (filter.atkMin===undefined||card.atk>=filter.atkMin)&&
+  (filter.atkMax===undefined||card.atk<=filter.atkMax)&&
+  (filter.defMin===undefined||card.def>=filter.defMin)&&
+  (filter.defMax===undefined||card.def<=filter.defMax)&&
+  (filter.levelMin===undefined||card.level>=filter.levelMin)&&
+  (filter.levelMax===undefined||card.level<=filter.levelMax)&&
+  (filter.attribute===undefined||card.attribute===filter.attribute)&&
+  (filter.race===undefined||card.race===filter.race)&&
+  (filter.nameContains===undefined||(card.name||'').includes(filter.nameContains));
+}
+function validStatDelta(stage){return stage.operation==='changeStats'?Number.isSafeInteger(stage.defAmount)&&Math.abs(stage.defAmount)<=10000&&!!(stage.amount||stage.defAmount):stage.defAmount===undefined;}
+export function validCoinStage(stage,allowPreviousMoved=false){
+ if(!stage||typeof stage!=='object'||Array.isArray(stage)||Object.keys(stage).some(k=>!['amount','operation','target','filter','scale','defAmount'].includes(k)))return false;
+ if(!validStatDelta(stage))return false;
+ if(stage.scale!==undefined&&!validAmountScale(stage,'main',allowPreviousMoved))return false;
+ if(stage.filter!==undefined&&!validOperationFilter(stage))return false;
+ if(!COIN_BRANCH_OPERATIONS.includes(stage.operation)||!Number.isSafeInteger(stage.amount))return false;
+ const meta=ABILITY_META[stage.operation];
+ if(stage.amount<(meta.min??0)||stage.amount>(meta.max??0))return false;
+ // All targets are automatically resolved; never open a second target picker.
+ const permitted=meta.scope==='monster'?['enemyAllMonsters','ownAllMonsters','bothMonsters']:
+  meta.scope==='backrow'?BACKROW_BATCH_TARGETS:stage.operation==='damage'||stage.operation==='heal'||meta.scope==='player'?['self','opponent']:[];
+ return permitted.includes(stage.target)&&(!['summonMonsterHand','summonMonsterDeck','banishOwnHand','returnOwnHandToDeck'].includes(stage.operation)||stage.target==='self');
+}
+// A branch is allowed one automatic follow-up. Leaf validation remains non-recursive.
+export const BRANCH_SEQUENCE_FIRST=['draw','heal','damage','searchMonster','searchSpell','searchTrap','mill','banishDeck','discardNewest','banishOwnHand','returnOwnHandToDeck','graveRecover','graveBanish','graveRecycle','banishedRecover','destroy','banish','sendGrave','returnHand','destroyBackrow','banishBackrow','returnBackrow','summonMonsterHand','summonMonsterDeck','graveRevive','returnDeck','boostBoth','weakenBoth','changeStats'];
+export const MOVE_COUNT_FIELD=['destroy','banish','sendGrave','returnHand','returnDeck'];
+export const COUNT_SUMMON_OPERATIONS=['summonMonsterHand','summonMonsterDeck','graveRevive'];
+export const MOVE_COUNT_ZONE=['searchMonster','searchSpell','searchTrap','mill','banishDeck','discardNewest','banishOwnHand','returnOwnHandToDeck','graveRecover','graveBanish','graveRecycle','banishedRecover'];
+export function canCountPreviousMove(stage){return !!stage&&(MOVE_COUNT_FIELD.includes(stage.operation)&&FIELD_FILTER_TARGETS.includes(stage.target)||MOVE_COUNT_BACKROW.includes(stage.operation)&&BACKROW_BATCH_TARGETS.includes(stage.target)||(MOVE_COUNT_ZONE.includes(stage.operation)||COUNT_SUMMON_OPERATIONS.includes(stage.operation)||stage.operation==='draw')&&['self','opponent'].includes(stage.target));}
+const previousScaleContext=stage=>canCountPreviousMove(stage)&&(MOVE_COUNT_FIELD.includes(stage.operation)?stage.operation:true);
+export function validBranchStage(stage){
+ if(!stage||typeof stage!=='object'||Array.isArray(stage))return false;
+ if(!Object.hasOwn(stage,'then'))return validCoinStage(stage);
+ const {then,...first}=stage;
+ return BRANCH_SEQUENCE_FIRST.includes(first.operation)&&validCoinStage(first)&&validCoinStage(then,previousScaleContext(first));
+}
+export function validCountRequirement(r){
+ if(!r||typeof r!=='object'||Array.isArray(r)||!['comparison,count,kind,zone','comparison,count,filter,kind,zone'].includes(Object.keys(r).sort().join(',')))return false;
+ if(['ownLP','enemyLP','relativeLP'].includes(r.zone))return r.kind==='lp'&&r.filter===undefined&&['atLeast','atMost','equal'].includes(r.comparison)&&Number.isSafeInteger(r.count)&&r.count>=(r.zone==='relativeLP'?-99999:0)&&r.count<=99999;
+ if(/^(own|enemy|both)(Hand|Deck)$/.test(r.zone))return r.kind==='all'&&r.filter===undefined&&['atLeast','atMost','equal'].includes(r.comparison)&&Number.isSafeInteger(r.count)&&r.count>=0&&r.count<=(r.zone.startsWith('both')?120:60);
+ if(/^(own|enemy|both)Backrow$/.test(r.zone))return ['all','faceup','set','spell','trap'].includes(r.kind)&&r.filter===undefined&&['atLeast','atMost','equal'].includes(r.comparison)&&Number.isSafeInteger(r.count)&&r.count>=0&&r.count<=(r.zone==='bothBackrow'?10:5);
+ const field=['ownField','enemyField','bothField'].includes(r.zone),grave=/^(own|enemy|both)(Grave|Banished)$/.test(r.zone);
+ if(r.filter!==undefined){
+  if(!validDeckFilter(r.filter)||['maxCount','order','summonPosition','deckPlacement','fieldPosition'].some(k=>r.filter[k]!==undefined))return false;
+  if(field){if(!['atk','def','faceup'].includes(r.kind)||r.filter.cardType&&r.filter.cardType!=='monster')return false;}
+  else if(!grave||!['monster','spell','trap'].includes(r.kind)||(r.filter.cardType||'monster')!==r.kind)return false;
+ }
+ return (field||grave)&&['atLeast','atMost','equal'].includes(r.comparison)&&
+  (field?['all','atk','def','set','faceup']:['all','monster','spell','trap']).includes(r.kind)&&
+  Number.isSafeInteger(r.count)&&r.count>=0&&r.count<=(field?(r.zone==='bothField'?10:5):120);
+}
+export function validAmountScale(stage,when='main',allowPreviousMoved=false){
+ const r=stage.scale;
+ if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).some(k=>!['zone','kind','filter'].includes(k))||typeof r.zone!=='string'||r.zone.endsWith('LP'))return false;
+ if(when!=='main')return false;
+ const independent=stage.operation==='changeStats';
+ const validPercent=independent?Number.isSafeInteger(stage.amount)&&Math.abs(stage.amount)<=1000&&Number.isSafeInteger(stage.defAmount)&&Math.abs(stage.defAmount)<=1000:Number.isSafeInteger(stage.amount)&&stage.amount>=1&&stage.amount<=1000;
+ if(r.zone==='previousMoved'){if(!allowPreviousMoved||r.kind!=='all'||Object.keys(r).length!==2)return false;}
+ else if(['previousDestroyedAtk','previousDestroyedDef'].includes(r.zone)){if(allowPreviousMoved!=='destroy'||r.kind!=='all'||Object.keys(r).length!==2||!validPercent)return false;}
+ else if(['previousMovedAtk','previousMovedDef','previousMovedLevel'].includes(r.zone)){if(!['banish','sendGrave','returnHand','returnDeck'].includes(allowPreviousMoved)||r.kind!=='all'||Object.keys(r).length!==2||r.zone!=='previousMovedLevel'&&!validPercent)return false;}
+ else if(r.zone==='previousDestroyedLevel'){if(allowPreviousMoved!=='destroy'||r.kind!=='all'||Object.keys(r).length!==2)return false;}
+ else if(!validCountRequirement({...r,comparison:'atLeast',count:0}))return false;
+ return (['damage','heal'].includes(stage.operation)||stage.operation==='draw'&&r.zone==='previousMoved')&&['self','opponent'].includes(stage.target)||(['boost','weaken','boostDef','weakenDef','boostBoth','weakenBoth'].includes(stage.operation)&&FIELD_FILTER_TARGETS.includes(stage.target)||independent&&['ownAllMonsters','enemyAllMonsters','bothMonsters'].includes(stage.target));
+}
 export function isValidAbility(a,type='monster',spellKind='normal'){
  if(!a||typeof a!=='object'||!Object.hasOwn(TRIGGERS,a.when)||!Object.hasOwn(TARGETS,a.target)||!Object.hasOwn(ABILITY_META,a.operation))return false;
+ if(!validStatDelta(a)||a.operation==='changeStats'&&(a.when!=='main'||a.before||!abilityTargets(a.operation,a.when,type,spellKind).includes(a.target)))return false;
+ if(a.scale!==undefined&&(!validAmountScale(a,a.when)||!(type==='monster'||type==='spell'&&['normal','quick'].includes(spellKind))))return false;
+ if(a.requirement2!==undefined&&(!a.requirement||!validCountRequirement(a.requirement2)))return false;
+ if(a.requirementMode!==undefined&&(a.requirementMode!=='or'||!a.requirement||!a.requirement2))return false;
+ if(a.operation==='conditionBranch')return type==='monster'&&a.when==='main'&&a.target==='none'&&a.amount===0&&validCountRequirement(a.requirement)&&validBranchStage(a.heads)&&validBranchStage(a.tails)&&Object.keys(a).sort().join(',')===(a.requirement2===undefined?'amount,heads,operation,requirement,tails,target,when':a.requirementMode==='or'?'amount,heads,operation,requirement,requirement2,requirementMode,tails,target,when':'amount,heads,operation,requirement,requirement2,tails,target,when');
+ if(a.requirement!==undefined&&(!validCountRequirement(a.requirement)||a.when!=='main'||!['draw','heal','damage'].includes(a.operation)||a.before!==undefined&&a.before?.operation!=='payLP'&&!a.before?.filter||!['self','opponent'].includes(a.target)||!(type==='monster'||type==='spell'&&['normal','quick'].includes(spellKind))))return false;
+ if(a.filter!==undefined&&!validOperationFilter(a))return false;
+ if(a.filter&&a.before&&['searchSpell','searchTrap','discardNewest'].includes(a.operation))return false;
+ if(a.filter&&a.before&&(FIELD_FILTER_OPERATIONS.includes(a.operation)||MIXED_ZONE_FILTERS.includes(a.operation)&&(['graveBanish','graveRecycle','banishedRecover','mill','banishDeck'].includes(a.operation)||a.filter.cardType||a.filter.subtype)))return false;
+ if(a.operation==='coinBranch'){
+  if(type!=='monster'||a.when!=='main'||a.target!=='none'||a.amount!==0||!validBranchStage(a.heads)||!validBranchStage(a.tails)||a.then!==undefined||a.before!==undefined||Object.keys(a).sort().join(',')!=='amount,heads,operation,tails,target,when')return false;
+ }else if(a.heads!==undefined||a.tails!==undefined)return false;
+ if(['summonMonsterHand','banishOwnHand','returnOwnHandToDeck'].includes(a.operation)&&(a.when!=='main'||a.target!=='self'||!['monster','spell'].includes(type)||type==='spell'&&!['normal','quick'].includes(spellKind)||a.before))return false;
+ if(a.operation==='summonMonsterDeck'&&(a.target!=='self'||a.when==='continuous'||a.then!==undefined&&!(a.when==='main'&&(type==='monster'||type==='spell'&&['normal','quick'].includes(spellKind)))))return false;
+ if(['flip','grave','destroyed'].includes(a.when)){
+  const playerEffect=['draw','searchMonster','summonMonsterDeck','searchSpell','searchTrap','heal','damage','mill','graveRecover'].includes(a.operation)&&['self','opponent'].includes(a.target);
+  const flipGroup=a.when==='flip'&&FLIP_FIELD_FILTER_OPERATIONS.includes(a.operation)&&FIELD_FILTER_TARGETS.includes(a.target)&&!!a.filter;
+  if(type!=='monster'||!(playerEffect||flipGroup)||a.then||a.before)return false;
+ }
  const meta=ABILITY_META[a.operation];
  if(['searchNamed','summonNamedFromHand'].includes(a.operation)&&Object.keys(a).some(k=>!['when','operation','target','amount','match','query','then','before'].includes(k)))return false;
  if(['searchNamed','summonNamedFromHand'].includes(a.operation)&&!(a.target==='self'&&(a.operation==='searchNamed'?['exact','contains']:['exact']).includes(a.match)&&
@@ -194,13 +353,14 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
   if(Object.keys(a).some(k=>!['when','operation','target','amount','match'].includes(k)))return false;
  }
  if(!['searchNamed','summonNamedFromHand','millFirstType','summonRaceFromHand'].includes(a.operation)&&(a.query!==undefined||a.match!==undefined))return false;
+ if(a.operation==='summonMonsterDeck'&&a.before!==undefined)return false;
  if(a.operation==='summonNamedFromHand'&&!(a.when==='main'&&['monster','spell'].includes(type)&&a.amount===0&&!a.then))return false;
  if(!Number.isSafeInteger(a.amount)||(meta.min===undefined?a.amount!==0:a.amount<meta.min||a.amount>meta.max))return false;
- if(type==='monster'&&!['main','summon','continuous','battleDamage'].includes(a.when))return false;
+ if(type==='monster'&&!['main','summon','flip','grave','destroyed','continuous','battleDamage'].includes(a.when))return false;
  // Battle-damage triggers are synchronous, player-only, and never open a
  // second chain or manual cost picker; limit the vocabulary deliberately.
  if(a.when==='battleDamage'&&!(type==='monster'&&
-  ['draw','discardNewest','millFirstType'].includes(a.operation)&&!a.before&&!a.then))return false;
+  (['draw','discardNewest','millFirstType'].includes(a.operation)||a.operation==='mill'&&a.target==='opponent'&&!!a.filter)&&!a.before&&!a.then))return false;
  if(type==='spell'&&a.when!=='main'&&!(a.when==='continuous'&&['continuous','equip','field'].includes(spellKind)))return false;
  if(type==='trap'&&!['attack','response','summon'].includes(a.when)&&!(a.when==='continuous'&&a.operation==='extraNormalSummon')&&!(a.when==='main'&&a.operation==='graveRevive'))return false;
  if(a.when==='summon'&&type==='trap'&&a.operation!=='destroyOnEnemySummon')return false;
@@ -246,7 +406,10 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  if(a.then!==undefined){
   if(a.when==='continuous'||['summonNamedFromHand','negateAttack','negateEndBattle','blastAttacker','negateEffect','replaceHands','swapPrintedStats','recoverNormalAtk'].includes(a.operation)||
      !a.then||typeof a.then!=='object'||Array.isArray(a.then)||
-     Object.keys(a.then).sort().join(',')!=='amount,operation,target')return false;
+     Object.keys(a.then).some(k=>!['amount','operation','target','filter','scale','defAmount'].includes(k))||
+     (a.then.scale!==undefined&&(!validAmountScale(a.then,a.when,previousScaleContext(a))||!(type==='monster'||type==='spell'&&['normal','quick'].includes(spellKind))))||
+     !validStatDelta(a.then)||
+     (a.then.filter!==undefined&&!validOperationFilter(a.then,a.when)))return false;
   const next=ABILITY_META[a.then.operation];
   if(!next||!Number.isSafeInteger(a.then.amount)||
     (next.min===undefined?a.then.amount!==0:a.then.amount<next.min||a.then.amount>next.max)||
@@ -255,6 +418,10 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  if(a.before!==undefined){
   const cost=BEFORE_META[a.before?.operation];
   if(!cost||!Number.isSafeInteger(a.before.amount)||a.before.amount<1||a.before.amount>cost.max)return false;
+  if(a.before.filter!==undefined){
+   // Bounded costs with an independent first-stage effect.
+   if(Object.keys(a.before).sort().join(',')!=='amount,filter,operation'||!['banishOwnGrave','recycleOwnGrave','discardOwnHand','returnOwnHandDeck','sendOwnMonsterGrave','banishOwnMonster','returnOwnMonsterHand','returnOwnMonsterDeck','sendOwnBackrowGrave','banishOwnBackrow'].includes(a.before.operation)||a.when!=='main'||!['draw','heal','damage'].includes(a.operation)||!(type==='monster'||type==='spell'&&['normal','quick'].includes(spellKind))||!(cost.zone==='backrow'?validDeckFilter(a.before.filter)&&['spell','trap'].includes(a.before.filter.cardType)&&Object.keys(a.before.filter).every(k=>['cardType','spellKind','nameContains'].includes(k))&&a.before.filter.spellKind!=='field':cost.zone==='monsters'?validDeckFilter(a.before.filter)&&!['set'].includes(a.before.filter.fieldPosition)&&(!a.before.filter.cardType||a.before.filter.cardType==='monster')&&['maxCount','order','summonPosition','deckPlacement'].every(k=>a.before.filter[k]===undefined):validOperationFilter({operation:a.before.operation==='banishOwnGrave'?'graveBanish':a.before.operation==='recycleOwnGrave'?'graveRecycle':'discardNewest',target:'self',filter:a.before.filter})))return false;
+  }
   if(!['main','attack','response'].includes(a.when)||type==='spell'&&spellKind!=='normal'&&spellKind!=='quick')return false;
  }
  // Graveyard choice is deliberately a normal-spell-only feature; avoid invalid trap/continuous triggers.
@@ -274,10 +441,51 @@ export function isValidAbility(a,type='monster',spellKind='normal'){
  }
  return true;
 }
+// Shared display vocabulary for first-stage, coin outcome and follow-up filters.
+export function monsterFilterText(f,operation){
+ if(!f)return '';
+ const terms=[];
+ if(f.cardType)terms.push({monster:'モンスター',spell:'魔法',trap:'罠'}[f.cardType]);
+ if(f.deckPlacement)terms.push(f.deckPlacement==='top'?'デッキの上に戻す':'デッキの下に戻す');
+ if(f.fieldPosition&&MOVE_COUNT_BACKROW.includes(operation))terms.push(f.fieldPosition==='set'?'セットカード':'表側表示');
+ else if(f.fieldPosition)terms.push(({atk:'表側攻撃表示',def:'表側守備表示',faceup:'表側表示',set:'裏側守備表示'})[f.fieldPosition]);
+ if(f.summonPosition)terms.push(f.summonPosition==='def'?'表側守備表示で特殊召喚':'表側攻撃表示で特殊召喚');
+ if(f.summonKind)terms.push(({normal:'通常召喚可能',ritual:'儀式',fusion:'融合'})[f.summonKind]+'モンスター');
+ if(f.spellKind)terms.push(({normal:'通常',quick:'速攻',continuous:'永続',equip:'装備',field:'フィールド',ritual:'儀式',fusion:'融合'})[f.spellKind]+'魔法');
+ if(f.subtype)terms.push(f.subtype==='normal'?'通常モンスター':'効果モンスター');
+ for(const [key,title,suffix] of [['atkMin','ATK','以上'],['atkMax','ATK','以下'],['defMin','DEF','以上'],['defMax','DEF','以下'],['levelMin','Lv','以上'],['levelMax','Lv','以下']])
+  if(f[key]!==undefined)terms.push(`${title}${f[key]}${suffix}`);
+ if(f.attribute)terms.push(`${f.attribute}属性`);
+ if(f.race)terms.push(`${f.race}族`);
+ if(f.nameContains)terms.push(`名前に「${f.nameContains}」を含む`);
+ if(f.maxCount!==undefined)terms.push(`最大${f.maxCount}${MOVE_COUNT_BACKROW.includes(operation)?'枚':'体'}`);
+ if(f.order)terms.push({left:'左端優先',atkLow:'元々のATKが低い順',atkHigh:'元々のATKが高い順',defLow:'元々のDEFが低い順',defHigh:'元々のDEFが高い順'}[f.order]);
+ return terms.length?`（条件：${terms.join('・')}）`:'';
+}
+function filteredOperationLabel(a){if(a.filter&&FIELD_FILTER_OPERATIONS.includes(a.operation))return a.filter.fieldPosition==='set'?`裏側守備表示に適用（公開情報のみ）・${ABILITY_META[a.operation].label}`:`条件に合う表側モンスターに適用（元々のATK/DEF・レベル）・${ABILITY_META[a.operation].label}`;return a.filter?({discardNewest:'手札から条件に合うカードを捨てる（末尾優先）',mill:'デッキから条件に合うカードを墓地へ送る',banishDeck:'デッキから条件に合うカードを除外',graveRecover:'墓地から条件に合うカードを回収',graveBanish:'墓地から条件に合うカードを除外',graveRecycle:'墓地から条件に合うカードをデッキへ戻す',banishedRecover:'除外から条件に合うカードを回収'}[a.operation]||ABILITY_META[a.operation].label):ABILITY_META[a.operation].label;}
+function requirementText(r){
+ if(!r)return '';
+ const comparison={atLeast:'以上',atMost:'以下',equal:'ちょうど'}[r.comparison];
+ if(r.zone.endsWith('LP'))return `${{ownLP:'自分のLP',enemyLP:'相手のLP',relativeLP:'自分のLP－相手のLP'}[r.zone]}が${r.count}LP${comparison}`;
+ if(/^(own|enemy|both)Backrow$/.test(r.zone))return `${{own:'自分',enemy:'相手',both:'双方'}[r.zone.match(/^(own|enemy|both)/)[0]]}の魔法・罠ゾーン（${{all:'全カード',faceup:'表側',set:'裏側',spell:'表側魔法',trap:'表側罠'}[r.kind]}）が${r.count}枚${comparison}`;
+ if(/^(own|enemy|both)(Hand|Deck)$/.test(r.zone))return `${{own:'自分',enemy:'相手',both:'双方'}[r.zone.match(/^(own|enemy|both)/)[0]]}の${r.zone.endsWith('Hand')?'手札':'デッキ残数'}が${r.count}枚${comparison}`;
+ return `${{ownField:'自分の場',enemyField:'相手の場',bothField:'双方の場',ownGrave:'自分の墓地',enemyGrave:'相手の墓地',bothGrave:'双方の墓地',ownBanished:'自分の除外',enemyBanished:'相手の除外',bothBanished:'双方の除外'}[r.zone]}の${{all:r.zone.endsWith('Field')?'全モンスター':'全カード',atk:'表側攻撃表示',def:'表側守備表示',set:'裏側守備表示',faceup:'表側モンスター',monster:'モンスター',spell:'魔法',trap:'罠'}[r.kind]}${monsterFilterText(r.filter)}が${r.count}${r.zone.endsWith('Field')?'体':'枚'}${{atLeast:'以上',atMost:'以下',equal:'ちょうど'}[r.comparison]}`;
+}
+function combinedRequirementText(a){return requirementText(a.requirement)+(a.requirement2?(a.requirementMode==='or'?' または ':' かつ ')+requirementText(a.requirement2):'');}
+function amountText(a){
+ if(a.operation==='changeStats'){if(a.scale)return `ATK：${amountText({...a,operation:'boost'})} / DEF：${amountText({...a,operation:'boost',amount:a.defAmount})}（各±10000以内）`;return `ATK ${a.amount>=0?'+':''}${a.amount} / DEF ${a.defAmount>=0?'+':''}${a.defAmount}`;}
+ if(!a.scale)return String(a.amount);
+ if(['previousDestroyedAtk','previousDestroyedDef'].includes(a.scale.zone))return `直前に破壊した表側・非トークンモンスターのカード記載${a.scale.zone==='previousDestroyedAtk'?'ATK':'DEF'}合計×${a.amount}%（上限${ABILITY_META[a.operation].max}）`;
+ if(a.scale.zone==='previousDestroyedLevel')return `直前に破壊した表側・非トークンモンスターのレベル合計×${a.amount}（上限${ABILITY_META[a.operation].max}）`;
+ if(['previousMovedAtk','previousMovedDef','previousMovedLevel'].includes(a.scale.zone)){const stat=a.scale.zone.slice(13);return `直前に移動した表側・非トークンモンスターのカード記載${stat==='Level'?'レベル':stat.toUpperCase()}合計×${a.amount}${stat==='Level'?'':'%'}（上限${ABILITY_META[a.operation].max}）`;}
+ if(a.scale.zone==='previousMoved')return `直前の効果で実際に処理したカード数×${a.amount}（上限${ABILITY_META[a.operation].max}）`;
+ const source=requirementText({...a.scale,comparison:'equal',count:0}).replace(/が0[枚体]ちょうど$/,'');
+ return `${source}の数×${a.amount}（解決時・上限${ABILITY_META[a.operation].max}）`;
+}
 export function abilityText(a){if(!a)return '';
  const meta=ABILITY_META[a.operation];if(!meta)return '';
  const usesAmount=meta.min!==undefined;
- const label=meta.label;
+ const label=filteredOperationLabel(a);
  if(a.operation==='reviveSelected'&&!a.then)return (a.before?`コスト：${beforeText(a.before)}。\n`:'')+'自分・相手の墓地のモンスター1体を選び、自分フィールドに攻撃表示で特殊召喚する。';
  if(a.operation==='negateWeakenAttacker')return `${TRIGGERS[a.when]}：攻撃を無効にし、この罠が表側で残る間、攻撃モンスターのATKを${a.amount}下げ、攻撃を禁止する。`;
  if(a.operation==='earthAura')return `${a.attribute||'地'}属性の表側モンスターのATKを${a.amount}上げ、DEFを${a.defDecrease??400}下げる（フィールド魔法）。`;
@@ -289,6 +497,7 @@ export function abilityText(a){if(!a)return '';
  if(a.operation==='preventEquipAttack')return `${TRIGGERS[a.when]}：装備している相手モンスターの攻撃を禁止。`;
  if(a.operation==='tributeOtherToAttack')return `${TRIGGERS[a.when]}：攻撃するには、自分のほかのモンスター1体をリリースする。`;
  if(a.operation==='timeWizardCoin')return `${TRIGGERS[a.when]}：擬似コイントスが成功なら相手、失敗なら自分の全モンスターを破壊。失敗時はLPダメージ。`;
+ if(['coinBranch','conditionBranch'].includes(a.operation)){const leaf=stage=>`${TARGETS[stage.target]}：${filteredOperationLabel(stage)}${ABILITY_META[stage.operation].min!==undefined?`（${amountText(stage)}）`:''}${monsterFilterText(stage.filter,stage.operation)}`;const fmt=stage=>leaf(stage)+(stage.then?'。成功した場合、'+leaf(stage.then):'');return a.operation==='conditionBranch'?`自分メイン：効果解決時、${combinedRequirementText(a)}なら成立。\n成立：${fmt(a.heads)}。\n不成立：${fmt(a.tails)}。`:`自分メイン：擬似コイントスで分岐。\n表：${fmt(a.heads)}。\n裏：${fmt(a.tails)}。`;}
  if(a.operation==='selfSpecialFromHand')return `${TRIGGERS[a.when]}：手札からこのモンスターを特殊召喚（空きゾーン必須）。`;
  if(a.operation==='selfSpecialFromHandGiveRevive')return `${TRIGGERS[a.when]}：手札から自身を特殊召喚し、相手墓地の通常召喚可能なモンスター1体を自動蘇生（選択と辞退を省略）。`;
  if(a.operation==='lockWhileSourceFaceUp')return `${TRIGGERS[a.when]}：相手のモンスター1体を、このカードが表側でいる間攻撃禁止にする（左端自動選択）。`;
@@ -313,17 +522,21 @@ export function abilityText(a){if(!a)return '';
  if(a.operation==='crushVirus')return 'セットした次のターン以降の自分メインまたは相手の効果にチェーン：闇属性・ATK1000以下の表側モンスター1体を墓地へ送り、相手の場と手札のATK1500以上を破壊（継続効果なし）。';
  if(a.operation==='revealSetMonsters')return 'セットした次のターン以降の自分メインまたは相手の効果にチェーン：お互いの裏側守備モンスターを表側守備にする（永続セット制限なし）。';
  if(a.operation==='millFirstType')return `${TRIGGERS[a.when]}：相手のデッキから${{monster:'モンスター',spell:'魔法',trap:'罠'}[a.match]||'指定種類'}カード1枚を墓地へ送る（デッキの先頭側から自動選択）。`;
+ const filterText=monsterFilterText(a.filter,a.operation);
  const detail=a.operation==='millFirstType'
   ?`相手デッキの最初の${{monster:'モンスター',spell:'魔法',trap:'罠'}[a.match]||'指定種類'}カード1枚を墓地へ送る（自動選択）`
   :a.operation==='summonNamedFromHand'
   ?`自分の手札から「${a.query||''}」という名前のモンスター1体を特殊召喚する（最初の候補を自動選択。ゾーン満杯や候補なしの場合は不発）`
+  :['searchMonster','summonMonsterDeck'].includes(a.operation)
+  ?`${a.operation==='searchMonster'?'デッキから手札へ':'デッキから自分の場へ特殊召喚'}${filterText}（${a.amount}体・候補は先頭から自動選択）`
   :a.operation==='searchNamed'
   ?`自分のデッキから${a.match==='contains'?'名前に':'名前が'}「${a.query||''}」${a.match==='contains'?'を含む':'に一致する'}カードを${a.amount}枚手札に加える（デッキ先頭順・自動選択）`
-  :usesAmount?(/LP|ダメージ|攻撃力|守備力/.test(label)?`${label}（${a.amount}）`:`${label}（${a.amount}枚）`):label;
- const result=`${TRIGGERS[a.when]||'効果'}：${TARGETS[a.target]||''} に ${detail}。`;
+  :usesAmount?(/LP|ダメージ|攻撃力|守備力/.test(label)?`${label}（${amountText(a)}）`:`${label}（${a.amount}枚）`):label;
+ const result=`${TRIGGERS[a.when]||'効果'}：${TARGETS[a.target]||''} に ${detail}${!['searchMonster','summonMonsterDeck'].includes(a.operation)?filterText:''}。`;
  const then=a.then;
- const follow=then?`${TARGETS[then.target]}に${ABILITY_META[then.operation].label}${ABILITY_META[then.operation].min===undefined?'':`（${then.amount}）`}する。`:'';
- return `${a.before?`発動コスト：${beforeText(a.before)}。\n`:''}${result}${then?`\nこの効果が処理された場合、${follow}`:''}`;
+ const follow=then?`${TARGETS[then.target]}に${filteredOperationLabel(then)}${ABILITY_META[then.operation].min===undefined?'':`（${amountText(then)}）`}${monsterFilterText(then.filter,then.operation)}する。`:'';
+ const requirement=a.requirement?`発動条件：${combinedRequirementText(a)}。\n`:'';
+ return `${requirement}${a.before?`発動コスト：${beforeText(a.before)}。\n`:''}${result}${then?`\nこの効果が処理された場合、${follow}`:''}`;
 }
 export function normalizeRuleSettings(input){const lp=Number(input?.lp),deckSize=Number(input?.deckSize),costLimit=Number(input?.costLimit);return {lp:Number.isInteger(lp)&&lp>=1000&&lp<=20000&&lp%500===0?lp:8000,deckSize:Number.isInteger(deckSize)&&deckSize>=20&&deckSize<=60?deckSize:40,costLimit:Number.isInteger(costLimit)&&costLimit>=20&&costLimit<=300?costLimit:0};}
 export function cardLimit(c){return LIMITS[c?.limit]?.max??3;}

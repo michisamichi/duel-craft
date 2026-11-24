@@ -1,4 +1,4 @@
-import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2080';
+import {LIMITS,cardLimit,deckCost,isValidAbility,abilityText} from './rules.js?v=2351';
 import {HISTORICAL_CARDS,HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2080';
 export {HISTORICAL_PRESETS,ATTRIBUTE_NAMES,RACE_NAMES} from './historical-data.js?v=2080';
 // オリジナルカード。データを追加すればカードプールを拡張できます。
